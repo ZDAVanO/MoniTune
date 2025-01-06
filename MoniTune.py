@@ -239,7 +239,7 @@ class MT_App:
             label_frame.columnconfigure(1, weight=1)
 
             monitor_label = ctk.CTkLabel(label_frame, 
-                                         text=f"Display {index + 1}", 
+                                         text=monitor["display_name"], 
                                          font=("Segoe UI", 16, "bold"))
             # monitor_label.configure(bg_color="red")
             # monitor_label.grid(row=0, column=0, padx=(5, 0), pady=(5, 5), sticky="w")
