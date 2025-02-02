@@ -2,4 +2,4 @@
 
 ###  Easily manage the brightness, resolution, and refresh rate of your monitors in Windows from the system tray
 
-![001](assets/demo.png)
+![001](demo.png)

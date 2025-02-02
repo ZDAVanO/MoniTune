@@ -43,6 +43,7 @@ class MT_App:
 
         self.taskbar_height = 48
         self.edge_padding = 11
+        # self.edge_padding = 0
 
         self.border_dark_color = "#404040"
         self.bg_dark_color = "#202020"
@@ -53,7 +54,7 @@ class MT_App:
         self.fr_light_color = "#fbfbfb"
 
         
-
+        
         if is_dark_theme():
             ctk.set_appearance_mode("dark")
             self.bg_color = self.bg_dark_color
@@ -89,26 +90,24 @@ class MT_App:
         self.brightness_sync_thread = None
 
         self.brightness_values = {}
-        
+
+        self.prev_monitors_info = None
+
         self.setup_window()
 
 
     # MARK: setup_window()
     def setup_window(self):
         self.root.bind("<FocusOut>", self.on_focus_out)
-
         self.root.withdraw()
 
-        
-        
         # self.x_position = self.screen_width  - self.window_width  - self.edge_padding
         # self.y_position = self.screen_height - self.window_height - self.edge_padding - self.taskbar_height
 
-        self.x_position = self.screen_width - 15
-        self.y_position = self.screen_height - 15
-
-        print(f"x_position {self.x_position}")
-        print(f"y_position {self.y_position}")
+        self.x_position = int((self.screen_width - self.window_width - self.edge_padding) * self.main_scale_factor)
+        self.y_position = int((self.screen_height - self.window_height - self.edge_padding - self.taskbar_height) * self.main_scale_factor)
+        print("window height", self.window_height)  
+        print(f"x_position {self.x_position} y_position {self.y_position}")
 
         self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}")
 
@@ -117,6 +116,7 @@ class MT_App:
 
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
+        # self.root.configure(fg_color="green")
 
         self.window_frame = ctk.CTkFrame(self.root, 
                                          corner_radius=9, 
@@ -124,10 +124,11 @@ class MT_App:
                                          bg_color="#000001", 
                                          border_color=self.border_color, 
                                          border_width=1)
-        self.window_frame.grid(sticky="ew")
+        self.window_frame.grid(sticky="nsew")
 
         self.window_frame.grid_columnconfigure(0, weight=1)
         self.window_frame.grid_rowconfigure(0, weight=1)
+
         
         self.window_frame.configure(fg_color=self.bg_color)
 
@@ -163,25 +164,34 @@ class MT_App:
 
 
 
-        bottom_frame = ctk.CTkFrame(self.window_frame, height=45, corner_radius=6, fg_color=self.bg_color)
+        bottom_frame = ctk.CTkFrame(self.window_frame, height=48, corner_radius=6, fg_color=self.bg_color)
         # bottom_frame.configure(fg_color="red")
         bottom_frame.grid(row=2, column=0, padx=(5, 5), pady=(0, 5), sticky="ew")
+        # bottom_frame.grid(row=2, column=0, padx=(7, 7), pady=(0, 7), sticky="ew")
         bottom_frame.columnconfigure(0, weight=1)
+        bottom_frame.bind("<MouseWheel>", self.on_bottom_frame_scroll)
 
         name_title = ctk.CTkLabel(bottom_frame, 
                                   text="Adjust Monitors", 
-                                  font=("Segoe UI", 14))#, "bold"))
+                                  font=("Segoe UI", 14),
+                                  height=28)#, "bold"))
         # name_title.configure(bg_color="blue")
         name_title.grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        name_title.bind("<MouseWheel>", self.on_bottom_frame_scroll)
 
-        icon = Image.open("icons/setting_white.png")
 
-        settings_button = ctk.CTkButton(bottom_frame, 
-                                        text="", 
-                                        image=ctk.CTkImage(icon), 
-                                        width=1, 
-                                        command=self.open_settings_window)
-        # settings_button.grid(row=0, column=1, padx=10, pady=10, sticky="e")
+
+
+
+
+
+        # icon = Image.open("src/assets/icons/setting_white.png")
+        # settings_button = ctk.CTkButton(bottom_frame, 
+        #                                 text="", 
+        #                                 image=ctk.CTkImage(icon), 
+        #                                 width=1, 
+        #                                 command=self.open_settings_window)
+        # settings_button.grid(row=0, column=1, padx=10, pady=(10, 5), sticky="nse")
 
 
         
@@ -198,7 +208,7 @@ class MT_App:
 
         # self.load_ui()
         
-        self.root.after(0, self.load_ui)
+        self.root.after(0, self.load_ui) #////////////////////////////////////////////////
 
 
 
@@ -207,19 +217,26 @@ class MT_App:
 
     # MARK: load_ui()
     def load_ui(self):
-
-
+        print("load_ui ------------------------------------------------")
         for widget in self.main_frame.winfo_children():
             widget.destroy()
 
-
-
-        new_window_height = 65 - 5
-
-
-
         monitors_info = get_monitors_info()
-        # print(monitors_info)
+
+
+        # new_window_height = 65 - 5 + 5
+        new_window_height = 48 + 5
+
+        if self.main_scale_factor == 1.0:
+            new_window_height += 1
+            print("+1.0")
+        elif self.main_scale_factor == 1.25: 
+            for _ in range(len(monitors_info)):
+                new_window_height += 4
+            print("+1.25")
+        elif self.main_scale_factor == 1.5:
+            new_window_height += 5
+            print("+1.5")
 
 
         # icon_image = Image.open(self.icon_path)
@@ -227,9 +244,14 @@ class MT_App:
 
         for index, monitor in enumerate(monitors_info):
 
+            # for index_2, _ in enumerate(range(1)):
+
+            new_window_height += 7
+            # new_window_height += int(7 * self.main_scale_factor)
+
             monitor_frame = ctk.CTkFrame(self.main_frame, 
-                                         corner_radius=6, 
-                                         fg_color=self.fr_color)
+                                        corner_radius=6, 
+                                        fg_color=self.fr_color)
             # monitor_frame.configure(fg_color="green")
             monitor_frame.grid(row=index, column=0, padx=(2, 2), pady=(2, 5), sticky="ew")
             monitor_frame.columnconfigure(0, weight=1)
@@ -241,8 +263,8 @@ class MT_App:
             label_frame.columnconfigure(1, weight=1)
 
             monitor_label = ctk.CTkLabel(label_frame, 
-                                         text=monitor['display_name'], 
-                                         font=("Segoe UI", 16, "bold"))
+                                        text=monitor["display_name"], 
+                                        font=("Segoe UI", 16, "bold"))
             # monitor_label.configure(bg_color="red")
             # monitor_label.grid(row=0, column=0, padx=(5, 0), pady=(5, 5), sticky="w")
             monitor_label.grid(row=0, column=0, padx=(10, 0), pady=(5, 5), sticky="w")
@@ -258,8 +280,8 @@ class MT_App:
 
             # res_combobox = ctk.CTkComboBox(label_frame, values=formatted_resolutions, state="readonly", font=("Segoe UI", 14, "bold"))
             res_combobox = ctk.CTkOptionMenu(label_frame, 
-                                             values=formatted_resolutions, 
-                                             font=("Segoe UI", 14, "bold"))
+                                            values=formatted_resolutions, 
+                                            font=("Segoe UI", 14, "bold"))
             res_combobox.configure(command=lambda value, monitor_idx=index, frame=label_frame: self.on_resolution_select(monitor_idx, value, frame))
             res_combobox.set(monitor["Resolution"])
             # res_combobox.configure(state="disabled")
@@ -274,8 +296,8 @@ class MT_App:
 
 
             rr_frame = ctk.CTkFrame(monitor_frame, corner_radius=6)
-            # rr_frame.configure(fg_color="red")
             rr_frame.configure(fg_color=self.fr_color)
+            # rr_frame.configure(fg_color="red")
             rr_frame.grid(row=1, column=0, padx=(5, 5), pady=(2, 2), sticky="ew")
 
             self.update_refresh_rate_frame(index, monitor, rr_frame)
@@ -306,21 +328,22 @@ class MT_App:
 
 
 
-            br_frame = ctk.CTkFrame(monitor_frame, corner_radius=6, fg_color=self.fr_color)
+            br_frame = ctk.CTkFrame(monitor_frame, corner_radius=6, fg_color=self.fr_dark_color)
             # br_frame.configure(fg_color="yellow")
             br_frame.grid(row=2, column=0, padx=(2, 2), pady=(0, 2), sticky="ew")
             br_frame.columnconfigure(0, weight=1)
+            br_frame.columnconfigure(1, weight=0)
 
-            br_slider = ctk.CTkSlider(br_frame, from_=0, to=100, number_of_steps=100)
+            br_slider = ctk.CTkSlider(br_frame, from_=0, to=100, number_of_steps=100, height=20)
 
             br_level = sbc.get_brightness(display=monitor['serial'])[0]
             # br_slider.set(sbc.get_brightness(display=monitor['serial'])[0])
             br_slider.set(br_level)
-
-            self.brightness_values[monitor['serial']] = br_slider.get()
+            
+            
             # br_slider.configure(bg_color="green")
             # br_slider.grid(row=0, column=0, padx=(3, 0), pady=(6, 6), sticky="nsew")
-            br_slider.grid(row=0, column=0, padx=(3, 0), pady=(9, 9), sticky="nsew")
+            br_slider.grid(row=0, column=0, padx=(3, 0), pady=(2, 2), sticky="ew")
 
             # br_label = ctk.CTkLabel(master=br_frame, text=int(br_slider.get()), corner_radius=6, width=50, font=("Segoe UI", 16, "bold"))
             br_label = ctk.CTkLabel(master=br_frame, 
@@ -338,22 +361,44 @@ class MT_App:
             # br_slider.configure(command=lambda value, idx=index, label=br_label: self.on_br_slider_change(idx, value, label))
             br_slider.configure(command=lambda value, idx=monitor_serial, label=br_label: self.on_br_slider_change(idx, value, label))
 
-
+            print(f"br_level {br_slider.get()}")
+            # self.brightness_values[monitor['serial']] = br_slider.get()
+            self.brightness_values[monitor['serial']] = {'brightness': br_slider.get(), 'slider': br_slider, 'label': br_label}
+            # print(f"self.brightness_values222222222 {self.brightness_values}")
 
             # monitor_frame.update_idletasks()
-            monitor_frame.update()
+            # monitor_frame.update()
             # monitor_frame.after(0, monitor_frame.update())
 
-            new_window_height += monitor_frame.winfo_height() + 5
+            # new_window_height += monitor_frame.winfo_height() + 5
+
+            new_window_height += 84
+            # new_window_height += 5
+
+
+            refresh_rates = monitor["AvailableRefreshRates"]
+            print(f"refresh_rates {refresh_rates}")
+            rows = (len(refresh_rates) + 6 - 1) // 6
+            print(f"rows {rows}")
+
+            new_window_height += rows * 28
+
             print(f"monitor_frame {index} height = {monitor_frame.winfo_height()}")
 
 
         self.window_frame.update()
         print("self.window_frame.winfo_height()", self.window_frame.winfo_height())
         print(f"new_window_height {new_window_height}")
-        self.window_height = new_window_height #+ 100
-        self.y_position = self.screen_height - self.window_height - self.edge_padding - self.taskbar_height
-        # self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}")
+        self.window_height = new_window_height
+
+        # self.y_position = self.screen_height - self.window_height - self.edge_padding - self.taskbar_height
+
+        print("window height", self.window_height)  
+        # self.y_position = int((self.screen_height - self.window_height - self.edge_padding - self.taskbar_height) * self.main_scale_factor)
+        self.y_position = int((self.screen_height - self.window_height - self.edge_padding - self.taskbar_height) * self.main_scale_factor)
+        print(f"x_position {self.x_position} y_position {self.y_position}")
+        self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}")
+        
 
 
 
@@ -414,6 +459,8 @@ class MT_App:
             rr_button.grid(row=r_index // num_columns, 
                            column=r_index % num_columns, 
                            padx=2, pady=2, sticky="ew")
+        
+        print("update_refresh_rate_frame height", frame.winfo_height())
 
 
 
@@ -427,14 +474,36 @@ class MT_App:
 
 
     # MARK: on_br_slider_change()
-    def on_br_slider_change(self, monitor_serial, value, label):
+    def on_br_slider_change(self, monitor_serial, value, label, all=False):
 
-        # monitor_serial = get_monitors_info()[monitor_index]['serial']
-        self.brightness_values[monitor_serial] = value
+        if all:
+            for monitor_serial, monitor in self.brightness_values.items():
+                # print("monitorssssssssssss", monitor)
+                # {'brightness': br_slider.get(), 'slider': br_slider, 'label': br_label}
+                brightness = monitor['brightness']
+                slider = monitor['slider']
+                label = monitor['label']
 
-        label.configure(text=f"{int(value)}")
+                # print("   cccccc     brightness", brightness, "slider", slider, "label", label)
+
+                new_value = max(0, min(100, slider.get() + (1 if value > 0 else -1)))
+                slider.set(new_value)
+                self.brightness_values[monitor_serial]['brightness'] = new_value
+                label.configure(text=f"{int(new_value)}")
+        else:
+            # monitor_serial = get_monitors_info()[monitor_index]['serial']
+            self.brightness_values[monitor_serial]['brightness'] = value
+            label.configure(text=f"{int(value)}")
+
+        print("self.brightness_values", self.brightness_values)
 
 
+    # MARK: on_bottom_frame_scroll() ###################################################
+    def on_bottom_frame_scroll(self, event):
+        print("on_bottom_frame_scroll")
+        print(event.delta)
+
+        self.on_br_slider_change(1, event.delta, 1, True)
 
 
 
@@ -479,9 +548,8 @@ class MT_App:
             # hotkeys_tab = tabview.add("Hotkeys")
             about_tab = tabview.add("About")
 
-            # Контент вкладок
-            label_tab1 = ctk.CTkLabel(general_tab, text="general_tab", font=("Arial", 16))
-            label_tab1.pack(pady=20)
+
+
 
 
             label_tab3 = ctk.CTkLabel(about_tab, text="about_tab", font=("Arial", 16))
@@ -525,7 +593,7 @@ class MT_App:
         monitors_info = get_monitors_info()
         for index, monitor in enumerate(monitors_info):
 
-            br_level = sbc.get_brightness(display=monitor['serial'])[0]
+            br_level = int(sbc.get_brightness(display=monitor['serial'])[0])
 
             monitor_frame = self.main_frame.grid_slaves(row=index, column=0)[0]
             br_frame = monitor_frame.grid_slaves(row=2, column=0)[0]
@@ -547,12 +615,25 @@ class MT_App:
     def on_tray_click(self, icon, item):
         if not self.root.winfo_viewable():
             print("on_tray_click show")
-            
+
+            # monitors_info = get_monitors_info()
+            # if self.prev_monitors_info != monitors_info:
+            #     print("on_tray_click show load_ui")
+            #     self.prev_monitors_info = monitors_info
+            #     self.root.after(0, self.load_ui)
+            #     # self.load_ui()
+            # else:
+            #     print("on_tray_click show refresh_ui")
+            #     # self.refresh_ui() ##########################
+            #     self.root.after(0, self.load_ui)
+            # self.prev_monitors_info = monitors_info
+
+            self.root.geometry(f"{self.window_width}x{self.window_height}+{int(self.screen_width * self.main_scale_factor)}+{self.y_position}")
+
             # self.load_ui()
-            self.show_window()
-            # self.root.after(0, self.load_ui)
-            # self.root.after(0, self.show_window)
-            self.refresh_ui()
+            self.root.after(0, self.load_ui)
+            # self.show_window()
+            self.root.after(0, self.show_window)
         else:
             print("on_tray_click hide !!!")
             self.hide_window()
@@ -561,7 +642,8 @@ class MT_App:
     
     # MARK: show_window()
     def show_window(self):
-        # self.root.geometry(f"{self.window_width}x{self.window_height}+{self.screen_width}+{self.y_position}")
+        print("show_window ------------------------------------------------")
+        # self.root.geometry(f"{self.window_width}x{self.window_height}+{int(self.screen_width * self.main_scale_factor)}+{self.y_position}")
 
         self.root.deiconify()
         self.root.focus_force()
@@ -578,7 +660,7 @@ class MT_App:
         # self.brightness_sync_thread.join()
 
         # print(self.brightness_values)
-        self.brightness_values.clear()
+        # self.brightness_values.clear() ##################################################################
         # print(self.brightness_values)
 
         self.root.withdraw()
@@ -593,7 +675,9 @@ class MT_App:
 
     # MARK: animate_window_open()
     def animate_window_open(self, speed=20):
-        for i in range(self.screen_width, self.x_position, -speed):
+        
+        for i in range(int(self.screen_width * self.main_scale_factor), self.x_position, -speed):
+        # for i in range(self.screen_width, self.x_position, -speed):
             self.root.geometry(f"{self.window_width}x{self.window_height}+{i}+{self.y_position}")
             self.root.update()
             time.sleep(0.003)
@@ -617,8 +701,8 @@ class MT_App:
             # start_time = time.time()  # Start time measurement
 
             brightness_values_copy = self.brightness_values.copy()
-            for monitor_serial, brightness in brightness_values_copy.items():
-
+            for monitor_serial, monitor in brightness_values_copy.items():
+                brightness = monitor['brightness']
                 current_brightness = sbc.get_brightness(display=monitor_serial)[0]
                 
                 if current_brightness != brightness:
@@ -632,7 +716,7 @@ class MT_App:
 
             time.sleep(0.25)
 
-            
+    
 
     # MARK: run()
     def run(self):
@@ -664,7 +748,7 @@ if __name__ == "__main__":
         #     icon_path = os.path.join(sys._MEIPASS, 'icon_dark.ico')
     else:
         # Якщо програма запущена з Python, використовуємо поточну директорію
-        icon_path_s = 'icons/icon_color_dev.ico'
+        icon_path_s = 'src/assets/icons/icon_color_dev.ico'
         # if is_dark_theme():
         #     icon_path = 'icons/icon_light.ico' 
         # else:
