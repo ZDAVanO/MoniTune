@@ -122,6 +122,41 @@ def read_order_from_registry():
 
 
 
+def write_show_refresh_rates_to_registry(show_refresh_rates):
+    try:
+        if not key_exists(config.REGISTRY_PATH):
+            create_reg_key(config.REGISTRY_PATH)
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, config.REGISTRY_PATH, 0, winreg.KEY_WRITE) as key:
+            winreg.SetValueEx(key, "ShowRefreshRates", 0, winreg.REG_DWORD, int(show_refresh_rates))
+    except Exception as e:
+        print(f"Error writing to registry: {e}")
+
+def read_show_refresh_rates_from_registry():
+    try:
+        if not key_exists(config.REGISTRY_PATH):
+            create_reg_key(config.REGISTRY_PATH)
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, config.REGISTRY_PATH, 0, winreg.KEY_READ) as key:
+            try:
+                value, _ = winreg.QueryValueEx(key, "ShowRefreshRates")
+                return bool(value)
+            except FileNotFoundError:
+                return True
+    except Exception as e:
+        print(f"Error reading from registry: {e}")
+        return True
+
+
+
+
+
+
+
+
+
+
+
 # MARK: WRRS
 class MonitorTuneApp:
     def __init__(self, icon_path):
@@ -183,15 +218,15 @@ class MonitorTuneApp:
 
         self.prev_monitors_info = None
 
-        self.show_refresh_rates = True  # Add a flag to control the display of refresh rates
+        self.show_refresh_rates = read_show_refresh_rates_from_registry()  # Add a flag to control the display of refresh rates
 
         self.setup_window()
 
 
     # MARK: setup_window()
     def setup_window(self):
-        # self.root.bind("<FocusOut>", self.on_focus_out)
-        # self.root.withdraw()
+        self.root.bind("<FocusOut>", self.on_focus_out)
+        self.root.withdraw()
 
         # self.x_position = self.screen_width  - self.window_width  - self.edge_padding
         # self.y_position = self.screen_height - self.window_height - self.edge_padding - self.taskbar_height
@@ -749,6 +784,7 @@ class MonitorTuneApp:
 
     def toggle_refresh_rates(self, var):
         self.show_refresh_rates = var.get()
+        write_show_refresh_rates_to_registry(self.show_refresh_rates)
         self.load_ui()
 
 
