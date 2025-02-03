@@ -71,6 +71,57 @@ def read_excluded_rates_from_registry():
 
 
 
+
+
+
+
+
+
+# MARK: write_excluded_rates_to_registry()
+def write_order_to_registry(order):
+    try:
+        order_str = ",".join(map(str, order))
+
+        if not key_exists(config.REGISTRY_PATH):
+            create_reg_key(config.REGISTRY_PATH)
+
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, config.REGISTRY_PATH, 0, winreg.KEY_WRITE)
+        winreg.SetValueEx(key, "Order", 0, winreg.REG_SZ, order_str)
+        winreg.CloseKey(key)
+    except Exception as e:
+        print(f"Error writing to registry: {e}")
+
+# MARK: read_excluded_rates_from_registry()
+def read_order_from_registry():
+    try:
+        if not key_exists(config.REGISTRY_PATH):
+            create_reg_key(config.REGISTRY_PATH)
+
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, config.REGISTRY_PATH, 0, winreg.KEY_READ)
+        
+        try:
+            value, _ = winreg.QueryValueEx(key, "Order")
+            order = value.split(",")
+        except FileNotFoundError:
+            order = []
+
+        winreg.CloseKey(key)
+
+        # print(f"read_excluded_rates_from_registry(): {excluded_rates}")
+        return order
+    
+    except Exception as e:
+        print(f"Error reading from registry: {e}")
+        return []
+
+
+
+
+
+
+
+
+
 # MARK: WRRS
 class MonitorTuneApp:
     def __init__(self, icon_path):
@@ -253,7 +304,17 @@ class MonitorTuneApp:
             widget.destroy()
 
         monitors_info = get_monitors_info()
+        print(f"monitors_info {monitors_info}")
+        print(f"monitors_info type {type(monitors_info)}")
         monitors_info.reverse()  # Invert the order of monitors
+
+        reg_order = read_order_from_registry()
+        monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
+
+        # Сортуємо список моніторів відповідно до порядку з реєстру
+        monitor_list = [serial for serial in reg_order if serial in monitors_dict]
+        # Додаємо монітори, яких немає в реєстрі, в кінець списку
+        monitor_list += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitor_list]
 
         # new_window_height = 65 - 5 + 5
         new_window_height = 48 + 5 # bottom_frame height + padding
@@ -269,13 +330,8 @@ class MonitorTuneApp:
             new_window_height += 5
             print("+1.5")
 
-
-        # icon_image = Image.open(self.icon_path)
-        # ctkimg = ctk.CTkImage(icon_image, icon_image, (20, 20))
-
-        for index, monitor in enumerate(monitors_info):
-
-            # for index_2, _ in enumerate(range(1)):
+        for index, monitor_serial in enumerate(monitor_list):
+            monitor = monitors_dict[monitor_serial]
 
             new_window_height += 7 # monitor_frame padx
             # new_window_height += int(7 * self.main_scale_factor)
@@ -372,7 +428,7 @@ class MonitorTuneApp:
             br_label.grid(row=0, column=1, padx=(0, 5), pady=(2, 2), sticky="nsew")
 
 
-            monitor_serial = monitor['serial']
+            # monitor_serial = monitor['serial']
             # br_slider.configure(command=lambda value, idx=index, label=br_label: self.on_br_slider_change(idx, value, label))
             br_slider.configure(command=lambda value, idx=monitor_serial, label=br_label: self.on_br_slider_change(idx, value, label))
 
@@ -503,6 +559,7 @@ class MonitorTuneApp:
         new_value = max(0, min(100, slider.get() + (1 if event.delta > 0 else -1)))
         slider.set(new_value)
         self.brightness_values[monitor_serial]['brightness'] = new_value
+        print(f"self.brightness_values type {type(self.brightness_values)}")
         label.configure(text=f"{int(new_value)}")
 
 
@@ -522,36 +579,44 @@ class MonitorTuneApp:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     # MARK: open_settings_window()
     def open_settings_window(self):
         if self.settings_window is None or not self.settings_window.winfo_exists():
 
             self.settings_window = ctk.CTkToplevel(self.root)
-
             self.settings_window.title("MoniTune Settings")
-            
             self.settings_window.grid_rowconfigure(0, weight=1)
             self.settings_window.grid_columnconfigure(0, weight=1)
 
-
             settings_window_width = 600
             settings_window_height = 450
-            # screen_width = self.screen_width
-            # screen_height = self.screen_height
-            # x_position = (screen_width // 2) - (settings_window_width // 2)
-            # y_position = (screen_height // 2) - (settings_window_height // 2)
-            # self.settings_window.geometry(f"{settings_window_width}x{settings_window_height}+{x_position}+{y_position}")
             self.settings_window.geometry(f"{settings_window_width}x{settings_window_height}")
-
-            
 
             # self.settings_window.after(250, lambda: self.settings_window.iconbitmap('icons/icon_color_dev.ico'))
             # self.settings_window.after(250, lambda: self.settings_window.iconbitmap(self.title_bar_icon))
             self.settings_window.after(250, lambda: self.settings_window.iconbitmap(self.icon_path))
-
-            # Center the settings window on the screen
-
-
 
 
             tabview = ctk.CTkTabview(self.settings_window)
@@ -564,12 +629,115 @@ class MonitorTuneApp:
             about_tab = tabview.add("About")
 
 
+
+
+
+
+
+
+
+
             show_refresh_rates_var = ctk.BooleanVar(value=self.show_refresh_rates)
             show_refresh_rates_checkbox = ctk.CTkSwitch(general_tab, 
-                                                          text="Show Refresh Rates", 
-                                                          variable=show_refresh_rates_var, 
-                                                          command=lambda: self.toggle_refresh_rates(show_refresh_rates_var))
-            show_refresh_rates_checkbox.pack(pady=10)
+                                                        text="Show Refresh Rates", 
+                                                        variable=show_refresh_rates_var, 
+                                                        command=lambda: self.toggle_refresh_rates(show_refresh_rates_var))
+            show_refresh_rates_checkbox.pack(pady=15, padx=15)
+
+
+
+
+
+
+
+
+
+
+            reg_order = read_order_from_registry() # ['5&19396927&5&UID256', 'H4TN602437']
+
+            monitors_info = get_monitors_info()
+            # Створюємо словник, де ключ — серійний номер
+            monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
+            print(f"monitors_dict {monitors_dict}")
+
+
+            # Сортуємо список моніторів відповідно до порядку з реєстру
+            monitor_list = [serial for serial in reg_order if serial in monitors_dict]
+            print(f"monitor_list 1 {monitor_list}")
+            # Додаємо монітори, яких немає в реєстрі, в кінець списку
+            monitor_list += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitor_list]
+            print(f"monitor_list 2 {monitor_list}")
+
+
+            order_frame = ctk.CTkFrame(general_tab)
+
+            def create_monitor_list():
+
+                # Видалити старі віджети
+                for widget in order_frame.winfo_children():
+                    widget.destroy()
+                # monitor_labels.clear()
+
+                # Додати нові віджети
+                for i, monitor in enumerate(monitor_list):
+                    row_frame = ctk.CTkFrame(order_frame)
+                    row_frame.pack(fill="x", pady=2)
+
+                    label = ctk.CTkLabel(row_frame, text=f"{monitors_dict[monitor]["display_name"]}", width=200, anchor="w")
+                    label.pack(side="left", padx=5)
+                    # monitor_labels.append(label)
+
+                    up_btn = ctk.CTkButton(row_frame, text="⬆", width=30, command=lambda i=i: move_up(i))
+                    up_btn.pack(side="right", padx=2)
+
+                    down_btn = ctk.CTkButton(row_frame, text="⬇", width=30, command=lambda i=i: move_down(i))
+                    down_btn.pack(side="right", padx=2)
+
+                # # Кнопка "Зберегти порядок"
+                # save_btn = ctk.CTkButton(frame, text="💾 Зберегти порядок", command=save_order)
+                # save_btn.pack(pady=10)
+
+            def move_up(index):
+                if index > 0:
+                    monitor_list[index], monitor_list[index - 1] = monitor_list[index - 1], monitor_list[index]
+                    create_monitor_list()
+                    save_order()
+
+            def move_down(index):
+                if index < len(monitor_list) - 1:
+                    monitor_list[index], monitor_list[index + 1] = monitor_list[index + 1], monitor_list[index]
+                    create_monitor_list()
+                    save_order()
+
+            def save_order():
+                print("Новий порядок моніторів:", monitor_list)
+                write_order_to_registry(monitor_list)
+
+                self.load_ui()
+
+
+            
+            create_monitor_list()
+            order_frame.pack()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             label_tab3 = ctk.CTkLabel(about_tab, text="about_tab", font=("Arial", 16))
             label_tab3.pack(pady=20)
@@ -577,9 +745,34 @@ class MonitorTuneApp:
         else:
             self.settings_window.focus()
 
+
+
     def toggle_refresh_rates(self, var):
         self.show_refresh_rates = var.get()
         self.load_ui()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
