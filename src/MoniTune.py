@@ -327,9 +327,9 @@ class MonitorTuneApp:
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
 
         # Сортуємо список моніторів відповідно до порядку з реєстру
-        monitor_list = [serial for serial in self.monitors_order if serial in monitors_dict]
+        monitors_order = [serial for serial in self.monitors_order if serial in monitors_dict]
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
-        monitor_list += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitor_list]
+        monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
 
         # new_window_height = 65 - 5 + 5
         new_window_height = 48 + 5 # bottom_frame height + padding
@@ -345,7 +345,7 @@ class MonitorTuneApp:
             new_window_height += 5
             print("+1.5")
 
-        for index, monitor_serial in enumerate(monitor_list):
+        for index, monitor_serial in enumerate(monitors_order):
             monitor = monitors_dict[monitor_serial]
 
             new_window_height += 7 # monitor_frame padx
@@ -384,7 +384,7 @@ class MonitorTuneApp:
             res_combobox = ctk.CTkOptionMenu(label_frame, 
                                             values=formatted_resolutions, 
                                             font=("Segoe UI", 14, "bold"))
-            res_combobox.configure(command=lambda value, monitor_idx=index, frame=label_frame: self.on_resolution_select(monitor_idx, value, frame))
+            res_combobox.configure(command=lambda value, ms=monitor_serial, frame=label_frame: self.on_resolution_select(ms, value, frame))
             res_combobox.set(monitor["Resolution"])
             # res_combobox.configure(state="disabled")
             # res_combobox.configure(bg_color="red")
@@ -559,10 +559,14 @@ class MonitorTuneApp:
 
 
     # MARK: on_resolution_select()
-    def on_resolution_select(self, monitor_idx, resolution, frame):
-        print(f"on_resolution_select {resolution} idx {monitor_idx} frame {frame}")
+    def on_resolution_select(self, monitor_serial, resolution, frame):
+        print(f"on_resolution_select {resolution} idx {monitor_serial} frame {frame}")
         width, height = map(int, resolution.split('x'))
-        set_resolution(get_monitors_info()[monitor_idx]["Device"], width, height)
+
+        monitors_info = get_monitors_info()
+        monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
+
+        set_resolution(monitors_dict[monitor_serial]["Device"], width, height)
 
 
 
@@ -643,7 +647,8 @@ class MonitorTuneApp:
 
             # Додаємо вкладки
             general_tab = tabview.add("General")
-            refresh_rate_tab = tabview.add("Refresh Rates")
+            resolution_tab = tabview.add("Resolution")
+            refresh_rate_tab = tabview.add("Refresh Rate")
             brightness_tab = tabview.add("Brightness")
             # time_tab = tabview.add("Time adjustment")
             # hotkeys_tab = tabview.add("Hotkeys")
@@ -653,22 +658,7 @@ class MonitorTuneApp:
 
 
 
-
-
-
-
-
-            
-
-
-
-
-
-
-
-
-
-
+            # MARK: General Tab
             reg_order = read_order_from_registry() # ['5&19396927&5&UID256', 'H4TN602437']
 
             monitors_info = get_monitors_info()
@@ -678,11 +668,11 @@ class MonitorTuneApp:
 
 
             # Сортуємо список моніторів відповідно до порядку з реєстру
-            monitor_list = [serial for serial in reg_order if serial in monitors_dict]
-            print(f"monitor_list 1 {monitor_list}")
+            monitors_order = [serial for serial in reg_order if serial in monitors_dict]
+            print(f"monitors_order 1 {monitors_order}")
             # Додаємо монітори, яких немає в реєстрі, в кінець списку
-            monitor_list += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitor_list]
-            print(f"monitor_list 2 {monitor_list}")
+            monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
+            print(f"monitors_order 2 {monitors_order}")
 
 
 
@@ -693,14 +683,13 @@ class MonitorTuneApp:
 
 
             def create_monitor_list():
-
                 # Видалити старі віджети
                 for widget in order_frame.winfo_children():
                     widget.destroy()
                 # monitor_labels.clear()
 
                 # Додати нові віджети
-                for i, monitor in enumerate(monitor_list):
+                for i, monitor in enumerate(monitors_order):
                     row_frame = ctk.CTkFrame(order_frame)
                     row_frame.pack(fill="x", pady=2)
 
@@ -720,24 +709,22 @@ class MonitorTuneApp:
 
             def move_up(index):
                 if index > 0:
-                    monitor_list[index], monitor_list[index - 1] = monitor_list[index - 1], monitor_list[index]
+                    monitors_order[index], monitors_order[index - 1] = monitors_order[index - 1], monitors_order[index]
                     create_monitor_list()
                     save_order()
 
             def move_down(index):
-                if index < len(monitor_list) - 1:
-                    monitor_list[index], monitor_list[index + 1] = monitor_list[index + 1], monitor_list[index]
+                if index < len(monitors_order) - 1:
+                    monitors_order[index], monitors_order[index + 1] = monitors_order[index + 1], monitors_order[index]
                     create_monitor_list()
                     save_order()
 
             def save_order():
-                print("New monitor order:", monitor_list)
-                write_order_to_registry(monitor_list)
-                self.monitors_order = monitor_list
+                print("New monitor order:", monitors_order)
+                write_order_to_registry(monitors_order)
+                self.monitors_order = monitors_order
                 # self.load_ui()
 
-
-            
             create_monitor_list()
             order_frame.pack()
 
@@ -747,24 +734,21 @@ class MonitorTuneApp:
 
 
 
-
-
-
-
-
-
+            # MARK: Refresh Rates Tab
+            def toggle_refresh_rates(var):
+                self.show_refresh_rates = var.get()
+                reg_write_bool(config.REGISTRY_PATH, "ShowRefreshRates", self.show_refresh_rates)
+                self.load_ui()
 
             show_refresh_rates_var = ctk.BooleanVar(value=self.show_refresh_rates)
             show_refresh_rates_checkbox = ctk.CTkSwitch(refresh_rate_tab, 
                                                         text="Show Refresh Rates", 
                                                         variable=show_refresh_rates_var, 
-                                                        command=lambda: self.toggle_refresh_rates(show_refresh_rates_var))
+                                                        command=lambda: toggle_refresh_rates(show_refresh_rates_var)
+                                                        )
             show_refresh_rates_checkbox.pack(pady=15, padx=15)
             
 
-
-
-            # MARK: excluded_rates
 
             order_settings_label = ctk.CTkLabel(refresh_rate_tab, text="Exclude Refresh Rates")
             order_settings_label.pack(pady=10)
@@ -830,16 +814,6 @@ class MonitorTuneApp:
 
         else:
             self.settings_window.focus()
-
-
-
-    def toggle_refresh_rates(self, var):
-        self.show_refresh_rates = var.get()
-        # write_show_refresh_rates_to_registry(self.show_refresh_rates)
-        reg_write_bool(config.REGISTRY_PATH, "ShowRefreshRates", self.show_refresh_rates)
-        self.load_ui()
-
-
 
 
 
@@ -940,9 +914,9 @@ class MonitorTuneApp:
         else:
             print("on_tray_click hide !!!")
             self.hide_window()
-        
 
-    
+
+
     # MARK: show_window()
     def show_window(self):
         print("show_window ------------------------------------------------")
@@ -1017,7 +991,7 @@ class MonitorTuneApp:
 
             time.sleep(0.25)
 
-    
+
 
     # MARK: run()
     def run(self):
@@ -1047,7 +1021,9 @@ if __name__ == "__main__":
         #     icon_path = os.path.join(sys._MEIPASS, 'icon_light.ico')
         # else:
         #     icon_path = os.path.join(sys._MEIPASS, 'icon_dark.ico')
+
         settings_icon = os.path.join(sys._MEIPASS, 'setting_white.png')
+
     else:
         # Якщо програма запущена з Python, використовуємо поточну директорію
         icon_path_s = 'src/assets/icons/icon_color_dev.ico'
@@ -1055,7 +1031,9 @@ if __name__ == "__main__":
         #     icon_path = 'icons/icon_light.ico' 
         # else:
         #     icon_path = 'icons/icon_dark.ico'
+
         settings_icon = 'src/assets/icons/setting_white.png'
+
 
 
     app = MonitorTuneApp(icon_path_s, settings_icon)
