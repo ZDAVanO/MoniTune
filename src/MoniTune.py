@@ -26,18 +26,57 @@ import winreg
 
 
 
+# MARK: write_excluded_rates_to_registry()
+def write_excluded_rates_to_registry(excluded_rates):
+    try:
+        excluded_rates_str = ",".join(map(str, excluded_rates))
+
+        if not key_exists(config.REGISTRY_PATH):
+            create_reg_key(config.REGISTRY_PATH)
+
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, config.REGISTRY_PATH, 0, winreg.KEY_WRITE)
+        winreg.SetValueEx(key, "ExcludedHzRates", 0, winreg.REG_SZ, excluded_rates_str)
+        winreg.CloseKey(key)
+    except Exception as e:
+        print(f"Error writing to registry: {e}")
+
+# MARK: read_excluded_rates_from_registry()
+def read_excluded_rates_from_registry():
+    try:
+        if not key_exists(config.REGISTRY_PATH):
+            create_reg_key(config.REGISTRY_PATH)
+
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, config.REGISTRY_PATH, 0, winreg.KEY_READ)
+        
+        try:
+            value, _ = winreg.QueryValueEx(key, "ExcludedHzRates")
+            excluded_rates = list(map(int, value.split(",")))
+        except FileNotFoundError:
+            excluded_rates = []
+
+        winreg.CloseKey(key)
+
+        # print(f"read_excluded_rates_from_registry(): {excluded_rates}")
+        return excluded_rates
+    
+    except Exception as e:
+        print(f"Error reading from registry: {e}")
+        return []
+
+
+
+
+
 
 
 
 
 # MARK: WRRS
-class MT_App:
+class MonitorTuneApp:
     def __init__(self, icon_path):
-
 
         self.icon_path = icon_path
 
-        # 1920:1080 100% scaling
         self.window_width = 357
         self.window_height = 231
 
@@ -93,13 +132,15 @@ class MT_App:
 
         self.prev_monitors_info = None
 
+        self.show_refresh_rates = True  # Add a flag to control the display of refresh rates
+
         self.setup_window()
 
 
     # MARK: setup_window()
     def setup_window(self):
-        self.root.bind("<FocusOut>", self.on_focus_out)
-        self.root.withdraw()
+        # self.root.bind("<FocusOut>", self.on_focus_out)
+        # self.root.withdraw()
 
         # self.x_position = self.screen_width  - self.window_width  - self.edge_padding
         # self.y_position = self.screen_height - self.window_height - self.edge_padding - self.taskbar_height
@@ -165,7 +206,7 @@ class MT_App:
 
 
         bottom_frame = ctk.CTkFrame(self.window_frame, height=48, corner_radius=6, fg_color=self.bg_color)
-        # bottom_frame.configure(fg_color="red")
+        bottom_frame.configure(fg_color="red")
         bottom_frame.grid(row=2, column=0, padx=(5, 5), pady=(0, 5), sticky="ew")
         # bottom_frame.grid(row=2, column=0, padx=(7, 7), pady=(0, 7), sticky="ew")
         bottom_frame.columnconfigure(0, weight=1)
@@ -185,30 +226,18 @@ class MT_App:
 
 
 
-        # icon = Image.open("src/assets/icons/setting_white.png")
-        # settings_button = ctk.CTkButton(bottom_frame, 
-        #                                 text="", 
-        #                                 image=ctk.CTkImage(icon), 
-        #                                 width=1, 
-        #                                 command=self.open_settings_window)
-        # settings_button.grid(row=0, column=1, padx=10, pady=(10, 5), sticky="nse")
+        icon = Image.open("src/assets/icons/setting_white.png")
+        settings_button = ctk.CTkButton(bottom_frame, 
+                                        text="", 
+                                        image=ctk.CTkImage(icon), 
+                                        width=1, 
+                                        command=self.open_settings_window)
+        settings_button.grid(row=0, column=1, padx=10, pady=(10, 5), sticky="nse")
 
 
-        
-
-
-        # self.root.update()
-
-        # pf_height = profiles_frame.winfo_height()
-        # print(f"pf_height {pf_height}")
-
-        # bf_height = bottom_frame.winfo_height()
-        # print(f"bf_height {bf_height}")
-        self.root.update()
-
+        # self.root.update() #////////////////////////////////////////////////
         # self.load_ui()
-        
-        self.root.after(0, self.load_ui) #////////////////////////////////////////////////
+        # self.root.after(0, self.load_ui) #////////////////////////////////////////////////
 
 
 
@@ -218,15 +247,17 @@ class MT_App:
     # MARK: load_ui()
     def load_ui(self):
         print("load_ui ------------------------------------------------")
+        
+
         for widget in self.main_frame.winfo_children():
             widget.destroy()
 
         monitors_info = get_monitors_info()
-
+        monitors_info.reverse()  # Invert the order of monitors
 
         # new_window_height = 65 - 5 + 5
-        new_window_height = 48 + 5
-
+        new_window_height = 48 + 5 # bottom_frame height + padding
+        # new_window_height += 5
         if self.main_scale_factor == 1.0:
             new_window_height += 1
             print("+1.0")
@@ -246,19 +277,19 @@ class MT_App:
 
             # for index_2, _ in enumerate(range(1)):
 
-            new_window_height += 7
+            new_window_height += 7 # monitor_frame padx
             # new_window_height += int(7 * self.main_scale_factor)
 
             monitor_frame = ctk.CTkFrame(self.main_frame, 
                                         corner_radius=6, 
                                         fg_color=self.fr_color)
-            # monitor_frame.configure(fg_color="green")
+            monitor_frame.configure(fg_color="green")
             monitor_frame.grid(row=index, column=0, padx=(2, 2), pady=(2, 5), sticky="ew")
             monitor_frame.columnconfigure(0, weight=1)
             
             label_frame = ctk.CTkFrame(monitor_frame, corner_radius=6)
             label_frame.configure(fg_color=self.fr_color)
-            # label_frame.configure(fg_color="blue")
+            label_frame.configure(fg_color="blue")
             label_frame.grid(row=0, column=0, padx=(2, 2), pady=(2, 0), sticky="ew")
             label_frame.columnconfigure(1, weight=1)
 
@@ -282,6 +313,7 @@ class MT_App:
             res_combobox = ctk.CTkOptionMenu(label_frame, 
                                             values=formatted_resolutions, 
                                             font=("Segoe UI", 14, "bold"))
+            res_combobox.configure(state="disabled")
             res_combobox.configure(command=lambda value, monitor_idx=index, frame=label_frame: self.on_resolution_select(monitor_idx, value, frame))
             res_combobox.set(monitor["Resolution"])
             # res_combobox.configure(state="disabled")
@@ -295,41 +327,24 @@ class MT_App:
 
 
 
-            rr_frame = ctk.CTkFrame(monitor_frame, corner_radius=6)
-            rr_frame.configure(fg_color=self.fr_color)
-            # rr_frame.configure(fg_color="red")
-            rr_frame.grid(row=1, column=0, padx=(5, 5), pady=(2, 2), sticky="ew")
+            if self.show_refresh_rates:  # Check the flag before displaying refresh rates
+                rr_frame = ctk.CTkFrame(monitor_frame, corner_radius=6)
+                rr_frame.configure(fg_color=self.fr_color)
+                rr_frame.configure(fg_color="red")
+                rr_frame.grid(row=1, column=0, padx=(5, 5), pady=(2, 2), sticky="ew")
+                self.update_refresh_rate_frame(index, monitor, rr_frame)
 
-            self.update_refresh_rate_frame(index, monitor, rr_frame)
-
-            # refresh_rates = monitor["AvailableRefreshRates"]
-
-            # if len(refresh_rates) > 6:
-            #     num_columns = 6
+                refresh_rates = monitor["AvailableRefreshRates"]
+                print(f"refresh_rates {refresh_rates}")
+                rows = (len(refresh_rates) + 6 - 1) // 6
+                new_window_height += rows * 28 # rr_frame row
+                new_window_height += 4 # rr_frame pady ############################
             # else:
-            #     num_columns = len(refresh_rates)
-
-            # for i in range(num_columns):
-            #     rr_frame.columnconfigure(i, weight=1)
-
-            # for r_index, rate in enumerate(refresh_rates):
-            #     rr_button = ctk.CTkButton(rr_frame, text=f"{rate} Hz", width=1)
-            #     rr_button.configure(border_width=1, border_color="gray", fg_color=self.fr_dark_color)
-
-            #     if rate == monitor["RefreshRate"]:
-            #         rr_button.configure(fg_color="gray")
-            #     else:
-            #         rr_button.configure(command=lambda rate=rate, monitor_idx=index, frame=rr_frame: self.crr_test(monitor_idx, rate, frame))
-
-            #     rr_button.grid(row=r_index // num_columns, column=r_index % num_columns, padx=2, pady=2, sticky="ew")
-
-            
-
-
-
+            #     new_window_height -= int(4 * self.main_scale_factor)
+            # new_window_height -= int(4 * self.main_scale_factor)
 
             br_frame = ctk.CTkFrame(monitor_frame, corner_radius=6, fg_color=self.fr_dark_color)
-            # br_frame.configure(fg_color="yellow")
+            br_frame.configure(fg_color="yellow")
             br_frame.grid(row=2, column=0, padx=(2, 2), pady=(0, 2), sticky="ew")
             br_frame.columnconfigure(0, weight=1)
             br_frame.columnconfigure(1, weight=0)
@@ -361,7 +376,11 @@ class MT_App:
             # br_slider.configure(command=lambda value, idx=index, label=br_label: self.on_br_slider_change(idx, value, label))
             br_slider.configure(command=lambda value, idx=monitor_serial, label=br_label: self.on_br_slider_change(idx, value, label))
 
-            print(f"br_level {br_slider.get()}")
+
+            br_frame.bind("<MouseWheel>", command=lambda event, idx=monitor_serial, label=br_label, slider=br_slider: self.on_br_slider_scroll(event, slider, label, idx))
+            br_slider.bind("<MouseWheel>", command=lambda event, idx=monitor_serial, label=br_label, slider=br_slider: self.on_br_slider_scroll(event, slider, label, idx))
+
+            # print(f"br_level {br_slider.get()}")
             # self.brightness_values[monitor['serial']] = br_slider.get()
             self.brightness_values[monitor['serial']] = {'brightness': br_slider.get(), 'slider': br_slider, 'label': br_label}
             # print(f"self.brightness_values222222222 {self.brightness_values}")
@@ -372,16 +391,16 @@ class MT_App:
 
             # new_window_height += monitor_frame.winfo_height() + 5
 
-            new_window_height += 84
-            # new_window_height += 5
+            # new_window_height += 84 # 38 * 2 + 4
+            new_window_height += 38 * 2 + 4
 
 
-            refresh_rates = monitor["AvailableRefreshRates"]
-            print(f"refresh_rates {refresh_rates}")
-            rows = (len(refresh_rates) + 6 - 1) // 6
-            print(f"rows {rows}")
 
-            new_window_height += rows * 28
+
+            # refresh_rates = monitor["AvailableRefreshRates"]
+            # print(f"refresh_rates {refresh_rates}")
+            # rows = (len(refresh_rates) + 6 - 1) // 6
+            # new_window_height += rows * 28
 
             print(f"monitor_frame {index} height = {monitor_frame.winfo_height()}")
 
@@ -401,7 +420,7 @@ class MT_App:
         
 
 
-
+    
 
 
     # MARK: on_refresh_rate_btn()
@@ -474,36 +493,32 @@ class MT_App:
 
 
     # MARK: on_br_slider_change()
-    def on_br_slider_change(self, monitor_serial, value, label, all=False):
-
-        if all:
-            for monitor_serial, monitor in self.brightness_values.items():
-                # print("monitorssssssssssss", monitor)
-                # {'brightness': br_slider.get(), 'slider': br_slider, 'label': br_label}
-                brightness = monitor['brightness']
-                slider = monitor['slider']
-                label = monitor['label']
-
-                # print("   cccccc     brightness", brightness, "slider", slider, "label", label)
-
-                new_value = max(0, min(100, slider.get() + (1 if value > 0 else -1)))
-                slider.set(new_value)
-                self.brightness_values[monitor_serial]['brightness'] = new_value
-                label.configure(text=f"{int(new_value)}")
-        else:
-            # monitor_serial = get_monitors_info()[monitor_index]['serial']
-            self.brightness_values[monitor_serial]['brightness'] = value
-            label.configure(text=f"{int(value)}")
-
-        print("self.brightness_values", self.brightness_values)
+    def on_br_slider_change(self, monitor_serial, value, label):
+        # monitor_serial = get_monitors_info()[monitor_index]['serial']
+        self.brightness_values[monitor_serial]['brightness'] = value
+        label.configure(text=f"{int(value)}")
 
 
-    # MARK: on_bottom_frame_scroll() ###################################################
+    def on_br_slider_scroll(self, event, slider, label, monitor_serial):
+        new_value = max(0, min(100, slider.get() + (1 if event.delta > 0 else -1)))
+        slider.set(new_value)
+        self.brightness_values[monitor_serial]['brightness'] = new_value
+        label.configure(text=f"{int(new_value)}")
+
+
+    # MARK: on_bottom_frame_scroll()
     def on_bottom_frame_scroll(self, event):
-        print("on_bottom_frame_scroll")
-        print(event.delta)
+        print("on_bottom_frame_scroll : ", event.delta)
 
-        self.on_br_slider_change(1, event.delta, 1, True)
+        for monitor_serial, monitor in self.brightness_values.items():
+            brightness = monitor['brightness']
+            slider = monitor['slider']
+            label = monitor['label']
+
+            new_value = max(0, min(100, slider.get() + (1 if event.delta > 0 else -1)))
+            slider.set(new_value)
+            self.brightness_values[monitor_serial]['brightness'] = new_value
+            label.configure(text=f"{int(new_value)}")
 
 
 
@@ -549,15 +564,22 @@ class MT_App:
             about_tab = tabview.add("About")
 
 
-
-
+            show_refresh_rates_var = ctk.BooleanVar(value=self.show_refresh_rates)
+            show_refresh_rates_checkbox = ctk.CTkSwitch(general_tab, 
+                                                          text="Show Refresh Rates", 
+                                                          variable=show_refresh_rates_var, 
+                                                          command=lambda: self.toggle_refresh_rates(show_refresh_rates_var))
+            show_refresh_rates_checkbox.pack(pady=10)
 
             label_tab3 = ctk.CTkLabel(about_tab, text="about_tab", font=("Arial", 16))
             label_tab3.pack(pady=20)
 
-
         else:
             self.settings_window.focus()
+
+    def toggle_refresh_rates(self, var):
+        self.show_refresh_rates = var.get()
+        self.load_ui()
 
 
 
@@ -578,7 +600,7 @@ class MT_App:
             MenuItem("Exit", self.quit_app)
         )
 
-        self.icon = Icon("Monitune", icon_image, f"Monitune {"v0.0.1"}", menu)
+        self.icon = Icon("Monitune", icon_image, f"MoniTune {"v0.0.1"}", menu)
         self.icon.run()
 
 
@@ -628,7 +650,7 @@ class MT_App:
             #     self.root.after(0, self.load_ui)
             # self.prev_monitors_info = monitors_info
 
-            self.root.geometry(f"{self.window_width}x{self.window_height}+{int(self.screen_width * self.main_scale_factor)}+{self.y_position}")
+            # self.root.geometry(f"{self.window_width}x{self.window_height}+{int(self.screen_width * self.main_scale_factor)}+{self.y_position}")
 
             # self.load_ui()
             self.root.after(0, self.load_ui)
@@ -668,7 +690,7 @@ class MT_App:
     # MARK: on_focus_out()
     def on_focus_out(self, event):
         if self.root.winfo_viewable():
-            print("on_focus_out hide")
+            print("on_focus_out")
             self.hide_window()
 
 
@@ -682,17 +704,15 @@ class MT_App:
             self.root.update()
             time.sleep(0.003)
         self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}")
-        
-    # MARK: animate_window_close()
-    # def animate_window_close_r(self, speed=2):
-    #     current_x_position = self.root.winfo_x()
-    #     for i in range(current_x_position, self.screen_width, speed):
-    #         self.root.geometry(f"{self.window_width}x{self.window_height}+{i}+{self.y_position}")
-    #         self.root.update()
-    #         time.sleep(0.003)
     
-
-
+    # MARK: animate_window_close()
+    def animate_window_close(self, speed=2):
+        current_x_position = self.root.winfo_x()
+        for i in range(current_x_position, self.screen_width, speed):
+            self.root.geometry(f"{self.window_width}x{self.window_height}+{i}+{self.y_position}")
+            self.root.update()
+            time.sleep(0.003)
+    
 
 
     # MARK: brightness_sync()
@@ -755,5 +775,5 @@ if __name__ == "__main__":
         #     icon_path = 'icons/icon_dark.ico'
 
 
-    app = MT_App(icon_path_s)
+    app = MonitorTuneApp(icon_path_s)
     app.run()
