@@ -132,9 +132,11 @@ def read_order_from_registry():
 
 # MARK: WRRS
 class MonitorTuneApp:
-    def __init__(self, icon_path):
+    def __init__(self, icon_path, settings_icon):
 
         self.icon_path = icon_path
+        self.settings_icon = settings_icon
+        
 
         self.window_width = 357
         self.window_height = 231
@@ -291,7 +293,7 @@ class MonitorTuneApp:
 
 
 
-        icon = Image.open("src/assets/icons/setting_white.png")
+        icon = Image.open(self.settings_icon)
         settings_button = ctk.CTkButton(bottom_frame, 
                                         text="", 
                                         image=ctk.CTkImage(icon), 
@@ -1045,6 +1047,7 @@ if __name__ == "__main__":
         #     icon_path = os.path.join(sys._MEIPASS, 'icon_light.ico')
         # else:
         #     icon_path = os.path.join(sys._MEIPASS, 'icon_dark.ico')
+        settings_icon = os.path.join(sys._MEIPASS, 'setting_white.png')
     else:
         # Якщо програма запущена з Python, використовуємо поточну директорію
         icon_path_s = 'src/assets/icons/icon_color_dev.ico'
@@ -1052,7 +1055,8 @@ if __name__ == "__main__":
         #     icon_path = 'icons/icon_light.ico' 
         # else:
         #     icon_path = 'icons/icon_dark.ico'
+        settings_icon = 'src/assets/icons/setting_white.png'
 
 
-    app = MonitorTuneApp(icon_path_s)
+    app = MonitorTuneApp(icon_path_s, settings_icon)
     app.run()
