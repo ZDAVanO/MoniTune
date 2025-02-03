@@ -158,11 +158,13 @@ class MonitorTuneApp:
             self.bg_color = self.bg_dark_color
             self.border_color = self.border_dark_color
             self.fr_color = self.fr_dark_color
+            self.btn_bg_color = self.fr_color
         else:
             ctk.set_appearance_mode("light")
             self.bg_color = self.bg_light_color
             self.border_color = self.border_light_color
             self.fr_color = self.fr_light_color
+            self.btn_bg_color = "gray"
 
 
         # self.title_bar_icon = os.path.join(sys._MEIPASS, 'icon_color.ico')
@@ -202,8 +204,8 @@ class MonitorTuneApp:
 
     # MARK: setup_window()
     def setup_window(self):
-        self.root.bind("<FocusOut>", self.on_focus_out)
-        self.root.withdraw()
+        # self.root.bind("<FocusOut>", self.on_focus_out)
+        # self.root.withdraw()
 
         # self.x_position = self.screen_width  - self.window_width  - self.edge_padding
         # self.y_position = self.screen_height - self.window_height - self.edge_padding - self.taskbar_height
@@ -410,7 +412,7 @@ class MonitorTuneApp:
             #     new_window_height -= int(4 * self.main_scale_factor)
             # new_window_height -= int(4 * self.main_scale_factor)
 
-            br_frame = ctk.CTkFrame(monitor_frame, corner_radius=6, fg_color=self.fr_dark_color)
+            br_frame = ctk.CTkFrame(monitor_frame, corner_radius=6, fg_color=self.fr_color)
             # br_frame.configure(fg_color="yellow")
             br_frame.grid(row=2, column=0, padx=(2, 2), pady=(0, 2), sticky="ew")
             br_frame.columnconfigure(0, weight=1)
@@ -541,7 +543,7 @@ class MonitorTuneApp:
                 # rr_button.configure(fg_color="gray")
                 pass
             else:
-                rr_button.configure(border_width=1, border_color="gray", fg_color=self.fr_color)
+                rr_button.configure(border_width=1, border_color="gray", fg_color=self.btn_bg_color)
                 rr_button.configure(command=lambda rate=rate, 
                                     m_s=monitor_serial, mon=monitor, 
                                     frame=frame: self.on_refresh_rate_btn(m_s, mon, rate, frame))
@@ -550,7 +552,7 @@ class MonitorTuneApp:
                            column=r_index % num_columns, 
                            padx=2, pady=2, sticky="ew")
         
-        print("update_refresh_rate_frame height", frame.winfo_height())
+        # print("update_refresh_rate_frame height", frame.winfo_height())
 
 
 
@@ -823,8 +825,6 @@ class MonitorTuneApp:
 
 
 
-            label_tab3 = ctk.CTkLabel(about_tab, text="about_tab", font=("Arial", 16))
-            label_tab3.pack(pady=20)
 
         else:
             self.settings_window.focus()
