@@ -192,6 +192,7 @@ class MonitorTuneApp:
         # self.prev_monitors_info = None
 
         self.excluded_rates = read_excluded_rates_from_registry()
+        self.monitors_order = read_order_from_registry()
 
 
         # self.show_refresh_rates = read_show_refresh_rates_from_registry()  # Add a flag to control the display of refresh rates
@@ -317,13 +318,12 @@ class MonitorTuneApp:
         monitors_info = get_monitors_info()
         print(f"monitors_info {monitors_info}")
         print(f"monitors_info type {type(monitors_info)}")
-        monitors_info.reverse()  # Invert the order of monitors
+        # monitors_info.reverse()  # Invert the order of monitors
 
-        reg_order = read_order_from_registry()
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
 
         # Сортуємо список моніторів відповідно до порядку з реєстру
-        monitor_list = [serial for serial in reg_order if serial in monitors_dict]
+        monitor_list = [serial for serial in self.monitors_order if serial in monitors_dict]
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
         monitor_list += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitor_list]
 
@@ -380,7 +380,6 @@ class MonitorTuneApp:
             res_combobox = ctk.CTkOptionMenu(label_frame, 
                                             values=formatted_resolutions, 
                                             font=("Segoe UI", 14, "bold"))
-            res_combobox.configure(state="disabled")
             res_combobox.configure(command=lambda value, monitor_idx=index, frame=label_frame: self.on_resolution_select(monitor_idx, value, frame))
             res_combobox.set(monitor["Resolution"])
             # res_combobox.configure(state="disabled")
@@ -399,7 +398,7 @@ class MonitorTuneApp:
                 rr_frame.configure(fg_color=self.fr_color)
                 # rr_frame.configure(fg_color="red")
                 rr_frame.grid(row=1, column=0, padx=(5, 5), pady=(2, 2), sticky="ew")
-                self.update_refresh_rate_frame(index, monitor, rr_frame)
+                self.update_refresh_rate_frame(monitor_serial, monitor, rr_frame)
 
                 refresh_rates = monitor["AvailableRefreshRates"]
                 refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
@@ -492,12 +491,16 @@ class MonitorTuneApp:
 
 
     # MARK: on_refresh_rate_btn()
-    def on_refresh_rate_btn(self, monitor_idx, monitor, value, frame):
-        print(f"monitor_idx {monitor_idx} value {value} frame {frame}")
+    def on_refresh_rate_btn(self, monitor_serial, monitor, value, frame):
+        print(f"monitor_serial {monitor_serial} value {value} frame {frame}")
         set_refresh_rate_br(monitor, value, refresh=False)
 
-        fresh_monitor = get_monitors_info()[monitor_idx]
-        self.update_refresh_rate_frame(monitor_idx, fresh_monitor, frame)
+        monitors_info = get_monitors_info()
+        monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
+
+        fresh_monitor = monitors_dict[monitor_serial]
+        self.update_refresh_rate_frame(monitor_serial, fresh_monitor, frame)
+        # self.load_ui()
 
 
 
@@ -506,7 +509,7 @@ class MonitorTuneApp:
 
 
     # MARK: update_refresh_rate_frame()
-    def update_refresh_rate_frame(self, monitor_idx, monitor, frame):
+    def update_refresh_rate_frame(self, monitor_serial, monitor, frame):
 
         # print(f"update_refresh_rate_frame {monitor_idx} {frame}")
 
@@ -540,8 +543,8 @@ class MonitorTuneApp:
             else:
                 rr_button.configure(border_width=1, border_color="gray", fg_color=self.fr_color)
                 rr_button.configure(command=lambda rate=rate, 
-                                    m_idx=monitor_idx, mon=monitor, 
-                                    frame=frame: self.on_refresh_rate_btn(m_idx, mon, rate, frame))
+                                    m_s=monitor_serial, mon=monitor, 
+                                    frame=frame: self.on_refresh_rate_btn(m_s, mon, rate, frame))
 
             rr_button.grid(row=r_index // num_columns, 
                            column=r_index % num_columns, 
@@ -636,6 +639,8 @@ class MonitorTuneApp:
 
             # Додаємо вкладки
             general_tab = tabview.add("General")
+            refresh_rate_tab = tabview.add("Refresh Rates")
+            brightness_tab = tabview.add("Brightness")
             # time_tab = tabview.add("Time adjustment")
             # hotkeys_tab = tabview.add("Hotkeys")
             about_tab = tabview.add("About")
@@ -678,7 +683,7 @@ class MonitorTuneApp:
 
 
             order_settings_label = ctk.CTkLabel(general_tab, text="Reorder Monitors")
-            order_settings_label.pack(pady=10)
+            order_settings_label.pack(pady=(10, 5))
 
             order_frame = ctk.CTkFrame(general_tab)
 
@@ -724,8 +729,8 @@ class MonitorTuneApp:
             def save_order():
                 print("New monitor order:", monitor_list)
                 write_order_to_registry(monitor_list)
-
-                self.load_ui()
+                self.monitors_order = monitor_list
+                # self.load_ui()
 
 
             
@@ -746,7 +751,7 @@ class MonitorTuneApp:
 
 
             show_refresh_rates_var = ctk.BooleanVar(value=self.show_refresh_rates)
-            show_refresh_rates_checkbox = ctk.CTkSwitch(general_tab, 
+            show_refresh_rates_checkbox = ctk.CTkSwitch(refresh_rate_tab, 
                                                         text="Show Refresh Rates", 
                                                         variable=show_refresh_rates_var, 
                                                         command=lambda: self.toggle_refresh_rates(show_refresh_rates_var))
@@ -757,7 +762,7 @@ class MonitorTuneApp:
 
             # MARK: excluded_rates
 
-            order_settings_label = ctk.CTkLabel(general_tab, text="Exclude Refresh Rates")
+            order_settings_label = ctk.CTkLabel(refresh_rate_tab, text="Exclude Refresh Rates")
             order_settings_label.pack(pady=10)
 
             all_rates = set()
@@ -768,7 +773,7 @@ class MonitorTuneApp:
             excluded_rates = read_excluded_rates_from_registry()
 
             # Створення прокручуваного фрейму
-            scroll_frame = ctk.CTkScrollableFrame(general_tab)
+            scroll_frame = ctk.CTkScrollableFrame(refresh_rate_tab)
             scroll_frame.pack(fill="y", expand=True)
 
             # Функція для оновлення списку excluded
