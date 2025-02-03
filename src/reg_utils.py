@@ -30,5 +30,45 @@ def create_reg_key(path):
 
 
 
+
+
+def reg_write_bool(reg_path, dword_name, value):
+    try:
+        if not key_exists(reg_path):
+            create_reg_key(reg_path)
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_WRITE) as key:
+            winreg.SetValueEx(key, dword_name, 0, winreg.REG_DWORD, int(value))
+    except Exception as e:
+        print(f"Error writing to registry: {e}")
+
+
+def reg_read_bool(reg_path, dword_name):
+    try:
+        if not key_exists(reg_path):
+            create_reg_key(reg_path)
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_READ) as key:
+            try:
+                value, _ = winreg.QueryValueEx(key, dword_name)
+                return bool(value)
+            except FileNotFoundError:
+                return True
+    except Exception as e:
+        print(f"Error reading from registry: {e}")
+        return True
+
+
+
+
+
+
+
+
+
+
+
+
+
 if __name__ == '__main__':
     print(is_dark_theme())

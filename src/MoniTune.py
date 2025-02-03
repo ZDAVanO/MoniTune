@@ -11,7 +11,7 @@ import time
 import threading
 
 from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
-from reg_utils import is_dark_theme, key_exists, create_reg_key
+from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool
 
 import ctypes
 from ctypes import wintypes
@@ -22,6 +22,10 @@ import screen_brightness_control as sbc
 
 import config
 import winreg
+
+
+
+
 
 
 
@@ -79,6 +83,7 @@ def read_excluded_rates_from_registry():
 
 # MARK: write_excluded_rates_to_registry()
 def write_order_to_registry(order):
+    print(f"write_order_to_registry {order}")
     try:
         order_str = ",".join(map(str, order))
 
@@ -107,7 +112,6 @@ def read_order_from_registry():
 
         winreg.CloseKey(key)
 
-        # print(f"read_excluded_rates_from_registry(): {excluded_rates}")
         return order
     
     except Exception as e:
@@ -115,37 +119,6 @@ def read_order_from_registry():
         return []
 
 
-
-
-
-
-
-
-
-def write_show_refresh_rates_to_registry(show_refresh_rates):
-    try:
-        if not key_exists(config.REGISTRY_PATH):
-            create_reg_key(config.REGISTRY_PATH)
-
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, config.REGISTRY_PATH, 0, winreg.KEY_WRITE) as key:
-            winreg.SetValueEx(key, "ShowRefreshRates", 0, winreg.REG_DWORD, int(show_refresh_rates))
-    except Exception as e:
-        print(f"Error writing to registry: {e}")
-
-def read_show_refresh_rates_from_registry():
-    try:
-        if not key_exists(config.REGISTRY_PATH):
-            create_reg_key(config.REGISTRY_PATH)
-
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, config.REGISTRY_PATH, 0, winreg.KEY_READ) as key:
-            try:
-                value, _ = winreg.QueryValueEx(key, "ShowRefreshRates")
-                return bool(value)
-            except FileNotFoundError:
-                return True
-    except Exception as e:
-        print(f"Error reading from registry: {e}")
-        return True
 
 
 
@@ -216,10 +189,13 @@ class MonitorTuneApp:
 
         self.brightness_values = {}
 
-        self.prev_monitors_info = None
+        # self.prev_monitors_info = None
 
-        self.show_refresh_rates = read_show_refresh_rates_from_registry()  # Add a flag to control the display of refresh rates
+        self.excluded_rates = read_excluded_rates_from_registry()
 
+
+        # self.show_refresh_rates = read_show_refresh_rates_from_registry()  # Add a flag to control the display of refresh rates
+        self.show_refresh_rates = reg_read_bool(config.REGISTRY_PATH, "ShowRefreshRates")
         self.setup_window()
 
 
@@ -292,7 +268,7 @@ class MonitorTuneApp:
 
 
         bottom_frame = ctk.CTkFrame(self.window_frame, height=48, corner_radius=6, fg_color=self.bg_color)
-        bottom_frame.configure(fg_color="red")
+        # bottom_frame.configure(fg_color="red")
         bottom_frame.grid(row=2, column=0, padx=(5, 5), pady=(0, 5), sticky="ew")
         # bottom_frame.grid(row=2, column=0, padx=(7, 7), pady=(0, 7), sticky="ew")
         bottom_frame.columnconfigure(0, weight=1)
@@ -374,13 +350,13 @@ class MonitorTuneApp:
             monitor_frame = ctk.CTkFrame(self.main_frame, 
                                         corner_radius=6, 
                                         fg_color=self.fr_color)
-            monitor_frame.configure(fg_color="green")
+            # monitor_frame.configure(fg_color="green")
             monitor_frame.grid(row=index, column=0, padx=(2, 2), pady=(2, 5), sticky="ew")
             monitor_frame.columnconfigure(0, weight=1)
             
             label_frame = ctk.CTkFrame(monitor_frame, corner_radius=6)
             label_frame.configure(fg_color=self.fr_color)
-            label_frame.configure(fg_color="blue")
+            # label_frame.configure(fg_color="blue")
             label_frame.grid(row=0, column=0, padx=(2, 2), pady=(2, 0), sticky="ew")
             label_frame.columnconfigure(1, weight=1)
 
@@ -421,11 +397,12 @@ class MonitorTuneApp:
             if self.show_refresh_rates:  # Check the flag before displaying refresh rates
                 rr_frame = ctk.CTkFrame(monitor_frame, corner_radius=6)
                 rr_frame.configure(fg_color=self.fr_color)
-                rr_frame.configure(fg_color="red")
+                # rr_frame.configure(fg_color="red")
                 rr_frame.grid(row=1, column=0, padx=(5, 5), pady=(2, 2), sticky="ew")
                 self.update_refresh_rate_frame(index, monitor, rr_frame)
 
                 refresh_rates = monitor["AvailableRefreshRates"]
+                refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
                 print(f"refresh_rates {refresh_rates}")
                 rows = (len(refresh_rates) + 6 - 1) // 6
                 new_window_height += rows * 28 # rr_frame row
@@ -435,7 +412,7 @@ class MonitorTuneApp:
             # new_window_height -= int(4 * self.main_scale_factor)
 
             br_frame = ctk.CTkFrame(monitor_frame, corner_radius=6, fg_color=self.fr_dark_color)
-            br_frame.configure(fg_color="yellow")
+            # br_frame.configure(fg_color="yellow")
             br_frame.grid(row=2, column=0, padx=(2, 2), pady=(0, 2), sticky="ew")
             br_frame.columnconfigure(0, weight=1)
             br_frame.columnconfigure(1, weight=0)
@@ -539,7 +516,7 @@ class MonitorTuneApp:
         # monitor = get_monitors_info()[monitor_idx]
         refresh_rates = monitor["AvailableRefreshRates"]
         # excluded_rates = read_excluded_rates_from_registry()
-        # refresh_rates = [rate for rate in refresh_rates if rate not in excluded_rates]
+        refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
 
         if len(refresh_rates) > 6:
             num_columns = 6
@@ -672,12 +649,7 @@ class MonitorTuneApp:
 
 
 
-            show_refresh_rates_var = ctk.BooleanVar(value=self.show_refresh_rates)
-            show_refresh_rates_checkbox = ctk.CTkSwitch(general_tab, 
-                                                        text="Show Refresh Rates", 
-                                                        variable=show_refresh_rates_var, 
-                                                        command=lambda: self.toggle_refresh_rates(show_refresh_rates_var))
-            show_refresh_rates_checkbox.pack(pady=15, padx=15)
+            
 
 
 
@@ -704,7 +676,12 @@ class MonitorTuneApp:
             print(f"monitor_list 2 {monitor_list}")
 
 
+
+            order_settings_label = ctk.CTkLabel(general_tab, text="Reorder Monitors")
+            order_settings_label.pack(pady=10)
+
             order_frame = ctk.CTkFrame(general_tab)
+
 
             def create_monitor_list():
 
@@ -745,7 +722,7 @@ class MonitorTuneApp:
                     save_order()
 
             def save_order():
-                print("Новий порядок моніторів:", monitor_list)
+                print("New monitor order:", monitor_list)
                 write_order_to_registry(monitor_list)
 
                 self.load_ui()
@@ -754,6 +731,73 @@ class MonitorTuneApp:
             
             create_monitor_list()
             order_frame.pack()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            show_refresh_rates_var = ctk.BooleanVar(value=self.show_refresh_rates)
+            show_refresh_rates_checkbox = ctk.CTkSwitch(general_tab, 
+                                                        text="Show Refresh Rates", 
+                                                        variable=show_refresh_rates_var, 
+                                                        command=lambda: self.toggle_refresh_rates(show_refresh_rates_var))
+            show_refresh_rates_checkbox.pack(pady=15, padx=15)
+            
+
+
+
+            # MARK: excluded_rates
+
+            order_settings_label = ctk.CTkLabel(general_tab, text="Exclude Refresh Rates")
+            order_settings_label.pack(pady=10)
+
+            all_rates = set()
+            for monitor in monitors_info:
+                all_rates.update(monitor['AvailableRefreshRates'])
+            all_rates = sorted(all_rates)
+
+            excluded_rates = read_excluded_rates_from_registry()
+
+            # Створення прокручуваного фрейму
+            scroll_frame = ctk.CTkScrollableFrame(general_tab)
+            scroll_frame.pack(fill="y", expand=True)
+
+            # Функція для оновлення списку excluded
+            def update_excluded(rate, value):
+                print(f"Rate: {rate}, Switch: {value}")
+                if value == 1:  # Якщо перемикач увімкнений
+                    if rate in excluded_rates:
+                        excluded_rates.remove(rate)
+                else:  # Якщо перемикач вимкнений
+                    if rate not in excluded_rates:
+                        excluded_rates.append(rate)
+
+                write_excluded_rates_to_registry(excluded_rates)
+                self.excluded_rates = excluded_rates
+                print(f"Updated excluded list: {excluded_rates}")  # Виведення оновленого списку
+
+
+            for rate in all_rates:
+                switch = ctk.CTkSwitch(scroll_frame, text=f"{rate} Hz")
+                switch.pack(anchor="w", pady=5)
+                
+                # Встановлення початкового стану
+                if rate in excluded_rates:
+                    switch.deselect()
+                else:
+                    switch.select()
+                
+                # Прив'язка функції до події перемикання
+                switch.configure(command=lambda rate=rate, switch=switch: update_excluded(rate, switch.get()))
 
 
 
@@ -784,7 +828,8 @@ class MonitorTuneApp:
 
     def toggle_refresh_rates(self, var):
         self.show_refresh_rates = var.get()
-        write_show_refresh_rates_to_registry(self.show_refresh_rates)
+        # write_show_refresh_rates_to_registry(self.show_refresh_rates)
+        reg_write_bool(config.REGISTRY_PATH, "ShowRefreshRates", self.show_refresh_rates)
         self.load_ui()
 
 
@@ -879,7 +924,7 @@ class MonitorTuneApp:
             #     self.root.after(0, self.load_ui)
             # self.prev_monitors_info = monitors_info
 
-            # self.root.geometry(f"{self.window_width}x{self.window_height}+{int(self.screen_width * self.main_scale_factor)}+{self.y_position}")
+            self.root.geometry(f"{self.window_width}x{self.window_height}+{int(self.screen_width * self.main_scale_factor)}+{self.y_position}")
 
             # self.load_ui()
             self.root.after(0, self.load_ui)
