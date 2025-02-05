@@ -32,6 +32,7 @@ import winreg
 # MARK: WRRS
 class MonitorTuneApp:
     def __init__(self, icon_path, settings_icon):
+        print("MonitorTuneApp init ------------------------------------------------")
 
         self.icon_path = icon_path
         self.settings_icon = settings_icon
@@ -81,9 +82,8 @@ class MonitorTuneApp:
         print(f"Scale factor: {self.main_scale_factor}")
 
         self.screen_width = self.root.winfo_screenwidth()
-        print(f"Screen width: {self.screen_width}")
         self.screen_height = self.root.winfo_screenheight()
-        print(f"Screen height: {self.screen_height}")
+        print(f"Screen res: {self.screen_width} x {self.screen_height}")
 
         self.settings_window = None
 
@@ -116,6 +116,7 @@ class MonitorTuneApp:
 
     # MARK: setup_window()
     def setup_window(self):
+        print("setup_window ------------------------------------------------")
         self.root.bind("<FocusOut>", self.on_focus_out)
         self.root.withdraw()
 
@@ -156,7 +157,7 @@ class MonitorTuneApp:
         self.main_frame = ctk.CTkFrame(self.window_frame, 
                                        corner_radius=6, 
                                        fg_color=self.bg_color)
-        self.main_frame.configure(fg_color="red")
+        # self.main_frame.configure(fg_color="red")
         self.main_frame.grid(row=0, column=0, padx=5, pady=(5, 0), sticky="nsew")
         self.main_frame.columnconfigure(0, weight=1)
 
@@ -182,15 +183,15 @@ class MonitorTuneApp:
 
 
 
-        bottom_frame = ctk.CTkFrame(self.window_frame, height=48, corner_radius=6, fg_color=self.bg_color)
-        bottom_frame.configure(fg_color="red")
-        bottom_frame.grid(row=2, column=0, padx=(5, 5), pady=(0, 5), sticky="ew")
+        self.bottom_frame = ctk.CTkFrame(self.window_frame, height=48, corner_radius=6, fg_color=self.bg_color)
+        # bottom_frame.configure(fg_color="red")
+        self.bottom_frame.grid(row=2, column=0, padx=(5, 5), pady=(0, 5), sticky="ew")
         # bottom_frame.grid(row=2, column=0, padx=(7, 7), pady=(0, 7), sticky="ew")
-        bottom_frame.columnconfigure(0, weight=1)
-        bottom_frame.bind("<MouseWheel>", self.on_bottom_frame_scroll)
+        self.bottom_frame.columnconfigure(0, weight=1)
+        self.bottom_frame.bind("<MouseWheel>", self.on_bottom_frame_scroll)
 
-        name_title = ctk.CTkLabel(bottom_frame, 
-                                  text="Adjust Monitors", 
+        name_title = ctk.CTkLabel(self.bottom_frame, 
+                                  text="Scroll to adjust monitors", 
                                   font=("Segoe UI", 14),
                                   height=28)#, "bold"))
         # name_title.configure(bg_color="blue")
@@ -204,7 +205,7 @@ class MonitorTuneApp:
 
 
         icon = Image.open(self.settings_icon)
-        settings_button = ctk.CTkButton(bottom_frame, 
+        settings_button = ctk.CTkButton(self.bottom_frame, 
                                         text="", 
                                         image=ctk.CTkImage(icon), 
                                         width=35,
@@ -226,6 +227,25 @@ class MonitorTuneApp:
     def load_ui(self):
         print("load_ui ------------------------------------------------")
         
+
+
+        # if is_dark_theme():
+        #     ctk.set_appearance_mode("dark")
+        #     self.bg_color = self.bg_dark_color
+        #     self.border_color = self.border_dark_color
+        #     self.fr_color = self.fr_dark_color
+        #     self.btn_bg_color = self.fr_color
+        # else:
+        #     ctk.set_appearance_mode("light")
+        #     self.bg_color = self.bg_light_color
+        #     self.border_color = self.border_light_color
+        #     self.fr_color = self.fr_light_color
+        #     self.btn_bg_color = "gray"
+
+        # self.window_frame.configure(fg_color=self.bg_color, border_color=self.border_color)
+        # self.main_frame.configure(fg_color=self.bg_color)
+        # self.bottom_frame.configure(fg_color=self.bg_color)
+
 
         for widget in self.main_frame.winfo_children():
             widget.destroy()
@@ -268,7 +288,7 @@ class MonitorTuneApp:
                 monitor_frame = ctk.CTkFrame(self.main_frame, 
                                             corner_radius=6, 
                                             fg_color=self.fr_color)
-                monitor_frame.configure(fg_color="green")
+                # monitor_frame.configure(fg_color="green")
                 # monitor_frame.grid(row=index, column=0, padx=(2, 2), pady=(2, 5), sticky="ew")
                 monitor_frame.grid(row=index+index_2*10, column=0, padx=(2, 2), pady=(2, 5), sticky="ew")
                 monitor_frame.columnconfigure(0, weight=1)
@@ -312,21 +332,26 @@ class MonitorTuneApp:
 
 
 
+                
 
-
-                if self.show_refresh_rates:  # Check the flag before displaying refresh rates
-                    rr_frame = ctk.CTkFrame(monitor_frame, corner_radius=6)
-                    rr_frame.configure(fg_color=self.fr_color)
-                    # rr_frame.configure(fg_color="red")
-                    rr_frame.grid(row=1, column=0, padx=(5, 5), pady=(2, 2), sticky="ew")
-                    self.update_refresh_rate_frame(monitor_serial, monitor, rr_frame)
+                if self.show_refresh_rates:
 
                     refresh_rates = monitor["AvailableRefreshRates"]
                     refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
-                    # print(f"refresh_rates {refresh_rates}")
-                    rows = (len(refresh_rates) + 6 - 1) // 6
-                    new_window_height += rows * 28 # rr_frame row
-                    new_window_height += 4 # rr_frame pady ############################
+
+                    if len(refresh_rates) >= 2:
+                        rr_frame = ctk.CTkFrame(monitor_frame, corner_radius=6)
+                        rr_frame.configure(fg_color=self.fr_color)
+                        # rr_frame.configure(fg_color="red")
+                        rr_frame.grid(row=1, column=0, padx=(5, 5), pady=(2, 2), sticky="ew")
+                        self.update_refresh_rate_frame(monitor_serial, monitor, rr_frame)
+
+                        # refresh_rates = monitor["AvailableRefreshRates"]
+                        # refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
+                        # print(f"refresh_rates {refresh_rates}")
+                        rows = (len(refresh_rates) + 6 - 1) // 6
+                        new_window_height += rows * 28 # rr_frame row
+                        new_window_height += 4 # rr_frame pady ############################
 
 
 
@@ -409,19 +434,39 @@ class MonitorTuneApp:
         # self.y_position = self.screen_height - self.window_height - self.edge_padding - self.taskbar_height
 
         # print("window height", self.window_height)  
-        # self.y_position = int((self.screen_height - self.window_height - self.edge_padding - self.taskbar_height) * self.main_scale_factor)
-        self.y_position = int((self.screen_height - self.window_height - self.edge_padding - self.taskbar_height) * self.main_scale_factor)
-        print(f"x_position {self.x_position} y_position {self.y_position}")
+
+
+        self.main_scale_factor = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100
+        print(f"Scale factor: {self.main_scale_factor}")
+
+
+
+        # self.screen_width = self.root.winfo_screenwidth()
+        # self.screen_height = self.root.winfo_screenheight()
+
+        
+
+        self.update_sizes()
         self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}")
         
 
 
-    
+    def update_sizes(self):
+        print("update_sizes")
+        user32 = ctypes.windll.user32
+        self.screen_width = int(user32.GetSystemMetrics(0) / self.main_scale_factor)
+        self.screen_height = int(user32.GetSystemMetrics(1) / self.main_scale_factor)
+        print(f"   Screen res: {self.screen_width} x {self.screen_height}")
+
+        self.x_position = int((self.screen_width - self.window_width - self.edge_padding) * self.main_scale_factor)
+        self.y_position = int((self.screen_height - self.window_height - self.edge_padding - self.taskbar_height) * self.main_scale_factor)
+        print(f"   x_position {self.x_position} y_position {self.y_position}")
 
 
     # MARK: on_refresh_rate_btn()
     def on_refresh_rate_btn(self, monitor_serial, monitor, value, frame):
-        print(f"monitor_serial {monitor_serial} value {value} frame {frame}")
+        print(f"on_refresh_rate_btn {monitor_serial} {value}")
+
         set_refresh_rate_br(monitor, value, refresh=False)
 
         monitors_info = get_monitors_info()
@@ -440,7 +485,7 @@ class MonitorTuneApp:
     # MARK: update_refresh_rate_frame()
     def update_refresh_rate_frame(self, monitor_serial, monitor, frame):
 
-        # print(f"update_refresh_rate_frame {monitor_idx} {frame}")
+        print(f"update_refresh_rate_frame {monitor_serial}")
 
         for widget in frame.winfo_children():
             widget.destroy()
@@ -449,12 +494,15 @@ class MonitorTuneApp:
         refresh_rates = monitor["AvailableRefreshRates"]
 
         refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
-
+        # print(f"refresh_rates {refresh_rates}")
+        # if len(refresh_rates) < 1:
+        #     return
+        # num_columns = 6
         if len(refresh_rates) > 6:
             num_columns = 6
         else:
             num_columns = len(refresh_rates)
-        # num_columns = 6
+        
 
         for i in range(num_columns):
             frame.columnconfigure(i, weight=1)
@@ -486,7 +534,7 @@ class MonitorTuneApp:
 
     # MARK: on_resolution_select()
     def on_resolution_select(self, monitor_serial, resolution, frame):
-        print(f"on_resolution_select {resolution} idx {monitor_serial} frame {frame}")
+        print(f"on_resolution_select {monitor_serial} {resolution}")
         width, height = map(int, resolution.split('x'))
 
         monitors_info = get_monitors_info()
@@ -494,18 +542,22 @@ class MonitorTuneApp:
 
         set_resolution(monitors_dict[monitor_serial]["Device"], width, height)
 
+        self.update_sizes()
+        self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}")
+
 
 
 
     # MARK: on_br_slider_change()
     def on_br_slider_change(self, monitor_serial, value, label):
-        # monitor_serial = get_monitors_info()[monitor_index]['serial']
+        print(f"on_br_slider_change {monitor_serial} {value}")
         self.brightness_values[monitor_serial]['brightness'] = int(value)  # Ensure value is an integer
         label.configure(text=f"{int(value)}")
         self.save_brightness_values_to_registry()
 
 
     def on_br_slider_scroll(self, event, slider, label, monitor_serial):
+        print(f"on_br_slider_scroll {monitor_serial} {event.delta}")
         new_value = max(0, min(100, slider.get() + (1 if event.delta > 0 else -1)))
         slider.set(new_value)
         self.brightness_values[monitor_serial]['brightness'] = int(new_value)  # Ensure value is an integer
@@ -516,7 +568,7 @@ class MonitorTuneApp:
 
     # MARK: on_bottom_frame_scroll()
     def on_bottom_frame_scroll(self, event):
-        # print("on_bottom_frame_scroll : ", event.delta)
+        print("on_bottom_frame_scroll ", event.delta)
 
         for monitor_serial, monitor in self.brightness_values.items():
             brightness = monitor['brightness']
@@ -534,6 +586,7 @@ class MonitorTuneApp:
     # MARK: open_settings_window()
     def open_settings_window(self):
         if self.settings_window is None or not self.settings_window.winfo_exists():
+            print("open_settings_window")
 
             self.settings_window = ctk.CTkToplevel(self.root)
             self.settings_window.title(f"{config.app_name} Settings")
@@ -723,6 +776,7 @@ class MonitorTuneApp:
 
     # MARK: create_tray_icon()
     def create_tray_icon(self):
+        print("create_tray_icon")
 
         icon_image = Image.open(self.icon_path)
         # icon_image = Image.new('RGB', (64, 64), color=(255, 255, 255))
@@ -764,6 +818,7 @@ class MonitorTuneApp:
     def on_tray_click(self):
         if not self.root.winfo_viewable():
             print("on_tray_click show")
+            # self.update_sizes()
 
             # monitors_info = get_monitors_info()
             # if self.prev_monitors_info != monitors_info:
@@ -778,6 +833,8 @@ class MonitorTuneApp:
             # self.prev_monitors_info = monitors_info
 
             self.root.geometry(f"{self.window_width}x{self.window_height}+{int(self.screen_width * self.main_scale_factor)}+{self.y_position}")
+            print(f"   {self.window_width}x{self.window_height}+{self.screen_width}+{self.y_position}")
+            # self.root.geometry(f"{self.window_width}x{self.window_height}+{int(self.x_position)}+{self.y_position}")
 
             # self.load_ui()
             self.root.after(0, self.load_ui)
@@ -803,21 +860,16 @@ class MonitorTuneApp:
             self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
             self.brightness_sync_thread.start()
 
-        # self.animate_window_open()
+        self.animate_window_open()
 
     # MARK: hide_window()
     def hide_window(self):
         print("hide_window")
-        
-        # self.brightness_sync_thread.join()
 
-        # print(self.brightness_values)
-        # self.brightness_values.clear() ##################################################################
-        # print(self.brightness_values)
-        
+        # self.animate_window_close()
         self.root.withdraw()
-
         self.window_open = False
+
         # if self.brightness_sync_thread is not None:
         #     print("brightness_sync_thread.join()")
         #     self.brightness_sync_thread.join()
@@ -827,8 +879,9 @@ class MonitorTuneApp:
 
     # MARK: on_focus_out()
     def on_focus_out(self, event):
+        print("on_focus_out")
         if self.root.winfo_viewable():
-            print("on_focus_out")
+            print("on_focus_out hide")
             self.hide_window()
 
 
@@ -857,6 +910,7 @@ class MonitorTuneApp:
 
     # MARK: animate_window_open()
     def animate_window_open(self, speed=20):
+        print("animate_window_open")
         for i in range(int(self.screen_width * self.main_scale_factor), self.x_position, -speed):
         # for i in range(self.screen_width, self.x_position, -speed):
             self.root.geometry(f"{self.window_width}x{self.window_height}+{i}+{self.y_position}")
@@ -865,12 +919,28 @@ class MonitorTuneApp:
         self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}")
     
     # MARK: animate_window_close()
-    def animate_window_close(self, speed=2):
+    def animate_window_close(self, speed=20):
         current_x_position = self.root.winfo_x()
         for i in range(current_x_position, self.screen_width, speed):
             self.root.geometry(f"{self.window_width}x{self.window_height}+{i}+{self.y_position}")
             self.root.update()
             time.sleep(0.003)
+
+
+
+    # MARK: save_brightness_values_to_registry()
+    def save_brightness_values_to_registry(self):
+        brightness_data = {monitor_serial: {'brightness': int(data['brightness'])} for monitor_serial, data in self.brightness_values.items()}  # Ensure value is an integer
+        reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", brightness_data)
+
+    # MARK: load_brightness_values_from_registry()
+    def load_brightness_values_from_registry(self):
+        brightness_data = reg_read_dict(config.REGISTRY_PATH, "BrightnessValues")
+        print(f"brightness_data {brightness_data}")
+        for monitor_serial, data in brightness_data.items():
+            self.brightness_values[monitor_serial] = {'brightness': data['brightness'], 'slider': None, 'label': None}
+        print(f"self.brightness_values {self.brightness_values}")
+
 
 
     # MARK: run()
@@ -882,25 +952,6 @@ class MonitorTuneApp:
     def quit_app(self, icon, item):
         self.icon.stop()
         self.root.quit()
-
-
-
-
-
-    # MARK: save_brightness_values_to_registry()
-    def save_brightness_values_to_registry(self):
-        brightness_data = {monitor_serial: {'brightness': int(data['brightness'])} for monitor_serial, data in self.brightness_values.items()}  # Ensure value is an integer
-        reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", brightness_data)
-
-    def load_brightness_values_from_registry(self):
-        brightness_data = reg_read_dict(config.REGISTRY_PATH, "BrightnessValues")
-        print(f"brightness_data {brightness_data}")
-        for monitor_serial, data in brightness_data.items():
-            self.brightness_values[monitor_serial] = {'brightness': data['brightness'], 'slider': None, 'label': None}
-        print(f"self.brightness_values {self.brightness_values}")
-
-
-
 
 # MARK: main
 if __name__ == "__main__":
