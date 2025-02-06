@@ -22,6 +22,8 @@ import screen_brightness_control as sbc
 import config
 import winreg
 
+import webbrowser
+
 
 # MARK: MonitorTuneApp
 class MonitorTuneApp:
@@ -36,8 +38,14 @@ class MonitorTuneApp:
         self.window_height = 231
 
         self.taskbar_height = 48
-        self.edge_padding = 11
-        # self.edge_padding = 0
+
+        self.enable_rounded_corners = reg_read_bool(config.REGISTRY_PATH, "EnableRoundedCorners")
+        if self.enable_rounded_corners:
+            self.window_corner_radius = 9
+            self.edge_padding = 11
+        else:
+            self.window_corner_radius = 0
+            self.edge_padding = 0
 
         self.border_color_light = "#bebebe"
         self.border_color_dark = "#404040"
@@ -68,12 +76,17 @@ class MonitorTuneApp:
         self.load_brightness_values_from_registry()
 
 
+
         self.excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
+
+
+        self.custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
+        print(f"custom_monitor_names {self.custom_monitor_names}")
 
         self.monitors_order = reg_read_list(config.REGISTRY_PATH, "MonitorsOrder")
 
 
-        self.show_res_combobox = reg_read_bool(config.REGISTRY_PATH, "ShowResCombobox")
+        self.show_res_combobox = reg_read_bool(config.REGISTRY_PATH, "ShowResolution")
         self.enable_res_combobox = reg_read_bool(config.REGISTRY_PATH, "EnableResCombobox")
 
         self.restore_last_brightness = reg_read_bool(config.REGISTRY_PATH, "RestoreLastBrightness")
@@ -82,6 +95,10 @@ class MonitorTuneApp:
         # self.show_refresh_rates = read_show_refresh_rates_from_registry()  # Add a flag to control the display of refresh rates
         self.show_refresh_rates = reg_read_bool(config.REGISTRY_PATH, "ShowRefreshRates")
         # print(f"show_refresh_rates {self.show_refresh_rates}")
+
+
+        
+
         self.setup_window()
 
 
@@ -118,7 +135,7 @@ class MonitorTuneApp:
         self.root.attributes('-topmost', 'True')
 
         self.window_frame = ctk.CTkFrame(self.root, 
-                                         corner_radius=9, 
+                                         corner_radius=self.window_corner_radius, 
                                          width=400, 
                                          bg_color="#000001", 
                                          fg_color=(self.bg_color_light, self.bg_color_dark),
@@ -179,7 +196,8 @@ class MonitorTuneApp:
         # self.root.update() #////////////////////////////////////////////////
         # self.load_ui()
         # self.root.after(0, self.load_ui) #////////////////////////////////////////////////
-        self.on_tray_click()
+        # self.on_tray_click()
+        self.open_settings_window()
 
 
 
@@ -244,8 +262,10 @@ class MonitorTuneApp:
                 label_frame.grid(row=0, column=0, padx=(2, 2), pady=(2, 0), sticky="ew")
                 label_frame.columnconfigure(1, weight=1)
 
+                monitor_label_text = self.custom_monitor_names[monitor_serial] if monitor_serial in self.custom_monitor_names else monitor["display_name"]
+
                 monitor_label = ctk.CTkLabel(label_frame, 
-                                            text=monitor["display_name"], 
+                                            text=monitor_label_text, 
                                             font=("Segoe UI", 16, "bold"))
                 # monitor_label.configure(bg_color="red")
                 monitor_label.grid(row=0, column=0, padx=(10, 0), pady=(5, 5), sticky="w")
@@ -398,7 +418,7 @@ class MonitorTuneApp:
                                       width=1, height=24)
             
             if rate == monitor["RefreshRate"]:
-                rr_button.configure(hover=False)
+                # rr_button.configure(hover=False)
                 # rr_button.configure(state="disabled")
                 pass
             else:
@@ -484,69 +504,184 @@ class MonitorTuneApp:
 
 
             tabview = ctk.CTkTabview(self.settings_window)
-            tabview.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+            tabview.grid(row=0, column=0, padx=5, pady=(0, 5), sticky="nsew")
 
 
 
-            def toggle_setting(setting_name, reg_setting_name, var):
+            def toggle_setting(setting_name, reg_setting_name, var, callback=None):
                 setattr(self, setting_name, var.get())
                 reg_write_bool(config.REGISTRY_PATH, reg_setting_name, getattr(self, setting_name))
+                
+                if callable(callback):
+                    print("callback", callback)
+                    callback()
+
                 self.load_ui()
 
-            def create_setting_switch(parent, setting_name, reg_setting_name, setting_label, row_num):
+            def create_setting_switch(parent, row_num, setting_name, reg_setting_name, setting_label, callback=None):
                 var = ctk.BooleanVar(value=getattr(self, setting_name))
-                switch = ctk.CTkSwitch(parent, 
-                                        text=setting_label, 
-                                        variable=var, 
-                                        command=lambda: toggle_setting(setting_name, reg_setting_name, var))
+                switch = ctk.CTkSwitch(parent,
+                                    # bg_color="red",
+                                    text=setting_label, 
+                                    variable=var, 
+                                    command=lambda: toggle_setting(setting_name, reg_setting_name, var, callback))
                 # switch.pack(pady=15, padx=15)
-                switch.grid(row=row_num, column=0, padx=10, pady=10, sticky="w")
+                switch.grid(row=row_num, column=0, padx=10, pady=(10, 0), sticky="w")
                 return switch
 
 
 
             # Додаємо вкладки
             general_tab = tabview.add("General")
+            general_tab_frame = ctk.CTkFrame(general_tab)
+            # general_tab_frame.configure(fg_color="gray")
+            general_tab_frame.pack(pady=(0, 0), fill="y", expand=True)
 
             resolution_tab = tabview.add("Resolution")
             resolution_tab_frame = ctk.CTkFrame(resolution_tab)
             resolution_tab_frame.configure(fg_color="gray")
-            resolution_tab_frame.pack(pady=(5, 0), fill="y", expand=True)
+            resolution_tab_frame.pack(pady=(0, 0), fill="y", expand=True)
 
             refresh_rate_tab = tabview.add("Refresh Rate")
             refresh_rate_tab_frame = ctk.CTkFrame(refresh_rate_tab)
             refresh_rate_tab_frame.configure(fg_color="gray")
-            refresh_rate_tab_frame.pack(pady=(5, 0), fill="y", expand=True)
+            refresh_rate_tab_frame.pack(pady=(0, 0), fill="y", expand=True)
 
             brightness_tab = tabview.add("Brightness")
             brightness_tab_frame = ctk.CTkFrame(brightness_tab)
             brightness_tab_frame.configure(fg_color="gray")
-            brightness_tab_frame.pack(pady=(5, 0), fill="y", expand=True)
+            brightness_tab_frame.pack(pady=(0, 0), fill="y", expand=True)
 
 
             # time_tab = tabview.add("Time adjustment")
             # hotkeys_tab = tabview.add("Hotkeys")
+
             about_tab = tabview.add("About")
+            about_tab_frame = ctk.CTkFrame(about_tab)
+            about_tab_frame.configure(fg_color="gray")
+            about_tab_frame.pack(pady=(5, 0), fill="y", expand=True)
+
 
 
             # MARK: General Tab
+
+            create_setting_switch(general_tab_frame, 1, "enable_rounded_corners", "EnableRoundedCorners", "Rounded Corners", self.update_rounded_corners)
+
+
+
+
+
             monitors_info = get_monitors_info()
             # Створюємо словник, де ключ — серійний номер
             monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
             # print(f"monitors_dict {monitors_dict}")
 
             reg_order = reg_read_list(config.REGISTRY_PATH, "MonitorsOrder")
+
             # Сортуємо список моніторів відповідно до порядку з реєстру
             monitors_order = [serial for serial in reg_order if serial in monitors_dict]
             # Додаємо монітори, яких немає в реєстрі, в кінець списку
             monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
 
+            print(f"monitors_order {monitors_order}")
 
-            order_settings_label = ctk.CTkLabel(general_tab, text="Reorder Monitors")
-            order_settings_label.pack(pady=(10, 5))
 
-            order_frame = ctk.CTkFrame(general_tab)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
+            print(f"custom_monitor_names {custom_monitor_names}")
+
+            # Add Rename Monitors setting
+            rename_monitors_frame = ctk.CTkFrame(general_tab_frame)
+            rename_monitors_frame.grid(row=2, column=0, padx=0, pady=(10, 0), sticky="we")
+
+            rename_monitors_label = ctk.CTkLabel(rename_monitors_frame, text="Rename Monitors")
+            rename_monitors_label.pack(pady=(5, 5))
+
+            rename_frame = ctk.CTkFrame(rename_monitors_frame)
+
+            def create_rename_list():
+                # Remove old widgets
+                for widget in rename_frame.winfo_children():
+                    widget.destroy()
+
+                # Add new widgets
+                for i, monitor_id in enumerate(monitors_order):
+                    print(f"monitor_id {monitor_id}")
+                    row_frame = ctk.CTkFrame(rename_frame)
+                    row_frame.pack(fill="x", pady=(2, 0))
+
+                    label = ctk.CTkLabel(row_frame, text=f"{monitors_dict[monitor_id]['display_name']}", width=150, anchor="w")
+                    label.pack(side="left", padx=5)
+
+                    entry = ctk.CTkEntry(row_frame, width=150)
+                    placeholder = custom_monitor_names[monitor_id] if monitor_id in custom_monitor_names else ""
+                    entry.insert(0, placeholder)
+                    entry.pack(side="left", padx=2)
+
+                    save_btn = ctk.CTkButton(row_frame, 
+                                            text="Save", 
+                                            width=50, 
+                                            command=lambda id=monitor_id, 
+                                            entry=entry: save_name(id, entry),
+                                            )
+                    save_btn.pack(side="right", padx=2, fill="x", expand=True)
+
+
+
+            def save_name(monitor_id, entry):
+                new_name = entry.get()
+
+                if len(new_name) == 0 or len(new_name) > 50:
+                    return
+                
+                custom_monitor_names[monitor_id] = new_name
+                self.custom_monitor_names = custom_monitor_names
+                reg_write_dict(config.REGISTRY_PATH, "CustomMonitorNames", custom_monitor_names)
+                # self.load_ui()
+
+
+
+            create_rename_list()
+            rename_frame.pack(fill="x")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            
+
+
+            reorder_monitors_frame = ctk.CTkFrame(general_tab_frame)
+            reorder_monitors_frame.grid(row=3, column=0, padx=0, pady=(10, 0), sticky="we")
+
+            reorder_monitors_label = ctk.CTkLabel(reorder_monitors_frame, text="Reorder Monitors")
+            reorder_monitors_label.pack(pady=(5, 5))
+
+            order_frame = ctk.CTkFrame(reorder_monitors_frame)
 
             def create_monitor_list():
                 # Видалити старі віджети
@@ -556,7 +691,12 @@ class MonitorTuneApp:
                 # Додати нові віджети
                 for i, monitor in enumerate(monitors_order):
                     row_frame = ctk.CTkFrame(order_frame)
-                    row_frame.pack(fill="x", pady=2)
+                    row_frame.pack(fill="x", pady=(2, 0))
+
+
+
+                    cmn = custom_monitor_names[monitor] if monitor in custom_monitor_names else ""
+
 
                     label = ctk.CTkLabel(row_frame, text=f"{monitors_dict[monitor]["display_name"]}", width=150, anchor="w")
                     label.pack(side="left", padx=5)
@@ -566,9 +706,12 @@ class MonitorTuneApp:
 
                     down_btn = ctk.CTkButton(row_frame, text="⬇", width=30, command=lambda i=i: move_down(i))
                     down_btn.pack(side="right", padx=2)
-
+        
                     # id = ctk.CTkLabel(row_frame, text=f"id: {monitor}", width=175, anchor="w")
                     # id.pack(side="right", padx=5)
+
+                    id = ctk.CTkLabel(row_frame, text=cmn, width=150, anchor="w")
+                    id.pack(side="right", padx=5)
 
             def move_up(index):
                 if index > 0:
@@ -589,20 +732,23 @@ class MonitorTuneApp:
                 self.load_ui()
 
             create_monitor_list()
-            order_frame.pack()
+            order_frame.pack(fill="x")
 
 
             # MARK: Resolution Tab
-            create_setting_switch(resolution_tab_frame, "show_res_combobox", "ShowResCombobox", "Show Resolutions", 1)
-            create_setting_switch(resolution_tab_frame, "enable_res_combobox", "EnableResCombobox", "Resolution Change Ability", 2)
+            create_setting_switch(resolution_tab_frame, 1, "show_res_combobox", "ShowResolution", "Show Resolutions")
+            create_setting_switch(resolution_tab_frame, 2, "enable_res_combobox", "EnableResCombobox", "Allow Resolution Change")
+
 
 
             # MARK: Refresh Rates Tab
-            create_setting_switch(refresh_rate_tab_frame, "show_refresh_rates", "ShowRefreshRates", "Show Refresh Rates", 1)
+            create_setting_switch(refresh_rate_tab_frame, 1, "show_refresh_rates", "ShowRefreshRates", "Show Refresh Rates")
 
+            exclude_rr_frame = ctk.CTkFrame(refresh_rate_tab_frame)
+            exclude_rr_frame.grid(row=2, column=0, padx=0, pady=(10, 0), sticky="nsew")
 
-            exclude_rr_label = ctk.CTkLabel(refresh_rate_tab_frame, text="Exclude Refresh Rates")
-            exclude_rr_label.grid(row=2, column=0, padx=10, pady=(10 ,0), sticky="we")
+            exclude_rr_label = ctk.CTkLabel(exclude_rr_frame, text="Exclude Refresh Rates")
+            exclude_rr_label.pack(pady=(5, 5))
 
             all_rates = set()
             for monitor in monitors_info:
@@ -611,10 +757,11 @@ class MonitorTuneApp:
 
             excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
 
-            refresh_rate_tab_frame.rowconfigure(3, weight=1)
+            refresh_rate_tab_frame.rowconfigure(2, weight=1)
             # Створення прокручуваного фрейму
-            scroll_frame = ctk.CTkScrollableFrame(refresh_rate_tab_frame)
-            scroll_frame.grid(row=3, column=0, padx=5, pady=(5 ,10), sticky="nsew")
+            scroll_frame = ctk.CTkScrollableFrame(exclude_rr_frame)
+            # scroll_frame.grid(row=3, column=0, padx=5, pady=(5 ,10), sticky="nsew")
+            scroll_frame.pack(padx=10, pady=(0, 10), fill="both", expand=True)
 
             # Функція для оновлення списку excluded
             def update_excluded(rate, value):
@@ -634,7 +781,7 @@ class MonitorTuneApp:
 
             for rate in all_rates:
                 switch = ctk.CTkSwitch(scroll_frame, text=f"{rate} Hz")
-                switch.pack(anchor="w", pady=5)
+                switch.pack(anchor="w", padx=5, pady=5)
                 
                 # Встановлення початкового стану
                 if rate in excluded_rates:
@@ -646,8 +793,24 @@ class MonitorTuneApp:
                 switch.configure(command=lambda rate=rate, switch=switch: update_excluded(rate, switch.get()))
 
 
+
             # MARK: Brightness Tab
-            create_setting_switch(brightness_tab_frame, "restore_last_brightness", "RestoreLastBrightness", "Restore Last Brightness", 1)
+            create_setting_switch(brightness_tab_frame, 1, "restore_last_brightness", "RestoreLastBrightness", "Restore Last Brightness")
+
+
+
+            # MARK: About Tab
+            about_label = ctk.CTkLabel(about_tab_frame, 
+                                       text=f"{config.app_name} v{config.version}"
+                                       )
+            about_label.pack(padx=10, pady=(10, 0))
+
+            check_update_button = ctk.CTkButton(about_tab_frame, 
+                                                text="Check for Updates", 
+                                                command=lambda: webbrowser.open("https://github.com/ZDAVanO/MoniTune"))
+            check_update_button.pack(padx=10, pady=(10, 0))
+
+
 
 
         else:
@@ -664,13 +827,12 @@ class MonitorTuneApp:
 
         menu = Menu(
             MenuItem("Quick access", self.on_tray_click, default=True, visible=False),
-            MenuItem("Refresh displays", self.load_ui),
             MenuItem("Settings", self.open_settings_window),
             pystray.Menu.SEPARATOR,
             MenuItem("Exit", self.quit_app)
         )
 
-        self.icon = Icon(config.app_name, icon_image, f"{config.app_name} {config.version}", menu)
+        self.icon = Icon(config.app_name, icon_image, f"{config.app_name} v{config.version}", menu)
         self.icon.run()
 
 
@@ -710,6 +872,7 @@ class MonitorTuneApp:
             self.brightness_sync_thread.start()
 
         self.animate_window_open()
+        # self.root.after(0, self.animate_window_open)
         # self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}")
 
     # MARK: hide_window()
@@ -720,6 +883,15 @@ class MonitorTuneApp:
         self.root.withdraw()
         self.window_open = False
 
+        if self.brightness_sync_thread and self.brightness_sync_thread.is_alive():
+            print("brightness_sync_thread.join()")
+            self.brightness_sync_thread.join()  # Зупинити потік
+
+            if not self.brightness_sync_thread.is_alive():
+                print("Потік завершився")
+            else:
+                print("Потік ще виконується")
+
 
 
     # MARK: on_focus_out()
@@ -728,23 +900,29 @@ class MonitorTuneApp:
         if self.root.winfo_viewable():
             print("on_focus_out hide")
             self.hide_window()
+            # self.window_frame.destroy()
 
 
     # MARK: brightness_sync()
     def brightness_sync(self):
         while self.window_open:
-            # print("brightness_sync")
+            print("brightness_sync")
 
             # start_time = time.time()  # Start time measurement
 
             brightness_values_copy = self.brightness_values.copy()
+            print(f"brightness_values_copy {brightness_values_copy}")
             for monitor_serial, monitor in brightness_values_copy.items():
                 brightness = monitor['brightness']
-                current_brightness = sbc.get_brightness(display=monitor_serial)[0]
-                
-                if current_brightness != brightness:
-                    print(f"set_brightness {monitor_serial} {brightness}")
-                    set_brightness(monitor_serial, brightness)
+
+                try:
+                    current_brightness = sbc.get_brightness(display=monitor_serial)[0]
+                    
+                    if current_brightness != brightness:
+                        print(f"set_brightness {monitor_serial} {brightness}")
+                        set_brightness(monitor_serial, brightness)
+                except Exception as e:
+                    print(f"Error: {e}")
 
             # end_time = time.time()  # End time measurement
             # print(f"Brightness sync took {end_time - start_time:.4f} seconds")
@@ -787,6 +965,12 @@ class MonitorTuneApp:
         print(f"self.brightness_values {self.brightness_values}")
 
 
+    # MARK: update_rounded_corners()
+    def update_rounded_corners(self):
+        new_corner_radius = 9 if self.enable_rounded_corners else 0
+        self.window_frame.configure(corner_radius=new_corner_radius)
+        self.edge_padding = 11 if self.enable_rounded_corners else 0
+
 
     # MARK: run()
     def run(self):
@@ -797,6 +981,8 @@ class MonitorTuneApp:
     def quit_app(self, icon, item):
         self.icon.stop()
         self.root.quit()
+
+    
 
 
 
