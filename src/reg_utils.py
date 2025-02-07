@@ -1,7 +1,5 @@
 import win32api, win32con
-
 import winreg
-
 import json
 
 def is_dark_theme():

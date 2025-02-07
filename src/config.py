@@ -5,20 +5,6 @@
 
 app_name = "MoniTune"
 
-version = "0.0.1"
+version = "0.1.0"
 
 REGISTRY_PATH = r"Software\MoniTune\Settings"
-
-
-settings = [
-    ("show_refresh_rates", "ShowRefreshRates", "Show Refresh Rates"),
-    ("enable_feature_x", "EnableFeatureX", "Enable Feature X"),
-    ("dark_mode", "DarkMode", "Enable Dark Mode"),
-]
-
-
-settings_dict = {
-    "show_refresh_rates": ("ShowRefreshRates", "Show Refresh Rates"),
-    "enable_feature_x": ("EnableFeatureX", "Enable Feature X"),
-    "dark_mode": ("DarkMode", "Enable Dark Mode"),
-}

@@ -1,20 +1,12 @@
-import customtkinter as ctk
-import time
+import win32api, win32con
 
+import time
 import threading
 
 import ctypes
 from ctypes import wintypes
 
-import win32api, win32con
-
 import screen_brightness_control as sbc
-
-
-import sys
-import os
-from reg_utils import is_dark_theme, key_exists, create_reg_key
-
 
 
 # MARK: get_available_refresh_rates()
