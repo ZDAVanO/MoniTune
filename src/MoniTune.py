@@ -97,8 +97,8 @@ class MonitorTuneApp:
         self.monitors_order = reg_read_list(config.REGISTRY_PATH, "MonitorsOrder")
 
 
-        self.show_res_combobox = reg_read_bool(config.REGISTRY_PATH, "ShowResolution")
-        self.enable_res_combobox = reg_read_bool(config.REGISTRY_PATH, "EnableResCombobox")
+        self.show_resolution = reg_read_bool(config.REGISTRY_PATH, "ShowResolution")
+        self.allow_res_change = reg_read_bool(config.REGISTRY_PATH, "AllowResolutionChange")
 
         self.restore_last_brightness = reg_read_bool(config.REGISTRY_PATH, "RestoreLastBrightness")
         
@@ -230,7 +230,7 @@ class MonitorTuneApp:
     def load_ui(self):
         print("load_ui ------------------------------------------------")
         
-        # start_time = time.time()
+        start_time = time.time()
 
 
         for widget in self.main_frame.winfo_children():
@@ -299,8 +299,8 @@ class MonitorTuneApp:
                 monitor_label.grid(row=0, column=0, padx=(10, 0), pady=(5, 5), sticky="w")
 
 
-                if self.show_res_combobox:
-                    if self.enable_res_combobox:
+                if self.show_resolution:
+                    if self.allow_res_change:
                         available_resolutions = monitor["AvailableResolutions"]
                         sorted_resolutions = sorted(available_resolutions, key=lambda res: res[0] * res[1], reverse=True)
                         formatted_resolutions = [f"{width}x{height}" for width, height in sorted_resolutions]
@@ -398,8 +398,8 @@ class MonitorTuneApp:
         # self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}")
         self.root.geometry(f"{self.window_width}x{self.window_height}")
 
-        # end_time = time.time()
-        # print(f"load_ui took {end_time - start_time:.4f} seconds")
+        end_time = time.time()
+        print(f"load_ui took {end_time - start_time:.4f} seconds")
 
         
 
@@ -550,18 +550,11 @@ class MonitorTuneApp:
             self.settings_window.title(f"{config.app_name} Settings")
 
             self.settings_window.minsize(450, 350)
+            self.settings_window.geometry(f"{550}x{475}")
+            self.settings_window.after(250, lambda: self.settings_window.iconbitmap(self.icon_path))
             
             self.settings_window.grid_rowconfigure(0, weight=1)
             self.settings_window.grid_columnconfigure(0, weight=1)
-
-            settings_window_width = 550
-            settings_window_height = 475
-            self.settings_window.geometry(f"{settings_window_width}x{settings_window_height}")
-
-            # self.settings_window.after(250, lambda: self.settings_window.iconbitmap('icons/icon_color_dev.ico'))
-            # self.settings_window.after(250, lambda: self.settings_window.iconbitmap(self.title_bar_icon))
-            self.settings_window.after(250, lambda: self.settings_window.iconbitmap(self.icon_path))
-
 
             tabview = ctk.CTkTabview(self.settings_window)
             tabview.grid(row=0, column=0, padx=5, pady=(0, 5), sticky="nsew")
@@ -573,7 +566,6 @@ class MonitorTuneApp:
                 reg_write_bool(config.REGISTRY_PATH, reg_setting_name, getattr(self, setting_name))
                 
                 if callable(callback):
-                    print("callback", callback)
                     callback()
 
                 self.load_ui()
@@ -585,7 +577,6 @@ class MonitorTuneApp:
                                     text=setting_label, 
                                     variable=var, 
                                     command=lambda: toggle_setting(setting_name, reg_setting_name, var, callback))
-                # switch.pack(pady=15, padx=15)
                 switch.grid(row=row_num, column=0, padx=10, pady=(10, 0), sticky="w")
                 return switch
 
@@ -758,8 +749,8 @@ class MonitorTuneApp:
 
 
             # MARK: Resolution Tab
-            create_setting_switch(resolution_tab_frame, 1, "show_res_combobox", "ShowResolution", "Show Resolutions")
-            create_setting_switch(resolution_tab_frame, 2, "enable_res_combobox", "EnableResCombobox", "Allow Resolution Change")
+            create_setting_switch(resolution_tab_frame, 1, "show_resolution", "ShowResolution", "Show Resolutions")
+            create_setting_switch(resolution_tab_frame, 2, "allow_res_change", "AllowResolutionChange", "Allow Resolution Change")
 
 
 
@@ -891,16 +882,18 @@ class MonitorTuneApp:
         self.root.deiconify()
         self.root.focus_force()
 
+        self.animate_window_open()
+        # self.root.after(0, self.animate_window_open)
+        # self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}")
+        # self.root.after(250, lambda: self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}"))
+
         self.window_open = True
         if self.brightness_sync_thread is None or not self.brightness_sync_thread.is_alive():
             print("brightness_sync_thread.start()")
             self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
             self.brightness_sync_thread.start()
 
-        self.animate_window_open()
-        # self.root.after(0, self.animate_window_open)
-        # self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}")
-        # self.root.after(250, lambda: self.root.geometry(f"{self.window_width}x{self.window_height}+{self.x_position}+{self.y_position}"))
+            
 
     # MARK: hide_window()
     def hide_window(self):
@@ -927,7 +920,6 @@ class MonitorTuneApp:
         if self.root.winfo_viewable():
             print("on_focus_out hide")
             self.hide_window()
-            # self.window_frame.destroy()
 
 
     # MARK: brightness_sync()
@@ -935,7 +927,7 @@ class MonitorTuneApp:
         while self.window_open:
             # print("brightness_sync")
 
-            # start_time = time.time()
+            start_time = time.time()
 
             brightness_values_copy = self.brightness_values.copy()
             # print(f"brightness_values_copy {brightness_values_copy}")
@@ -952,8 +944,8 @@ class MonitorTuneApp:
                 except Exception as e:
                     print(f"Error: {e}")
 
-            # end_time = time.time()  # End time measurement
-            # print(f"Brightness sync took {end_time - start_time:.4f} seconds")
+            end_time = time.time()  # End time measurement
+            print(f"Brightness sync took {end_time - start_time:.4f} seconds")
 
             time.sleep(0.15)
 
@@ -1021,6 +1013,17 @@ if __name__ == "__main__":
     
 
     if getattr(sys, 'frozen', False):
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        mutex = kernel32.CreateMutexW(None, False, "MoniTune")
+        if not mutex: # Помилка створення м'ютекса
+            print(f"Error code: {ctypes.get_last_error()}")
+            sys.exit(1)
+        if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS (м'ютекс вже є)
+            print("Another instance is already running")
+            sys.exit(1)
+
+
         # Якщо програма запущена як EXE, шлях до іконки відносно до виконуваного файлу
         icon_path_s = os.path.join(sys._MEIPASS, 'icon_color.ico')
         # if is_dark_theme():
