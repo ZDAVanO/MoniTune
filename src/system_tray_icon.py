@@ -10,6 +10,10 @@ class SystemTrayIcon(QSystemTrayIcon):
         tray_menu = QMenu()
         show_action = tray_menu.addAction("Show")
         show_action.triggered.connect(parent.show)
+        
+        settings_action = tray_menu.addAction("Settings")  # Add this action
+        settings_action.triggered.connect(parent.openSettingsWindow)  # Connect to openSettingsWindow method
+        
         exit_action = tray_menu.addAction("Exit")
         exit_action.triggered.connect(QGuiApplication.quit)
 
