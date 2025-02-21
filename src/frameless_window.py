@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QMenu,
     QSlider,
     QGraphicsOpacityEffect,  # Add this import
+    QStyleFactory,
 )
 from system_tray_icon import SystemTrayIcon  # Add this import
 
@@ -66,6 +67,7 @@ class MainWindow(QMainWindow):
     #         self.show()
 
     def eventFilter(self, source, event):
+        # print("eventFilter source", source, "event", event.type())
         if event.type() == QEvent.Type.WindowDeactivate:
             self.hide()
         return super().eventFilter(source, event)
@@ -109,6 +111,10 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication([])
+
+    # print(QStyleFactory.keys())
+    # app.setStyle("windows11")
+
     window = MainWindow()
     window.show()
     app.exec()

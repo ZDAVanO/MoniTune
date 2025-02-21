@@ -14,11 +14,11 @@ class SystemTrayIcon(QSystemTrayIcon):
         exit_action.triggered.connect(QGuiApplication.quit)
 
         self.setContextMenu(tray_menu)
-        self.activated.connect(self.onTrayIconActivated)
+        self.activated.connect(self.trayIconClicked)
         self.show()
 
-    def onTrayIconActivated(self, reason):
-        print("onTrayIconActivated reason:", reason)
+    def trayIconClicked(self, reason):
+        print("trayIconClicked reason:", reason)
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.parent().show()
 
