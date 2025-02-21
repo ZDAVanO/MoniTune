@@ -122,8 +122,8 @@ class MonitorTuneApp:
     def setup_window(self):
         print("setup_window ------------------------------------------------")
 
-        self.root.bind("<FocusOut>", self.on_focus_out)
-        self.root.withdraw()
+        # self.root.bind("<FocusOut>", self.on_focus_out)
+        # self.root.withdraw()
 
         # self.x_position = self.screen_width  - self.window_width  - self.edge_padding
         # self.y_position = self.screen_height - self.window_height - self.edge_padding - self.taskbar_height

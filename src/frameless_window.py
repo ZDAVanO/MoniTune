@@ -39,7 +39,7 @@ edge_padding = 11
 
 
 
-
+# MARK: MainWindow
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -60,7 +60,7 @@ class MainWindow(QMainWindow):
             #Container {
             background: #202020;
             border-radius: 9px;
-            border: 1px solid #303030;
+            border: 1px solid #404040;
             }
             """
         )
@@ -68,22 +68,30 @@ class MainWindow(QMainWindow):
 
         self.settings_window = None  # No settings window yet
 
+        self.test_var = 5
 
         self.monitors_frame = QWidget()
         # self.monitors_frame.setStyleSheet("background-color: red;")
         # self.monitors_frame.setStyleSheet("border-radius: 9px; background-color: red")
         self.monitors_layout = QVBoxLayout()
         self.monitors_layout.setContentsMargins(7, 7, 7, 0)
+        # self.monitors_layout.setSpacing(0)
         self.monitors_frame.setLayout(self.monitors_layout)
 
         self.bottom_frame = QFrame()
-        self.bottom_frame.setStyleSheet("background-color: green;") 
-        # self.bottom_frame.setStyleSheet("border-radius: 9px;")
-        self.bottom_frame.setFixedHeight(50)
+        # self.bottom_frame.setStyleSheet("background-color: green;") 
+        # self.bottom_frame.setStyleSheet("""
+        #     background-color: green;
+        #     border-bottom-left-radius: 9px;
+        #     border-bottom-right-radius: 9px;
+        # """)
+        self.bottom_frame.setFixedHeight(60)
         self.bottom_hbox = QHBoxLayout(self.bottom_frame)
         name_title = QLabel("Scroll to adjust brightness")
+        name_title.setStyleSheet("font-size: 14px; padding-left: 5px;")
         settings_button = QPushButton("Settings")
-        settings_button.setFixedWidth(80)
+        settings_button.setFixedWidth(70)
+        settings_button.setFixedHeight(40)
         settings_button.clicked.connect(self.openSettingsWindow)
         self.bottom_hbox.addWidget(name_title)
         self.bottom_hbox.addWidget(settings_button)
@@ -91,6 +99,7 @@ class MainWindow(QMainWindow):
 
         central_widget_layout = QVBoxLayout()
         central_widget_layout.setContentsMargins(0, 0, 0, 0)
+        central_widget_layout.setSpacing(0)
         central_widget_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         central_widget_layout.addWidget(self.monitors_frame)
         # central_widget_layout.addStretch()  # Add stretch to push the bottom frame to the bottom
@@ -115,7 +124,6 @@ class MainWindow(QMainWindow):
 
         # hide window when focus is lost
         if event.type() == QEvent.Type.WindowDeactivate:
-            # if source is self:
             self.hide()
         
         # Handle scroll events on the bottom frame
@@ -130,7 +138,7 @@ class MainWindow(QMainWindow):
 
 
 
-
+    # MARK: updateFrameContents()
     def updateFrameContents(self):
         # Clear old widgets
         while self.monitors_layout.count():
@@ -148,9 +156,9 @@ class MainWindow(QMainWindow):
             monitor_frame.setStyleSheet(
                 """
                 #MonitorsFrame {
-                background: #202020;
+                background: #2b2b2b;
                 border-radius: 6px;
-                border: 1px solid #303030;
+                border: 1px solid #1d1d1d;
                 }
                 """
             )
@@ -158,13 +166,21 @@ class MainWindow(QMainWindow):
             monitor_frame.setFrameShape(QFrame.Shape.Box)
             # monitor_frame.setStyleSheet("background-color: blue;")
             monitor_vbox = QVBoxLayout(monitor_frame)
+            monitor_vbox.setContentsMargins(0, 0, 0, 0)
+            monitor_vbox.setSpacing(0)  # Remove spacing between frames
             
             label_frame = QFrame()
+            
             label_hbox = QHBoxLayout(label_frame)
+            # label_hbox.setContentsMargins(0, 0, 0, 0)
             monitor_label = QLabel(f"Monitor {i+1}")
+            monitor_label.setStyleSheet("font-size: 16px; font-weight: bold;")
             label_hbox.addWidget(monitor_label)
             
             res_combobox = QComboBox()
+            res_combobox.setStyleSheet("font-size: 14px; font-weight: bold;  padding-left: 7px;")
+            res_combobox.setFixedWidth(120)
+            res_combobox.setFixedHeight(32)
             res_combobox.addItems(["1920x1080", "1280x720", "1024x768"])
             label_hbox.addWidget(res_combobox)
             
@@ -173,17 +189,23 @@ class MainWindow(QMainWindow):
             
             # Add refresh rate buttons
             rr_frame = QFrame()
+            
             rr_layout = QVBoxLayout(rr_frame)
-
+            # rr_layout.setContentsMargins(0, 0, 0, 0)
             rr_layout.setSpacing(0)  # Відстань між рядками (горизонтальними групами кнопок)
-            # rr_layout.setContentsMargins(0, 0, 0, 0)  # Прибираємо внутрішні відступи
 
             rr_hbox = QHBoxLayout()
+            rr_hbox.setAlignment(Qt.AlignmentFlag.AlignLeft)  # Align buttons to the left
             for idx, rate in enumerate(["60 Hz", "75 Hz", "120 Hz", "144 Hz", "240 Hz", "120 Hz", "144 Hz", "240 Hz"]):
                 if idx > 0 and idx % 5 == 0:
                     rr_layout.addLayout(rr_hbox)
                     rr_hbox = QHBoxLayout()
+                    rr_hbox.setAlignment(Qt.AlignmentFlag.AlignLeft)  # Align buttons to the left
                 rr_button = QPushButton(rate)
+
+                rr_button.setCheckable(True)
+                rr_button.setChecked(True) if rate == "60 Hz" else rr_button.setChecked(False)
+
                 rr_button.setFixedWidth(60)
                 rr_hbox.addWidget(rr_button)
 
@@ -192,9 +214,17 @@ class MainWindow(QMainWindow):
             monitor_vbox.addWidget(rr_frame)
             
             br_frame = QFrame()
+            
             br_hbox = QHBoxLayout(br_frame)
+            # br_hbox.setContentsMargins(0, 0, 0, 0)
             br_slider = QSlider(Qt.Orientation.Horizontal)
+            br_slider.setMaximum(100)  # Set maximum value to 100
+
             br_label = QLabel("50")
+            br_label.setStyleSheet("font-size: 22px; font-weight: bold; padding-bottom: 4px;")
+            br_label.setFixedWidth(40) 
+            br_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
             br_slider.setValue(50)
             br_label.setText(str(br_slider.value()))
             br_slider.valueChanged.connect(lambda value, label=br_label: label.setText(str(value)))
@@ -206,13 +236,18 @@ class MainWindow(QMainWindow):
             monitor_frame.setLayout(monitor_vbox)
             self.monitors_layout.addWidget(monitor_frame)
 
-        print("updateFrameContents sizeHint:", self.sizeHint().height())
-        
-        
+
+            # label_frame.setStyleSheet("background-color: red")
+            # rr_frame.setStyleSheet("background-color: green")
+            # br_frame.setStyleSheet("background-color: blue")
+            
+
+
 
 
     def showEvent(self, event):
         print("showEvent")
+        print(self.test_var)
 
         # monitors_info = get_monitors_info()
         # print("monitors_info", monitors_info)
@@ -288,7 +323,7 @@ class MainWindow(QMainWindow):
 
     def openSettingsWindow(self):
         if self.settings_window is None:
-            self.settings_window = SettingsWindow()
+            self.settings_window = SettingsWindow(self)
         if self.settings_window.isMinimized():
             self.settings_window.showNormal()
         self.settings_window.show()
@@ -301,8 +336,8 @@ class MainWindow(QMainWindow):
 if __name__ == "__main__":
     app = QApplication([])
 
-    # print(QStyleFactory.keys())
-    # app.setStyle("windows11")
+    print(QStyleFactory.keys())
+    app.setStyle("windows11")
 
     window = MainWindow()
     window.show()
