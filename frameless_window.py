@@ -1,4 +1,4 @@
-from PyQt6.QtCore import QEvent, QSize, Qt
+from PyQt6.QtCore import QEvent, QSize, Qt, QPropertyAnimation, QRect, QEasingCurve
 from PyQt6.QtGui import QIcon, QPixmap, QGuiApplication
 from PyQt6.QtWidgets import (
     QApplication,
@@ -12,7 +12,9 @@ from PyQt6.QtWidgets import (
     QSystemTrayIcon,
     QMenu,
     QSlider,
+    QGraphicsOpacityEffect,  # Add this import
 )
+from system_tray_icon import SystemTrayIcon  # Add this import
 
 
 class MainWindow(QMainWindow):
@@ -54,24 +56,14 @@ class MainWindow(QMainWindow):
 
         self.createTrayIcon()
 
+
+
     def createTrayIcon(self):
-        self.tray_icon = QSystemTrayIcon(self)
-        self.tray_icon.setIcon(QIcon(QPixmap(16, 16)))  # Set your icon here
-        self.tray_icon.setToolTip("MoniTune")
+        self.tray_icon = SystemTrayIcon(self)
 
-        tray_menu = QMenu()
-        show_action = tray_menu.addAction("Show")
-        show_action.triggered.connect(self.show)
-        exit_action = tray_menu.addAction("Exit")
-        exit_action.triggered.connect(QGuiApplication.quit)
-
-        self.tray_icon.setContextMenu(tray_menu)
-        self.tray_icon.activated.connect(self.onTrayIconActivated)
-        self.tray_icon.show()
-
-    def onTrayIconActivated(self, reason):
-        if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self.show()
+    # def onTrayIconActivated(self, reason):
+    #     if reason == QSystemTrayIcon.ActivationReason.Trigger:
+    #         self.show()
 
     def eventFilter(self, source, event):
         if event.type() == QEvent.Type.WindowDeactivate:
@@ -80,9 +72,39 @@ class MainWindow(QMainWindow):
 
     def showEvent(self, event):
         print("showEvent")
+
+        self.adjustWindowPosition()
+
+        self.animateWindowIn()
         self.activateWindow()
         self.raise_()
         super().showEvent(event)
+
+    def adjustWindowPosition(self):
+        # screen_geometry = QGuiApplication.primaryScreen().geometry()
+        screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
+        self.move(screen_geometry.width() - self.width(), screen_geometry.height() - self.height())
+
+    def animateWindowIn(self):
+        screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
+        start_rect = QRect(screen_geometry.width(), screen_geometry.height() - self.height(), self.width(), self.height())
+        end_rect = QRect(screen_geometry.width() - self.width(), screen_geometry.height() - self.height(), self.width(), self.height())
+        
+        self.animation = QPropertyAnimation(self, b"geometry")
+        self.animation.setDuration(1000)
+        self.animation.setStartValue(start_rect)
+        self.animation.setEndValue(end_rect)
+        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        
+        self.opacity_effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.opacity_effect)
+        self.opacity_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
+        self.opacity_animation.setDuration(1000)
+        self.opacity_animation.setStartValue(0)
+        self.opacity_animation.setEndValue(1)
+        
+        self.animation.start()
+        self.opacity_animation.start()
 
 
 if __name__ == "__main__":
