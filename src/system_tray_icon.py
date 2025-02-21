@@ -1,5 +1,5 @@
-from PyQt6.QtGui import QIcon, QPixmap, QGuiApplication
-from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
+from PySide6.QtGui import QIcon, QPixmap, QGuiApplication
+from PySide6.QtWidgets import QSystemTrayIcon, QMenu
 
 class SystemTrayIcon(QSystemTrayIcon):
     def __init__(self, parent=None):

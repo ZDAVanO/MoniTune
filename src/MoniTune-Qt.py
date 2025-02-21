@@ -1,6 +1,6 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QComboBox, QFrame, QWidget, QTabWidget, QCheckBox, QScrollArea
-from PyQt6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QComboBox, QFrame, QWidget, QTabWidget, QCheckBox, QScrollArea
+from PySide6.QtCore import Qt
 
 class MonitorTuneApp(QMainWindow):
     def __init__(self):
@@ -44,6 +44,9 @@ class MonitorTuneApp(QMainWindow):
             br_hbox = QHBoxLayout(br_frame)
             br_slider = QSlider(Qt.Orientation.Horizontal)
             br_label = QLabel("50")
+            br_slider.setValue(50)
+            br_label.setText(str(br_slider.value()))
+            br_slider.valueChanged.connect(lambda value, label=br_label: label.setText(str(value)))
             br_hbox.addWidget(br_slider)
             br_hbox.addWidget(br_label)
             br_frame.setLayout(br_hbox)
