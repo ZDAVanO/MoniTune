@@ -40,6 +40,15 @@ class MonitorTuneApp(QMainWindow):
             label_frame.setLayout(label_hbox)
             monitor_vbox.addWidget(label_frame)
             
+            # Add refresh rate buttons
+            rr_frame = QFrame()
+            rr_hbox = QHBoxLayout(rr_frame)
+            for rate in ["60 Hz", "75 Hz", "120 Hz", "144 Hz", "240 Hz"]:
+                rr_button = QPushButton(rate)
+                rr_hbox.addWidget(rr_button)
+            rr_frame.setLayout(rr_hbox)
+            monitor_vbox.addWidget(rr_frame)
+            
             br_frame = QFrame()
             br_hbox = QHBoxLayout(br_frame)
             br_slider = QSlider(Qt.Orientation.Horizontal)
