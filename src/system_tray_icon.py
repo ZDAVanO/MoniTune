@@ -22,7 +22,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.show()
 
     def trayIconClicked(self, reason):
-        print("trayIconClicked reason:", reason)
+        # print("trayIconClicked reason:", reason)
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.parent().show()
 
