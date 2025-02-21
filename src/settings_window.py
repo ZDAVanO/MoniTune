@@ -35,37 +35,21 @@ class SettingsWindow(QWidget):
         
 
     def closeEvent(self, event):
+        print("Settings window closeEvent")
         event.ignore()
         self.hide()
         # self.close()
 
     def showEvent(self, event):
-        print("Settings window is now visible")
+        print("Settings window showEvent")
         self.updateLayout()
         super().showEvent(event)
 
     def updateLayout(self):
+
         # Clear old widgets
-        print("removed tabs:", self.tab_widget.count())
-        while self.tab_widget.count():
-            self.tab_widget.removeTab(0)
-
-        # Add new tabs
-        # num_tabs = random.randint(1, 1)
-        # for i in range(num_tabs):
-        #     tab = QWidget()
-        #     tab_layout = QVBoxLayout()
-        #     tab_layout.addWidget(QLabel(f"Content for Tab {i}"))
-
-        #     # Add four sliders to each tab
-        #     for _ in range(4):
-        #         slider = QSlider(Qt.Orientation.Horizontal)
-        #         slider.setRange(0, 100)
-        #         slider.setValue(random.randint(0, 100))
-        #         tab_layout.addWidget(slider)
-
-        #     tab.setLayout(tab_layout)
-        #     self.tab_widget.addTab(tab, f"Tab {i}")
+        while self.tab_widget.count(): # num of tabs
+            self.tab_widget.removeTab(0) # remove the first tab
 
 
         general_tab = QWidget()
