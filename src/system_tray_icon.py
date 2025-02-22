@@ -1,11 +1,13 @@
 from PySide6.QtGui import QIcon, QPixmap, QGuiApplication
 from PySide6.QtWidgets import QSystemTrayIcon, QMenu
 
+import config
+
 class SystemTrayIcon(QSystemTrayIcon):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setIcon(QIcon(QPixmap(16, 16)))  # Set your icon here
-        self.setToolTip("MoniTune")
+        self.setToolTip(f"{config.app_name} v{config.version}")
 
         tray_menu = QMenu()
         show_action = tray_menu.addAction("Show")

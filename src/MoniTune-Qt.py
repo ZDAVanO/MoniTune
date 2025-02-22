@@ -195,15 +195,20 @@ class MainWindow(QMainWindow):
         self.bottom_frame.setFixedHeight(60)
         self.bottom_frame.installEventFilter(self)
         self.bottom_hbox = QHBoxLayout(self.bottom_frame)
+
         name_title = QLabel("Scroll to adjust brightness")
         name_title.setStyleSheet("""
                                  font-size: 14px; 
                                  padding-left: 5px;
                                  """)
+        
         settings_button = QPushButton("Settings")
         settings_button.setFixedWidth(70)
         settings_button.setFixedHeight(40)
         settings_button.clicked.connect(self.openSettingsWindow)
+
+        self.openSettingsWindow() # Open settings window on startup
+
         self.bottom_hbox.addWidget(name_title)
         self.bottom_hbox.addWidget(settings_button)
 
@@ -221,6 +226,9 @@ class MainWindow(QMainWindow):
 
         self.createTrayIcon()
 
+        # Run the theme listener in a separate thread
+        threading.Thread(target=darkdetect.listener, args=(self.on_theme_change,), daemon=True).start()
+
 
 
         # self.monitors_frame.setStyleSheet("background-color: red;")
@@ -234,16 +242,40 @@ class MainWindow(QMainWindow):
     def createTrayIcon(self):
         self.tray_icon = SystemTrayIcon(self)
 
+    # MARK: update_rounded_corners()
+    def update_rounded_corners(self):
+        new_corner_radius = 9 if self.enable_rounded_corners else 0
+        self.window_corner_radius = new_corner_radius
+        self.centralWidget().setStyleSheet(
+            f"""
+            #Container {{
+            background: #202020;
+            border-radius: {new_corner_radius}px;
+            border: 1px solid #404040;
+            }}
+            """
+        )
+
+        self.edge_padding = 11 if self.enable_rounded_corners else 0
 
 
+    # MARK: on_theme_change()
+    def on_theme_change(self, theme: str):
+        print(f"Theme changed to: {theme}")
+
+        if theme == "Light":
+            pass
+        else:
+            pass
     
+
 
     
 
     # MARK: brightness_sync()
     def brightness_sync(self):
         while self.window_open:
-            print("brightness_sync")
+            # print("brightness_sync")
 
 
             start_time = time.time()
@@ -317,7 +349,7 @@ class MainWindow(QMainWindow):
 
     # MARK: updateFrameContents()
     def updateFrameContents(self):
-
+        print("test_var", self.test_var)
         start_time = time.time()
 
 
@@ -495,10 +527,10 @@ class MainWindow(QMainWindow):
             self.brightness_values[monitor['serial']] = {'brightness': br_level, 'slider': br_slider, 'label': br_label}
             print(f"self.brightness_values {self.brightness_values}")
 
-            # label_frame.setStyleSheet("background-color: red")
-            # if self.show_refresh_rates: rr_frame.setStyleSheet("background-color: green")
-            # br_frame.setStyleSheet("background-color: blue")
-            # br_slider.setStyleSheet("background-color: red")
+            label_frame.setStyleSheet("background-color: red")
+            if self.show_refresh_rates: rr_frame.setStyleSheet("background-color: green")
+            br_frame.setStyleSheet("background-color: blue")
+            br_slider.setStyleSheet("background-color: red")
 
         end_time = time.time()
         print(f"load_ui took {end_time - start_time:.4f} seconds")
@@ -554,9 +586,8 @@ class MainWindow(QMainWindow):
 
         self.updateFrameContents()  # Update frame contents each time the window is shown
         
-        screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
-
-        self.move(screen_geometry.width(), screen_geometry.height())
+        # screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
+        # self.move(screen_geometry.width(), screen_geometry.height())
         # self.animateWindowOpen()
         QTimer.singleShot(0, self.animateWindowOpen)
         # QTimer.singleShot(0, self.updateSizeAndPosition)
@@ -689,13 +720,9 @@ if __name__ == "__main__":
     window = MainWindow()
     window.show()
 
-    # Theme change listener
-    def on_theme_change(theme: str):
-        print(f"Theme changed to: {theme}")
-    def theme_listener():
-        darkdetect.listener(on_theme_change)
-    # Run the theme listener in a separate thread
-    threading.Thread(target=theme_listener, daemon=True).start()
+    
+
+    
 
 
     app.exec()
