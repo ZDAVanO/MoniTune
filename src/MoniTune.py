@@ -88,8 +88,8 @@ class MonitorTuneApp:
 
 
 
-        self.excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
-
+        # self.excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
+        self.excluded_rates = list(map(int, filter(None, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates"))))
 
         self.custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
         print(f"custom_monitor_names {self.custom_monitor_names}")
@@ -350,7 +350,7 @@ class MonitorTuneApp:
 
                 br_frame = ctk.CTkFrame(monitor_frame, corner_radius=6, 
                                         fg_color=(self.fr_color_light, self.fr_color_dark))
-                # br_frame.configure(fg_color="yellow")
+                br_frame.configure(fg_color="yellow")
                 br_frame.grid(row=2, column=0, padx=(2, 2), pady=(0, 2), sticky="ew")
                 br_frame.columnconfigure(0, weight=1)
                 br_frame.columnconfigure(1, weight=0)
@@ -374,7 +374,8 @@ class MonitorTuneApp:
                                         corner_radius=6, 
                                         font=("Segoe UI", 22, "bold"), 
                                         anchor="n", 
-                                        width=50, height=34)
+                                        width=50, height=34,
+                                        fg_color="red")
                 # br_label.configure(fg_color="blue")
                 br_label.grid(row=0, column=1, padx=(0, 5), pady=(2, 2), sticky="nsew")
 
@@ -768,7 +769,8 @@ class MonitorTuneApp:
                 all_rates.update(monitor['AvailableRefreshRates'])
             all_rates = sorted(all_rates)
 
-            excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
+            # excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
+            excluded_rates = list(map(int, filter(None, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates"))))
 
             refresh_rate_tab_frame.rowconfigure(2, weight=1)
             # Створення прокручуваного фрейму
