@@ -1,5 +1,5 @@
 from PySide6.QtCore import QEvent, QSize, Qt, QPropertyAnimation, QRect, QEasingCurve, QTimer
-from PySide6.QtGui import QIcon, QPixmap, QGuiApplication
+from PySide6.QtGui import QIcon, QPixmap, QGuiApplication, QWheelEvent
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -40,7 +40,13 @@ import screen_brightness_control as sbc
 
 
 
-
+class CustomSlider(QSlider):
+    def wheelEvent(self, event: QWheelEvent):
+        value = self.value()
+        if event.angleDelta().y() > 0:
+            self.setValue(value + 1)
+        else:
+            self.setValue(value - 1)
 
 
 
@@ -100,6 +106,7 @@ class MainWindow(QMainWindow):
 
 
         self.settings_window = None  # No settings window yet
+        self.rr_buttons = {}  # Dictionary to store refresh rate buttons for each monitor
 
         self.window_open = False
         self.brightness_sync_thread = None
@@ -219,12 +226,52 @@ class MainWindow(QMainWindow):
         # self.monitors_frame.setStyleSheet("background-color: red;")
         # self.bottom_frame.setStyleSheet("background-color: green;") 
 
-        self.rr_buttons = {}  # Dictionary to store refresh rate buttons for each monitor
+        
 
 
 
+    
     def createTrayIcon(self):
         self.tray_icon = SystemTrayIcon(self)
+
+
+
+    
+
+    
+
+    # MARK: brightness_sync()
+    def brightness_sync(self):
+        while self.window_open:
+            print("brightness_sync")
+
+
+            start_time = time.time()
+
+            brightness_values_copy = self.brightness_values.copy()
+            # print(f"brightness_values_copy {brightness_values_copy}")
+
+            for monitor_serial, monitor in brightness_values_copy.items():
+                brightness = monitor['brightness']
+
+                try:
+                    current_brightness = sbc.get_brightness(display=monitor_serial)[0]
+                    if current_brightness != brightness:
+                        print(f"set_brightness {monitor_serial} {brightness}")
+                        set_brightness(monitor_serial, brightness)
+                        
+                except Exception as e:
+                    print(f"Error: {e}")
+            
+
+            self.save_brightness_values_to_registry()
+
+
+            end_time = time.time()  # End time measurement
+            print(f"Brightness sync took {end_time - start_time:.4f} seconds")
+
+            time.sleep(0.15)
+
 
 
     # MARK: eventFilter()
@@ -233,19 +280,38 @@ class MainWindow(QMainWindow):
 
         # hide window when focus is lost
         if event.type() == QEvent.Type.WindowDeactivate:
-            self.hide()
-            # self.animateWindowClose()
+            # self.hide()
+            self.animateWindowClose()
             return True
         
         # Handle scroll events on the bottom frame
         if source == self.bottom_frame and event.type() == QEvent.Type.Wheel:
             delta = event.angleDelta().y()
-            if delta > 0:
-                print("scroll up")
-            else:
-                print("scroll down")
+            self.on_bottom_frame_scroll(delta)
+            return True
+            
         
         return super().eventFilter(source, event)
+
+
+    # MARK: on_bottom_frame_scroll()
+    def on_bottom_frame_scroll(self, delta):
+        # print("on_bottom_frame_scroll ", delta)
+        for monitor_serial, monitor in self.brightness_values.items():
+            brightness = monitor['brightness']
+            slider = monitor['slider']
+            if slider is None:
+                continue
+            label = monitor['label']
+
+            new_value = max(0, min(100, slider.value() + (1 if delta > 0 else -1)))
+            slider.setValue(new_value)
+            # label.setText(f"{int(new_value)}")
+            # self.brightness_values[monitor_serial]['brightness'] = int(new_value)
+        # self.save_brightness_values_to_registry()
+
+
+
 
 
 
@@ -359,30 +425,31 @@ class MainWindow(QMainWindow):
                 # rates = ["100 Hz", "2 Hz", "3 Hz", "4 Hz", "5 Hz", "6 Hz", "7 Hz", "8 Hz", "9 Hz", "10 Hz", "11 Hz", "12 Hz", "13 Hz", "14 Hz", "15 Hz", "16 Hz", "17 Hz", "18 Hz", "19 Hz", "20 Hz"]
                 # rates = ["100 Hz", "2 Hz", "3 Hz", "4 Hz", "5 Hz",]
 
-                rr_frame = QWidget()
-                rr_grid = QGridLayout(rr_frame)
-                rr_grid.setContentsMargins(5, 0, 5, 0)
-                rr_grid.setSpacing(0)
+                if len(refresh_rates) >= 2:
+                    rr_frame = QWidget()
+                    rr_grid = QGridLayout(rr_frame)
+                    rr_grid.setContentsMargins(5, 0, 5, 0)
+                    rr_grid.setSpacing(0)
 
-                self.rr_buttons[monitor_serial] = []  # Initialize list for this monitor
+                    self.rr_buttons[monitor_serial] = []  # Initialize list for this monitor
 
-                num_columns = 6
-                for idx, rate in enumerate(refresh_rates):
-                    rr_button = QPushButton(f"{rate} Hz")
-                    rr_button.setCheckable(True)
-                    if rate == monitor["RefreshRate"]:
-                        rr_button.setChecked(True)
-                    rr_button.clicked.connect(lambda checked, r=rate, m=monitor, btn=rr_button: self.on_rr_button_clicked(r, m, btn))
-                    rr_button.setMinimumWidth(55)
+                    num_columns = 6
+                    for idx, rate in enumerate(refresh_rates):
+                        rr_button = QPushButton(f"{rate} Hz")
+                        rr_button.setCheckable(True)
+                        if rate == monitor["RefreshRate"]:
+                            rr_button.setChecked(True)
+                        rr_button.clicked.connect(lambda checked, r=rate, m=monitor, btn=rr_button: self.on_rr_button_clicked(r, m, btn))
+                        rr_button.setMinimumWidth(55)
 
-                    row = idx // num_columns
-                    col = idx % num_columns
-                    
-                    rr_grid.addWidget(rr_button, row, col)
+                        row = idx // num_columns
+                        col = idx % num_columns
+                        
+                        rr_grid.addWidget(rr_button, row, col)
 
-                    self.rr_buttons[monitor_serial].append(rr_button)  # Store button
+                        self.rr_buttons[monitor_serial].append(rr_button)  # Store button
 
-                monitor_vbox.addWidget(rr_frame)
+                    monitor_vbox.addWidget(rr_frame)
             
 
 
@@ -400,7 +467,7 @@ class MainWindow(QMainWindow):
                 br_level = sbc.get_brightness(display=monitor['serial'])[0]
 
 
-            br_slider = QSlider(Qt.Orientation.Horizontal)
+            br_slider = CustomSlider(Qt.Orientation.Horizontal, singleStep=1)
             br_slider.setMaximum(100)  # Set maximum value to 100
             br_slider.setValue(br_level)
             
@@ -415,7 +482,7 @@ class MainWindow(QMainWindow):
             br_label.setFixedWidth(50) 
             br_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-            br_slider.valueChanged.connect(lambda value, label=br_label: label.setText(str(value)))
+            br_slider.valueChanged.connect(lambda value, label=br_label, ms=monitor_serial: self.on_brightness_change(value, label, ms))
             
             br_hbox.addWidget(br_slider)
             br_hbox.addWidget(br_label)
@@ -425,6 +492,9 @@ class MainWindow(QMainWindow):
             self.monitors_layout.addWidget(monitor_frame)
 
 
+            self.brightness_values[monitor['serial']] = {'brightness': br_level, 'slider': br_slider, 'label': br_label}
+            print(f"self.brightness_values {self.brightness_values}")
+
             # label_frame.setStyleSheet("background-color: red")
             # if self.show_refresh_rates: rr_frame.setStyleSheet("background-color: green")
             # br_frame.setStyleSheet("background-color: blue")
@@ -432,6 +502,8 @@ class MainWindow(QMainWindow):
 
         end_time = time.time()
         print(f"load_ui took {end_time - start_time:.4f} seconds")
+
+        
             
 
     # MARK: on_rr_button_clicked()
@@ -458,7 +530,21 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(250, self.updateSizeAndPosition)
 
 
+    # MARK: on_brightness_change()
+    def on_brightness_change(self, value, label, monitor_serial):
+        # print(f"on_brightness_change {value} {label} {monitor_serial}")
+        label.setText(str(value))
+        # set_brightness(monitor_serial, value)
+        self.brightness_values[monitor_serial]['brightness'] = int(value)  # Ensure value is an integer
+        # self.save_brightness_values_to_registry()
+        
 
+    # MARK: save_brightness_values_to_registry()
+    def save_brightness_values_to_registry(self):
+        # print("save_brightness_values_to_registry")
+        # brightness_data = {monitor_serial: {'brightness': int(data['brightness'])} for monitor_serial, data in self.brightness_values.items()}
+        brightness_data = {monitor_serial: int(data['brightness']) for monitor_serial, data in self.brightness_values.items()}
+        reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", brightness_data)
 
 
     # MARK: showEvent()
@@ -486,12 +572,37 @@ class MainWindow(QMainWindow):
         self.activateWindow()
         self.raise_()
         
+        self.window_open = True
+        if self.brightness_sync_thread is None or not self.brightness_sync_thread.is_alive():
+            print("brightness_sync_thread.start()")
+            self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
+            self.brightness_sync_thread.start()
+        else:
+            print("Brightness sync thread is already running")
+
 
         super().showEvent(event)
         
         # print("self.height():", self.height(), "sizeHint:", self.sizeHint().height())
 
 
+
+    def hideEvent(self, event):
+        print("hideEvent")
+
+
+        self.window_open = False
+        if self.brightness_sync_thread and self.brightness_sync_thread.is_alive():
+            print("brightness_sync_thread.join()")
+            self.brightness_sync_thread.join()  # Зупинити потік
+
+            if not self.brightness_sync_thread.is_alive():
+                print("thread is dead")
+            else:
+                print("thread is still alive")
+
+
+        super().hideEvent(event)
 
 
 
@@ -533,11 +644,12 @@ class MainWindow(QMainWindow):
     def animateWindowClose(self):
         screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
         start_rect = QRect(screen_geometry.width() - self.width() - self.edge_padding, screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
+        current_rect = self.geometry()
         end_rect = QRect(screen_geometry.width(), screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
         
         self.animation = QPropertyAnimation(self, b"geometry")
         self.animation.setDuration(300)
-        self.animation.setStartValue(start_rect)
+        self.animation.setStartValue(current_rect)
         self.animation.setEndValue(end_rect)
         self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         
@@ -548,7 +660,7 @@ class MainWindow(QMainWindow):
         self.opacity_animation.setStartValue(1)
         self.opacity_animation.setEndValue(0)
         
-        self.animation.finished.connect(self.hide)
+        self.animation.finished.connect(self.hide) # hide window after animation is done
         self.animation.start()
         self.opacity_animation.start()
 
