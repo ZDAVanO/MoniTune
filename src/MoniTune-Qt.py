@@ -55,8 +55,6 @@ import screen_brightness_control as sbc
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-
-
         
         self.test_var = 5
 
@@ -221,7 +219,7 @@ class MainWindow(QMainWindow):
         # self.monitors_frame.setStyleSheet("background-color: red;")
         # self.bottom_frame.setStyleSheet("background-color: green;") 
 
-
+        self.rr_buttons = {}  # Dictionary to store refresh rate buttons for each monitor
 
 
 
@@ -356,10 +354,8 @@ class MainWindow(QMainWindow):
 
 
             if self.show_refresh_rates:
-
                 refresh_rates = monitor["AvailableRefreshRates"]
                 refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
-                
                 # rates = ["100 Hz", "2 Hz", "3 Hz", "4 Hz", "5 Hz", "6 Hz", "7 Hz", "8 Hz", "9 Hz", "10 Hz", "11 Hz", "12 Hz", "13 Hz", "14 Hz", "15 Hz", "16 Hz", "17 Hz", "18 Hz", "19 Hz", "20 Hz"]
                 # rates = ["100 Hz", "2 Hz", "3 Hz", "4 Hz", "5 Hz",]
 
@@ -368,21 +364,23 @@ class MainWindow(QMainWindow):
                 rr_grid.setContentsMargins(5, 0, 5, 0)
                 rr_grid.setSpacing(0)
 
-                num_columns = 6
+                self.rr_buttons[monitor_serial] = []  # Initialize list for this monitor
 
-                
+                num_columns = 6
                 for idx, rate in enumerate(refresh_rates):
                     rr_button = QPushButton(f"{rate} Hz")
-                    # rr_button.setFixedHeight(26)
-                    print(f"rate {rate}, monitor['RefreshRate'] {monitor['RefreshRate']}")
                     rr_button.setCheckable(True)
                     if rate == monitor["RefreshRate"]:
                         rr_button.setChecked(True)
-                    
+                    rr_button.clicked.connect(lambda checked, r=rate, m=monitor, btn=rr_button: self.on_rr_button_clicked(r, m, btn))
                     rr_button.setMinimumWidth(55)
+
                     row = idx // num_columns
                     col = idx % num_columns
+                    
                     rr_grid.addWidget(rr_button, row, col)
+
+                    self.rr_buttons[monitor_serial].append(rr_button)  # Store button
 
                 monitor_vbox.addWidget(rr_frame)
             
@@ -427,14 +425,30 @@ class MainWindow(QMainWindow):
             self.monitors_layout.addWidget(monitor_frame)
 
 
-            label_frame.setStyleSheet("background-color: red")
-            if self.show_refresh_rates: rr_frame.setStyleSheet("background-color: green")
-            br_frame.setStyleSheet("background-color: blue")
-            br_slider.setStyleSheet("background-color: red")
+            # label_frame.setStyleSheet("background-color: red")
+            # if self.show_refresh_rates: rr_frame.setStyleSheet("background-color: green")
+            # br_frame.setStyleSheet("background-color: blue")
+            # br_slider.setStyleSheet("background-color: red")
 
         end_time = time.time()
         print(f"load_ui took {end_time - start_time:.4f} seconds")
             
+
+    # MARK: on_rr_button_clicked()
+    def on_rr_button_clicked(self, rate, monitor, button):
+        print(f"Selected refresh rate: {rate} Hz for monitor {monitor["serial"]}")
+
+        for btn in self.rr_buttons[monitor["serial"]]:
+            if btn != button:
+                btn.setChecked(False)
+        button.setChecked(True)
+
+        set_refresh_rate_br(monitor, rate, refresh=False)
+
+
+
+
+
 
 
 

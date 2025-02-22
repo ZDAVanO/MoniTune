@@ -99,9 +99,9 @@ def get_monitors_info():
 # MARK: set_refresh_rate()
 def set_refresh_rate(monitor, refresh_rate):
 
-    if refresh_rate == monitor["RefreshRate"]:
-        print(f"Monitor {monitor['Device']} is already set to {refresh_rate} Hz.")
-        return
+    # if refresh_rate == monitor["RefreshRate"]:
+    #     print(f"Monitor {monitor['Device']} is already set to {refresh_rate} Hz.")
+    #     return
 
     device = monitor["Device"]
 
@@ -137,6 +137,8 @@ def set_refresh_rate_br(monitor, refresh_rate, refresh=False):
         if brightness_after != brightness_before:
             sbc.set_brightness(*brightness_before, display=monitor["name"])
             print(f"Restored brightness of {monitor['name']} from {brightness_after} to {brightness_before}")
+        else:
+            print(f"Did not need to restore brightness of {monitor['name']}")
 
     threading.Thread(target=restore_brightness).start()
 
