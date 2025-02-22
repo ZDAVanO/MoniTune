@@ -330,10 +330,10 @@ class MainWindow(QMainWindow):
                     res_combobox.setFixedWidth(120)
                     res_combobox.setFixedHeight(32)
                     res_combobox.addItems(formatted_resolutions)
+                    res_combobox.setCurrentText(monitor["Resolution"])
+                    res_combobox.currentIndexChanged.connect(lambda index, m=monitor, ms=monitor_serial, cb=res_combobox: self.on_resolution_select(m, ms, cb.currentText()))
                     label_hbox.addWidget(res_combobox)
-
-                    # res_combobox.set(monitor["Resolution"])
-                    # res_combobox.configure(command=lambda value, ms=monitor_serial, frame=label_frame: self.on_resolution_select(ms, value, frame))
+                    # def on_resolution_select(self, monitor, monitor_serial, resolution):
                 else:
                     res_label = QLabel(monitor['Resolution'])
                     res_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -437,16 +437,25 @@ class MainWindow(QMainWindow):
     # MARK: on_rr_button_clicked()
     def on_rr_button_clicked(self, rate, monitor, button):
         print(f"Selected refresh rate: {rate} Hz for monitor {monitor["serial"]}")
-
+        # update button states
         for btn in self.rr_buttons[monitor["serial"]]:
             if btn != button:
                 btn.setChecked(False)
         button.setChecked(True)
-
+        # set refresh rate
         set_refresh_rate_br(monitor, rate, refresh=False)
 
 
+    # MARK: on_resolution_select()
+    def on_resolution_select(self, monitor, monitor_serial, resolution):
+        print(f"on_resolution_select {monitor['serial']} {resolution}")
+        
+        width, height = map(int, resolution.split('x'))
 
+        set_resolution(monitor["Device"], width, height)
+        
+        # self.updateSizeAndPosition()
+        QTimer.singleShot(250, self.updateSizeAndPosition)
 
 
 
