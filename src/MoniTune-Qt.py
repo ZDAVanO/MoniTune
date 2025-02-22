@@ -18,7 +18,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QDialog,
     QFrame,
-    QComboBox  # Add this import
+    QComboBox,  # Add this import
+    QGridLayout  # Add this import
 )
 
 from system_tray_icon import SystemTrayIcon
@@ -48,7 +49,7 @@ class MainWindow(QMainWindow):
         self.resize(358, 231)
 
 
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.installEventFilter(self)
 
@@ -77,7 +78,7 @@ class MainWindow(QMainWindow):
         self.monitors_layout.setContentsMargins(7, 7, 7, 0)
         # self.monitors_layout.setSpacing(0)
 
-        self.bottom_frame = QFrame()
+        self.bottom_frame = QWidget()
         # self.bottom_frame.setStyleSheet("background-color: green;") 
         # self.bottom_frame.setStyleSheet("""
         #     background-color: green;
@@ -88,7 +89,10 @@ class MainWindow(QMainWindow):
         self.bottom_frame.installEventFilter(self)
         self.bottom_hbox = QHBoxLayout(self.bottom_frame)
         name_title = QLabel("Scroll to adjust brightness")
-        name_title.setStyleSheet("font-size: 14px; padding-left: 5px;")
+        name_title.setStyleSheet("""
+                                 font-size: 14px; 
+                                 padding-left: 5px;
+                                 """)
         settings_button = QPushButton("Settings")
         settings_button.setFixedWidth(70)
         settings_button.setFixedHeight(40)
@@ -123,6 +127,8 @@ class MainWindow(QMainWindow):
         # hide window when focus is lost
         if event.type() == QEvent.Type.WindowDeactivate:
             self.hide()
+            # self.animateWindowClose()
+            return True
         
         # Handle scroll events on the bottom frame
         if source == self.bottom_frame and event.type() == QEvent.Type.Wheel:
@@ -149,7 +155,7 @@ class MainWindow(QMainWindow):
         num_monitors = random.randint(1, 4)
         for i in range(num_monitors):
             
-            monitor_frame = QFrame()
+            monitor_frame = QWidget()
             monitor_frame.setObjectName("MonitorsFrame")
             monitor_frame.setStyleSheet(
                 """
@@ -160,63 +166,85 @@ class MainWindow(QMainWindow):
                 }
                 """
             )
-
-            monitor_frame.setFrameShape(QFrame.Shape.Box)
-            # monitor_frame.setStyleSheet("background-color: blue;")
             monitor_vbox = QVBoxLayout(monitor_frame)
             monitor_vbox.setContentsMargins(0, 0, 0, 0)
             monitor_vbox.setSpacing(0)  # Remove spacing between frames
             
-            label_frame = QFrame()
+            label_frame = QWidget()
             label_hbox = QHBoxLayout(label_frame)
-            # label_hbox.setContentsMargins(0, 0, 0, 0)
+            label_hbox.setContentsMargins(5, 5, 5, 5)
             monitor_label = QLabel(f"Monitor {i+1}")
-            monitor_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+            monitor_label.setStyleSheet("""
+                                        font-size: 16px; 
+                                        font-weight: bold;
+                                        """)
             label_hbox.addWidget(monitor_label)
             
-            res_combobox = QComboBox()
-            res_combobox.setStyleSheet("font-size: 14px; font-weight: bold;  padding-left: 7px;")
-            res_combobox.setFixedWidth(120)
-            res_combobox.setFixedHeight(32)
-            res_combobox.addItems(["1920x1080", "1280x720", "1024x768"])
-            label_hbox.addWidget(res_combobox)
+            # res_combobox = QComboBox()
+            # res_combobox.setStyleSheet("font-size: 14px; font-weight: bold;  padding-left: 7px;")
+            # res_combobox.setFixedWidth(120)
+            # res_combobox.setFixedHeight(32)
+            # res_combobox.addItems(["1920x1080", "1280x720", "1024x768"])
+            # label_hbox.addWidget(res_combobox)
             
+            res_label = QLabel("1920x1080")
+            res_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            res_label.setFixedWidth(105)
+            # res_label.setMinimumWidth(105)
+            res_label.setStyleSheet("""
+                                    font-size: 14px; font-weight: bold; 
+                                    background-color: #373737; 
+                                    border: 1px solid #3f3f3f; 
+                                    border-radius: 6px; 
+                                    padding: 3px;
+                                    padding-bottom: 4px;
+                                    """)
+            label_hbox.addWidget(res_label)
+
             monitor_vbox.addWidget(label_frame)
             
+
+
+
             # Add refresh rate buttons
-            rr_frame = QFrame()
+            rr_frame = QWidget()
             
-            rr_layout = QVBoxLayout(rr_frame)
-            # rr_layout.setContentsMargins(0, 0, 0, 0)
-            rr_layout.setSpacing(0)  # Відстань між рядками (горизонтальними групами кнопок)
+            rr_grid = QGridLayout(rr_frame)
+            rr_grid.setContentsMargins(5, 5, 5, 5)
+            rr_grid.setSpacing(0)
 
-            rr_hbox = QHBoxLayout()
-            rr_hbox.setAlignment(Qt.AlignmentFlag.AlignLeft)  # Align buttons to the left
-            for idx, rate in enumerate(["60 Hz", "75 Hz", "120 Hz", "144 Hz", "240 Hz", "120 Hz", "144 Hz", "240 Hz"]):
-                if idx > 0 and idx % 5 == 0:
-                    rr_layout.addLayout(rr_hbox)
-                    rr_hbox = QHBoxLayout()
-                    rr_hbox.setAlignment(Qt.AlignmentFlag.AlignLeft)  # Align buttons to the left
+            num_columns = 6
+
+            rates = ["100 Hz", "2 Hz", "3 Hz", "4 Hz", "5 Hz", "6 Hz", "7 Hz", "8 Hz", "9 Hz", "10 Hz", "11 Hz", "12 Hz", "13 Hz", "14 Hz", "15 Hz", "16 Hz", "17 Hz", "18 Hz", "19 Hz", "20 Hz"]
+            rates = ["100 Hz", "2 Hz", "3 Hz", "4 Hz", "5 Hz",]
+            for idx, rate in enumerate(rates):
                 rr_button = QPushButton(rate)
-
                 rr_button.setCheckable(True)
-                rr_button.setChecked(True) if rate == "60 Hz" else rr_button.setChecked(False)
+                rr_button.setChecked(True) if rate == "20 Hz" else rr_button.setChecked(False)
+                rr_button.setMinimumWidth(55)
+                row = idx // num_columns
+                col = idx % num_columns
+                rr_grid.addWidget(rr_button, row, col)
 
-                rr_button.setFixedWidth(60)
-                rr_hbox.addWidget(rr_button)
-
-            rr_layout.addLayout(rr_hbox)
             monitor_vbox.addWidget(rr_frame)
             
-            br_frame = QFrame()
+
+
+
+
+            br_frame = QWidget()
             
             br_hbox = QHBoxLayout(br_frame)
-            # br_hbox.setContentsMargins(0, 0, 0, 0)
+            br_hbox.setContentsMargins(5, 5, 5, 5)
             br_slider = QSlider(Qt.Orientation.Horizontal)
             br_slider.setMaximum(100)  # Set maximum value to 100
 
             br_label = QLabel("50")
-            br_label.setStyleSheet("font-size: 22px; font-weight: bold; padding-bottom: 4px;")
+            br_label.setStyleSheet("""
+                                   font-size: 22px; 
+                                   font-weight: bold; 
+                                   padding-bottom: 4px;
+                                   """)
             br_label.setFixedWidth(40) 
             br_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -225,14 +253,15 @@ class MainWindow(QMainWindow):
             br_slider.valueChanged.connect(lambda value, label=br_label: label.setText(str(value)))
             br_hbox.addWidget(br_slider)
             br_hbox.addWidget(br_label)
+
             monitor_vbox.addWidget(br_frame)
             
             self.monitors_layout.addWidget(monitor_frame)
 
 
-            # label_frame.setStyleSheet("background-color: red")
-            # rr_frame.setStyleSheet("background-color: green")
-            # br_frame.setStyleSheet("background-color: blue")
+            label_frame.setStyleSheet("background-color: red")
+            rr_frame.setStyleSheet("background-color: green")
+            br_frame.setStyleSheet("background-color: blue")
             
 
 
