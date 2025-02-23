@@ -278,35 +278,7 @@ class MainWindow(QMainWindow):
 
     
 
-    # MARK: brightness_sync()
-    def brightness_sync(self):
-        while self.window_open:
-            # print("brightness_sync")
-
-
-            start_time = time.time()
-
-            brightness_values_copy = self.brightness_values.copy()
-            # print(f"brightness_values_copy {brightness_values_copy}")
-
-            for monitor_serial, brightness in brightness_values_copy.items():
-                try:
-                    current_brightness = sbc.get_brightness(display=monitor_serial)[0]
-                    if current_brightness != brightness:
-                        print(f"set_brightness {monitor_serial} {brightness}")
-                        set_brightness(monitor_serial, brightness)
-                        
-                except Exception as e:
-                    print(f"Error: {e}")
-            
-
-            reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
-
-
-            end_time = time.time()  # End time measurement
-            print(f"Brightness sync took {end_time - start_time:.4f} seconds")
-
-            time.sleep(0.15)
+    
 
 
 
@@ -316,7 +288,7 @@ class MainWindow(QMainWindow):
 
         # hide window when focus is lost
         if event.type() == QEvent.Type.WindowDeactivate:
-            # self.hide()
+            self.hide()
             # self.animateWindowClose()
             return True
         
@@ -330,12 +302,9 @@ class MainWindow(QMainWindow):
         return super().eventFilter(source, event)
 
 
-    # MARK: on_bottom_frame_scroll()
-    def on_bottom_frame_scroll(self, delta):
-        # print("on_bottom_frame_scroll ", delta)
-        for slider in self.br_sliders:
-            new_value = max(0, min(100, slider.value() + (1 if delta > 0 else -1)))
-            slider.setValue(new_value)
+    
+
+
 
 
 
@@ -500,7 +469,7 @@ class MainWindow(QMainWindow):
                                    padding-bottom: 4px;
                                    background-color: green;
                                    """)
-            br_label.setFixedWidth(50) 
+            br_label.setFixedWidth(25) 
             br_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
             br_slider.valueChanged.connect(lambda value, label=br_label, ms=monitor_serial: self.on_brightness_change(value, label, ms))
@@ -544,7 +513,6 @@ class MainWindow(QMainWindow):
         print(f"on_resolution_select {monitor['serial']} {resolution}")
         
         width, height = map(int, resolution.split('x'))
-
         set_resolution(monitor["Device"], width, height)
         
         QTimer.singleShot(250, self.updateSizeAndPosition)
@@ -555,7 +523,39 @@ class MainWindow(QMainWindow):
         # print(f"on_brightness_change {value} {label} {monitor_serial}")
         label.setText(str(value))
         self.brightness_values[monitor_serial] = int(value)
-        
+
+    # MARK: on_bottom_frame_scroll()
+    def on_bottom_frame_scroll(self, delta):
+        # print("on_bottom_frame_scroll ", delta)
+        for slider in self.br_sliders:
+            new_value = max(0, min(100, slider.value() + (1 if delta > 0 else -1)))
+            slider.setValue(new_value)
+
+    # MARK: brightness_sync()
+    def brightness_sync(self):
+        while self.window_open:
+            # print("brightness_sync")
+
+            start_time = time.time()
+
+            brightness_values_copy = self.brightness_values.copy()
+            # print(f"brightness_values_copy {brightness_values_copy}")
+            for monitor_serial, brightness in brightness_values_copy.items():
+                try:
+                    current_brightness = sbc.get_brightness(display=monitor_serial)[0]
+                    if current_brightness != brightness:
+                        print(f"set_brightness {monitor_serial} {brightness}")
+                        set_brightness(monitor_serial, brightness)
+                except Exception as e:
+                    print(f"Error: {e}")
+            
+            reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
+
+            end_time = time.time()  # End time measurement
+            # print(f"Brightness sync took {end_time - start_time:.4f} seconds")
+
+            time.sleep(0.15)
+
 
 
     # MARK: showEvent()
@@ -565,8 +565,8 @@ class MainWindow(QMainWindow):
 
         self.updateFrameContents()  # Update frame contents each time the window is shown
         
-        # screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
-        # self.move(screen_geometry.width(), screen_geometry.height())
+        screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
+        self.move(screen_geometry.width(), screen_geometry.height())
         # self.animateWindowOpen()
         QTimer.singleShot(0, self.animateWindowOpen)
         # QTimer.singleShot(0, self.updateSizeAndPosition)
@@ -600,8 +600,7 @@ class MainWindow(QMainWindow):
         self.window_open = False
         if self.brightness_sync_thread and self.brightness_sync_thread.is_alive():
             print("brightness_sync_thread.join()")
-            self.brightness_sync_thread.join()  # Зупинити потік
-
+            self.brightness_sync_thread.join()  # Stop brightness sync thread
             if not self.brightness_sync_thread.is_alive():
                 print("thread is dead")
             else:

@@ -6,7 +6,7 @@ import sys
 
 app_name = "MoniTune"
 
-version = "0.1.0"
+version = "0.1.5"
 
 REGISTRY_PATH = r"Software\MoniTune\Settings"
 

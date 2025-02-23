@@ -1,10 +1,10 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel, QSlider, QPushButton, QApplication, QMainWindow, QHBoxLayout, QComboBox, QFrame, QCheckBox, QScrollArea
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel, QSlider, QPushButton, QApplication, QMainWindow, QHBoxLayout, QComboBox, QFrame, QCheckBox, QScrollArea, QLineEdit, QListWidget, QListWidgetItem, QSizePolicy
 from PySide6.QtCore import QEvent, QSize, Qt, QPropertyAnimation, QRect, QEasingCurve
 import random
 import webbrowser
 
 import config
-
+from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
 from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 from PySide6.QtGui import QIcon
 
@@ -12,7 +12,7 @@ class SettingsWindow(QWidget):
     def __init__(self, parent_window):
         super().__init__()
         
-        self.parent_window = parent_window
+        self.parent = parent_window
 
         self.setWindowTitle(f"{config.app_name} Settings")
         self.setWindowIcon(QIcon(config.app_icon_path))
@@ -61,7 +61,7 @@ class SettingsWindow(QWidget):
 
         def toggle_setting(setting_name, reg_setting_name, bool, callback=None):
             print(f"Setting {setting_name} to {bool}")
-            setattr(self.parent_window, setting_name, bool)
+            setattr(self.parent, setting_name, bool)
             reg_write_bool(config.REGISTRY_PATH, reg_setting_name, bool)
             if callable(callback):
                 callback()
@@ -73,7 +73,7 @@ class SettingsWindow(QWidget):
                                     callback=None,
                                     ):
             checkbox = QCheckBox(checkbox_label)
-            var = getattr(self.parent_window, setting_name)
+            var = getattr(self.parent, setting_name)
             checkbox.setChecked(var)
             checkbox.stateChanged.connect(lambda: toggle_setting(setting_name, 
                                                                  reg_setting_name, 
@@ -84,6 +84,7 @@ class SettingsWindow(QWidget):
 
         
         # MARK: General Tab
+
         general_tab = QWidget()
         # general_tab.setStyleSheet("background-color: blue")
         general_layout = QVBoxLayout(general_tab)
@@ -91,10 +92,146 @@ class SettingsWindow(QWidget):
         general_layout.addWidget(create_setting_checkbox("Rounded Corners", 
                                                          "enable_rounded_corners", 
                                                          "EnableRoundedCorners",
-                                                         self.parent_window.update_rounded_corners
+                                                         self.parent.update_rounded_corners
                                                          ))
+
+
+
+
+        # get monitors info
+
+        monitors_info = get_monitors_info()
+        # Створюємо словник, де ключ — серійний номер
+        monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
+        reg_order = reg_read_list(config.REGISTRY_PATH, "MonitorsOrder")
+        # Сортуємо список моніторів відповідно до порядку з реєстру
+        monitors_order = [serial for serial in reg_order if serial in monitors_dict]
+        # Додаємо монітори, яких немає в реєстрі, в кінець списку
+        monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
+        custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
+
+
+
+        # Add Rename Monitors setting
+
+        rename_monitors_widget = QFrame()
+        rename_monitors_widget.setFrameShape(QFrame.StyledPanel)
+        rename_monitors_layout = QVBoxLayout(rename_monitors_widget)
+        rename_monitors_label = QLabel("Rename Monitors")
+        rename_monitors_layout.addWidget(rename_monitors_label)
+        # rename_monitors_layout.setSpacing(0)
+
+        def save_name(monitor_id, new_name):
+            if 0 < len(new_name) <= 50:
+                custom_monitor_names[monitor_id] = new_name
+                print(f"Updated names: {custom_monitor_names}")
+                self.parent.custom_monitor_names = custom_monitor_names
+                reg_write_dict(config.REGISTRY_PATH, "CustomMonitorNames", custom_monitor_names)
+
+        for monitor_id in monitors_order:
+            row_frame = QWidget()
+            row_layout = QHBoxLayout(row_frame)
+            # row_frame.setStyleSheet("background-color: red")
+            row_layout.setContentsMargins(0, 0, 0, 0)
+
+            label = QLabel(f"{monitors_dict[monitor_id]['display_name']}")
+            label.setAlignment(Qt.AlignLeft)
+            row_layout.addWidget(label)
+
+            entry = QLineEdit()
+            entry.setPlaceholderText("Enter new name")
+            entry.setMaxLength(25)
+            placeholder = custom_monitor_names.get(monitor_id, "")
+            entry.setText(placeholder)
+            entry.textChanged.connect(lambda text, serial=monitor_id: save_name(serial, text))
+            row_layout.addWidget(entry)
+
+            row_layout.setStretch(0, 1)
+            row_layout.setStretch(1, 1) 
+
+            rename_monitors_layout.addWidget(row_frame)
+
+
+
+
+
+        general_layout.addWidget(rename_monitors_widget)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        # Add Reorder Monitors setting
+        
+        def save_order():
+            monitors_order = [self.list_widget.item(i).data(Qt.UserRole) for i in range(self.list_widget.count())]
+            print("New order:", monitors_order)
+            reg_write_list(config.REGISTRY_PATH, "MonitorsOrder", monitors_order)
+            self.parent.monitors_order = monitors_order
+
+        reorder_monitors_widget = QFrame()
+        reorder_monitors_widget.setFrameShape(QFrame.StyledPanel)
+        reorder_monitors_layout = QVBoxLayout(reorder_monitors_widget)
+        reorder_monitors_label = QLabel("Reorder Monitors")
+        reorder_monitors_layout.addWidget(reorder_monitors_label)
+
+        # print("monitors_order", monitors_order)
+        self.list_widget = QListWidget()
+        self.list_widget.setDragDropMode(QListWidget.InternalMove)  # Дозволяє перетягування
+        self.list_widget.model().rowsMoved.connect(save_order)
+        
+        for monitor_id in monitors_order:
+            # item = QListWidgetItem(monitors_dict[monitor_id]['display_name'])
+            item = QListWidgetItem(f"{custom_monitor_names[monitor_id]} ({monitors_dict[monitor_id]['display_name']})"
+            if monitor_id in custom_monitor_names else monitors_dict[monitor_id]['display_name'])
+            item.setData(Qt.UserRole, monitor_id)
+            self.list_widget.addItem(item)
+
+        reorder_monitors_layout.addWidget(self.list_widget)
+        general_layout.addWidget(reorder_monitors_widget)
+
+
+
         self.tab_widget.addTab(general_tab, "General")
         
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         # MARK: Resolution Tab
         resolution_tab = QWidget()
         resolution_layout = QVBoxLayout(resolution_tab)
@@ -162,11 +299,11 @@ class SettingsWindow(QWidget):
         
 
     def show_parent_window(self):
-        self.parent_window.show()
+        self.parent.show()
 
     def change_parent_var(self):
-        setattr(self.parent_window, "test_var", random.randint(1, 100))
-        # self.parent_window.test_var = 100
+        setattr(self.parent, "test_var", random.randint(1, 100))
+        # self.parent.test_var = 100
 
 
 
