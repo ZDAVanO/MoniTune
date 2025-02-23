@@ -36,8 +36,8 @@ from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool,
 import time
 import screen_brightness_control as sbc
 
-
-
+import sys
+import ctypes
 
 
 class CustomSlider(QSlider):
@@ -63,7 +63,6 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         self.test_var = 5
-
         # self.icon_path = icon_path
         # self.settings_icon_light = settings_icon_light
         # self.settings_icon_dark = settings_icon_dark
@@ -107,6 +106,7 @@ class MainWindow(QMainWindow):
 
         self.settings_window = None  # No settings window yet
         self.rr_buttons = {}  # Dictionary to store refresh rate buttons for each monitor
+        self.br_sliders = []  # List to store brightness sliders
 
         self.window_open = False
         self.brightness_sync_thread = None
@@ -116,7 +116,7 @@ class MainWindow(QMainWindow):
         brightness_data = reg_read_dict(config.REGISTRY_PATH, "BrightnessValues")
         print(f"brightness_data {brightness_data}")
         for monitor_serial, br_level in brightness_data.items():
-            self.brightness_values[monitor_serial] = {'brightness': int(br_level), 'slider': None, 'label': None}
+            self.brightness_values[monitor_serial] = int(br_level)
         print(f"self.brightness_values {self.brightness_values}")
 
 
@@ -184,7 +184,7 @@ class MainWindow(QMainWindow):
         # self.monitors_frame.setStyleSheet("border-radius: 9px; background-color: red")
         self.monitors_layout = QVBoxLayout(self.monitors_frame)
         self.monitors_layout.setContentsMargins(7, 7, 7, 0)
-        # self.monitors_layout.setSpacing(0)
+        self.monitors_layout.setSpacing(6) # Set spacing between monitor frames
 
         self.bottom_frame = QWidget()
         # self.bottom_frame.setStyleSheet("""
@@ -195,22 +195,29 @@ class MainWindow(QMainWindow):
         self.bottom_frame.setFixedHeight(60)
         self.bottom_frame.installEventFilter(self)
         self.bottom_hbox = QHBoxLayout(self.bottom_frame)
+        # 16 10
+        self.bottom_hbox.setContentsMargins(7, 0, 9, 0)
+        self.bottom_hbox.setSpacing(5)
 
         name_title = QLabel("Scroll to adjust brightness")
         name_title.setStyleSheet("""
                                  font-size: 14px; 
                                  padding-left: 5px;
+                                 
                                  """)
         
-        settings_button = QPushButton("Settings")
-        settings_button.setFixedWidth(70)
-        settings_button.setFixedHeight(40)
+        settings_button = QPushButton()
+        settings_button.setFixedWidth(43)
+        settings_button.setFixedHeight(43)
+        settings_button.setIcon(QIcon(config.settings_icon_dark_path))
+        settings_button.setIconSize(QSize(25, 25))
+        # settings_button.setStyleSheet("border: none;")
+        # settings_button.setStyleSheet("QPushButton { border: none; }")
         settings_button.clicked.connect(self.openSettingsWindow)
-
-        self.openSettingsWindow() # Open settings window on startup
 
         self.bottom_hbox.addWidget(name_title)
         self.bottom_hbox.addWidget(settings_button)
+        
 
         central_widget_layout = QVBoxLayout(central_widget)
         central_widget_layout.setContentsMargins(0, 0, 0, 0)
@@ -223,8 +230,8 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
 
 
-
-        self.createTrayIcon()
+        # Create the system tray icon
+        self.tray_icon = SystemTrayIcon(self)
 
         # Run the theme listener in a separate thread
         threading.Thread(target=darkdetect.listener, args=(self.on_theme_change,), daemon=True).start()
@@ -233,14 +240,13 @@ class MainWindow(QMainWindow):
 
         # self.monitors_frame.setStyleSheet("background-color: red;")
         # self.bottom_frame.setStyleSheet("background-color: green;") 
+        self.openSettingsWindow() # Open settings window on startup
 
         
 
 
 
-    
-    def createTrayIcon(self):
-        self.tray_icon = SystemTrayIcon(self)
+
 
     # MARK: update_rounded_corners()
     def update_rounded_corners(self):
@@ -283,9 +289,7 @@ class MainWindow(QMainWindow):
             brightness_values_copy = self.brightness_values.copy()
             # print(f"brightness_values_copy {brightness_values_copy}")
 
-            for monitor_serial, monitor in brightness_values_copy.items():
-                brightness = monitor['brightness']
-
+            for monitor_serial, brightness in brightness_values_copy.items():
                 try:
                     current_brightness = sbc.get_brightness(display=monitor_serial)[0]
                     if current_brightness != brightness:
@@ -296,7 +300,7 @@ class MainWindow(QMainWindow):
                     print(f"Error: {e}")
             
 
-            self.save_brightness_values_to_registry()
+            reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
 
 
             end_time = time.time()  # End time measurement
@@ -313,7 +317,7 @@ class MainWindow(QMainWindow):
         # hide window when focus is lost
         if event.type() == QEvent.Type.WindowDeactivate:
             # self.hide()
-            self.animateWindowClose()
+            # self.animateWindowClose()
             return True
         
         # Handle scroll events on the bottom frame
@@ -329,21 +333,9 @@ class MainWindow(QMainWindow):
     # MARK: on_bottom_frame_scroll()
     def on_bottom_frame_scroll(self, delta):
         # print("on_bottom_frame_scroll ", delta)
-        for monitor_serial, monitor in self.brightness_values.items():
-            brightness = monitor['brightness']
-            slider = monitor['slider']
-            if slider is None:
-                continue
-            label = monitor['label']
-
+        for slider in self.br_sliders:
             new_value = max(0, min(100, slider.value() + (1 if delta > 0 else -1)))
             slider.setValue(new_value)
-            # label.setText(f"{int(new_value)}")
-            # self.brightness_values[monitor_serial]['brightness'] = int(new_value)
-        # self.save_brightness_values_to_registry()
-
-
-
 
 
 
@@ -359,6 +351,7 @@ class MainWindow(QMainWindow):
             if child.widget():
                 child.widget().deleteLater()
 
+        self.br_sliders.clear() # Clear brightness sliders list
 
 
 
@@ -366,9 +359,7 @@ class MainWindow(QMainWindow):
         monitors_info = get_monitors_info()
         # print(f"monitors_info {monitors_info}")
         # monitors_info.reverse()  # Invert the order of monitors
-
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
-
         # Сортуємо список моніторів відповідно до порядку з реєстру
         monitors_order = [serial for serial in self.monitors_order if serial in monitors_dict]
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
@@ -379,8 +370,6 @@ class MainWindow(QMainWindow):
 
 
 
-        num_monitors = random.randint(1, 4)
-        # for i in range(num_monitors):
         for index, monitor_serial in enumerate(monitors_order):
 
             monitor = monitors_dict[monitor_serial]
@@ -429,9 +418,8 @@ class MainWindow(QMainWindow):
                     res_combobox.setFixedHeight(32)
                     res_combobox.addItems(formatted_resolutions)
                     res_combobox.setCurrentText(monitor["Resolution"])
-                    res_combobox.currentIndexChanged.connect(lambda index, m=monitor, ms=monitor_serial, cb=res_combobox: self.on_resolution_select(m, ms, cb.currentText()))
+                    res_combobox.currentIndexChanged.connect(lambda index, m=monitor, cb=res_combobox: self.on_resolution_select(m, cb.currentText()))
                     label_hbox.addWidget(res_combobox)
-                    # def on_resolution_select(self, monitor, monitor_serial, resolution):
                 else:
                     res_label = QLabel(monitor['Resolution'])
                     res_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -494,7 +482,7 @@ class MainWindow(QMainWindow):
 
 
             if self.restore_last_brightness and monitor['serial'] in self.brightness_values:
-                br_level = int(self.brightness_values[monitor['serial']]['brightness'])
+                br_level = int(self.brightness_values[monitor['serial']])
             else:
                 br_level = sbc.get_brightness(display=monitor['serial'])[0]
 
@@ -504,6 +492,7 @@ class MainWindow(QMainWindow):
             br_slider.setValue(br_level)
             
             br_label = QLabel()
+            self.br_sliders.append(br_slider)
             br_label.setText(str(br_level))
             br_label.setStyleSheet("""
                                    font-size: 22px; 
@@ -524,7 +513,7 @@ class MainWindow(QMainWindow):
             self.monitors_layout.addWidget(monitor_frame)
 
 
-            self.brightness_values[monitor['serial']] = {'brightness': br_level, 'slider': br_slider, 'label': br_label}
+            self.brightness_values[monitor['serial']] = br_level
             print(f"self.brightness_values {self.brightness_values}")
 
             label_frame.setStyleSheet("background-color: red")
@@ -551,14 +540,13 @@ class MainWindow(QMainWindow):
 
 
     # MARK: on_resolution_select()
-    def on_resolution_select(self, monitor, monitor_serial, resolution):
+    def on_resolution_select(self, monitor, resolution):
         print(f"on_resolution_select {monitor['serial']} {resolution}")
         
         width, height = map(int, resolution.split('x'))
 
         set_resolution(monitor["Device"], width, height)
         
-        # self.updateSizeAndPosition()
         QTimer.singleShot(250, self.updateSizeAndPosition)
 
 
@@ -566,17 +554,8 @@ class MainWindow(QMainWindow):
     def on_brightness_change(self, value, label, monitor_serial):
         # print(f"on_brightness_change {value} {label} {monitor_serial}")
         label.setText(str(value))
-        # set_brightness(monitor_serial, value)
-        self.brightness_values[monitor_serial]['brightness'] = int(value)  # Ensure value is an integer
-        # self.save_brightness_values_to_registry()
+        self.brightness_values[monitor_serial] = int(value)
         
-
-    # MARK: save_brightness_values_to_registry()
-    def save_brightness_values_to_registry(self):
-        # print("save_brightness_values_to_registry")
-        # brightness_data = {monitor_serial: {'brightness': int(data['brightness'])} for monitor_serial, data in self.brightness_values.items()}
-        brightness_data = {monitor_serial: int(data['brightness']) for monitor_serial, data in self.brightness_values.items()}
-        reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", brightness_data)
 
 
     # MARK: showEvent()
@@ -611,16 +590,12 @@ class MainWindow(QMainWindow):
         else:
             print("Brightness sync thread is already running")
 
-
         super().showEvent(event)
-        
-        # print("self.height():", self.height(), "sizeHint:", self.sizeHint().height())
 
 
 
     def hideEvent(self, event):
         print("hideEvent")
-
 
         self.window_open = False
         if self.brightness_sync_thread and self.brightness_sync_thread.is_alive():
@@ -631,7 +606,6 @@ class MainWindow(QMainWindow):
                 print("thread is dead")
             else:
                 print("thread is still alive")
-
 
         super().hideEvent(event)
 
@@ -712,6 +686,18 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
+
+    # Check if another instance is already running
+    if getattr(sys, 'frozen', False):
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        mutex = kernel32.CreateMutexW(None, False, "MoniTune")
+        if not mutex: # Помилка створення м'ютекса
+            print(f"Error code: {ctypes.get_last_error()}")
+            sys.exit(1)
+        if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS (м'ютекс вже є)
+            print("Another instance is already running")
+            sys.exit(1)
+
     app = QApplication([])
 
     # print(QStyleFactory.keys())
@@ -719,10 +705,4 @@ if __name__ == "__main__":
 
     window = MainWindow()
     window.show()
-
-    
-
-    
-
-
     app.exec()

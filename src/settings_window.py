@@ -6,6 +6,7 @@ import webbrowser
 import config
 
 from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
+from PySide6.QtGui import QIcon
 
 class SettingsWindow(QWidget):
     def __init__(self, parent_window):
@@ -13,7 +14,9 @@ class SettingsWindow(QWidget):
         
         self.parent_window = parent_window
 
-        self.setWindowTitle("Settings")
+        self.setWindowTitle(f"{config.app_name} Settings")
+        self.setWindowIcon(QIcon(config.app_icon_path))
+        
         self.resize(450, 400)
         self.setMinimumWidth(400)
         self.setMinimumHeight(300)
