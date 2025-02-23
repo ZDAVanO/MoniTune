@@ -83,6 +83,7 @@ class SettingsWindow(QWidget):
             return checkbox
 
         
+
         # MARK: General Tab
 
         general_tab = QWidget()
@@ -94,7 +95,6 @@ class SettingsWindow(QWidget):
                                                          "EnableRoundedCorners",
                                                          self.parent.update_rounded_corners
                                                          ))
-
 
 
 
@@ -159,21 +159,6 @@ class SettingsWindow(QWidget):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         # Add Reorder Monitors setting
         
         def save_order():
@@ -209,29 +194,6 @@ class SettingsWindow(QWidget):
         
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         # MARK: Resolution Tab
         resolution_tab = QWidget()
         resolution_layout = QVBoxLayout(resolution_tab)
@@ -249,6 +211,7 @@ class SettingsWindow(QWidget):
         self.tab_widget.addTab(resolution_tab, "Resolution")
         
 
+
         # MARK: Refresh Rates Tab
         refresh_rate_tab = QWidget()
         refresh_rate_layout = QVBoxLayout(refresh_rate_tab)
@@ -258,24 +221,64 @@ class SettingsWindow(QWidget):
                                                              "ShowRefreshRates",
                                                              ))
         
+
+
+        # Add Exclude Refresh Rate setting
+
+        all_rates = set()
+        for monitor in monitors_info:
+            all_rates.update(monitor['AvailableRefreshRates'])
+        all_rates = sorted(all_rates)
+
+        # excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
+        excluded_rates = list(map(int, filter(None, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates"))))
+
+
+        # Функція для оновлення списку excluded
+
+        def update_excluded(rate, value):
+            print(f"Rate: {rate}, Switch: {value}")
+
+            if value == 2: # Якщо перемикач увімкнений
+                if rate in excluded_rates:
+                    excluded_rates.remove(rate)
+            else:  # Якщо перемикач вимкнений
+                if rate not in excluded_rates:
+                    excluded_rates.append(rate)
+
+            reg_write_list(config.REGISTRY_PATH, "ExcludedHzRates", excluded_rates)
+            self.parent.excluded_rates = excluded_rates
+            print(f"Updated excluded list: {excluded_rates}")
+
+
         exclude_rr_frame = QFrame()
+        exclude_rr_frame.setFrameShape(QFrame.StyledPanel)
+
         exclude_rr_layout = QVBoxLayout(exclude_rr_frame)
         exclude_rr_label = QLabel("Exclude Refresh Rates")
         exclude_rr_layout.addWidget(exclude_rr_label)
-        
+
+
         scroll_area = QScrollArea()
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
-        for rate in ["60 Hz", "75 Hz", "120 Hz"]:
-            rate_checkbox = QCheckBox(rate)
+        for rate in all_rates:
+            rate_checkbox = QCheckBox(f"{rate} Hz")
             scroll_layout.addWidget(rate_checkbox)
-        scroll_content.setLayout(scroll_layout)
+
+            if rate not in excluded_rates:
+                rate_checkbox.setChecked(True)
+            
+            rate_checkbox.stateChanged.connect(lambda state, rate=rate: update_excluded(rate, state))
+
         scroll_area.setWidget(scroll_content)
         exclude_rr_layout.addWidget(scroll_area)
         
         refresh_rate_layout.addWidget(exclude_rr_frame)
         self.tab_widget.addTab(refresh_rate_tab, "Refresh Rate")
-        
+
+
+
         # MARK: Brightness Tab
         brightness_tab = QWidget()
         brightness_layout = QVBoxLayout(brightness_tab)
@@ -286,6 +289,8 @@ class SettingsWindow(QWidget):
                                                            ))
         self.tab_widget.addTab(brightness_tab, "Brightness")
         
+
+
         # MARK: About Tab
         about_tab = QWidget()
         about_layout = QVBoxLayout(about_tab)
