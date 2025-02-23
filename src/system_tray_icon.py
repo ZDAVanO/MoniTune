@@ -10,11 +10,13 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.setToolTip(f"{config.app_name} v{config.version}")
 
         tray_menu = QMenu()
-        show_action = tray_menu.addAction("Show")
+        show_action = tray_menu.addAction("Quick Access \tLeft-click")
         show_action.triggered.connect(parent.show)
         
         settings_action = tray_menu.addAction("Settings")  # Add this action
         settings_action.triggered.connect(parent.openSettingsWindow)  # Connect to openSettingsWindow method
+        
+        tray_menu.addSeparator()  # Add separator before Exit action
         
         exit_action = tray_menu.addAction("Exit")
         exit_action.triggered.connect(QGuiApplication.quit)
@@ -27,4 +29,6 @@ class SystemTrayIcon(QSystemTrayIcon):
         # print("trayIconClicked reason:", reason)
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.parent().show()
+        # elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+        #     self.parent().openSettingsWindow()  # Trigger Settings on double-click
 

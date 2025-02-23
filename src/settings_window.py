@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel, QSlider, QPushButton, QApplication, QMainWindow, QHBoxLayout, QComboBox, QFrame, QCheckBox, QScrollArea, QLineEdit, QListWidget, QListWidgetItem, QSizePolicy
-from PySide6.QtCore import QEvent, QSize, Qt, QPropertyAnimation, QRect, QEasingCurve
+from PySide6.QtCore import QEvent, QSize, Qt, QPropertyAnimation, QRect, QEasingCurve, QTimer
 import random
 import webbrowser
 
@@ -7,6 +7,9 @@ import config
 from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
 from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 from PySide6.QtGui import QIcon
+
+import time
+
 
 class SettingsWindow(QWidget):
     def __init__(self, parent_window):
@@ -24,18 +27,19 @@ class SettingsWindow(QWidget):
         settings_layout = QVBoxLayout(self)
         settings_layout.setContentsMargins(0, 0, 0, 0)
         self.tab_widget = QTabWidget()
+        self.tab_widget.setDocumentMode(True)
         settings_layout.addWidget(self.tab_widget)
 
 
         # Add button to show parent window
-        self.show_parent_button = QPushButton("Show Parent Window")
-        self.show_parent_button.clicked.connect(self.show_parent_window)
-        settings_layout.addWidget(self.show_parent_button)
+        # self.show_parent_button = QPushButton("Show Parent Window")
+        # self.show_parent_button.clicked.connect(self.parent.show)
+        # settings_layout.addWidget(self.show_parent_button)
 
         # Add button to change parent window's test_var
-        self.change_var_button = QPushButton("Change Parent Variable")
-        self.change_var_button.clicked.connect(self.change_parent_var)
-        settings_layout.addWidget(self.change_var_button)
+        # self.change_var_button = QPushButton("Change Parent Variable")
+        # self.change_var_button.clicked.connect(self.change_parent_var)
+        # settings_layout.addWidget(self.change_var_button)
 
         
 
@@ -65,7 +69,8 @@ class SettingsWindow(QWidget):
             reg_write_bool(config.REGISTRY_PATH, reg_setting_name, bool)
             if callable(callback):
                 callback()
-            # self.load_ui()
+
+            self.show_parent_window()
 
         def create_setting_checkbox(checkbox_label, 
                                     setting_name, 
@@ -126,6 +131,7 @@ class SettingsWindow(QWidget):
                 custom_monitor_names[monitor_id] = new_name
                 print(f"Updated names: {custom_monitor_names}")
                 self.parent.custom_monitor_names = custom_monitor_names
+                # self.show_parent_window()
                 reg_write_dict(config.REGISTRY_PATH, "CustomMonitorNames", custom_monitor_names)
 
         for monitor_id in monitors_order:
@@ -166,6 +172,7 @@ class SettingsWindow(QWidget):
             print("New order:", monitors_order)
             reg_write_list(config.REGISTRY_PATH, "MonitorsOrder", monitors_order)
             self.parent.monitors_order = monitors_order
+            self.show_parent_window()
 
         reorder_monitors_widget = QFrame()
         reorder_monitors_widget.setFrameShape(QFrame.StyledPanel)
@@ -248,6 +255,7 @@ class SettingsWindow(QWidget):
 
             reg_write_list(config.REGISTRY_PATH, "ExcludedHzRates", excluded_rates)
             self.parent.excluded_rates = excluded_rates
+            self.show_parent_window()
             print(f"Updated excluded list: {excluded_rates}")
 
 
@@ -304,7 +312,7 @@ class SettingsWindow(QWidget):
         
 
     def show_parent_window(self):
-        self.parent.show()
+        QTimer.singleShot(400, self.parent.show)
 
     def change_parent_var(self):
         setattr(self.parent, "test_var", random.randint(1, 100))
