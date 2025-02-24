@@ -69,9 +69,6 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         self.test_var = 5
-        # self.icon_path = icon_path
-        # self.settings_icon_light = settings_icon_light
-        # self.settings_icon_dark = settings_icon_dark
 
         self.window_width = 358
         self.window_height = 231
@@ -86,27 +83,7 @@ class MainWindow(QMainWindow):
 
 
 
-        self.border_color_light = "#bebebe"
-        self.border_color_dark = "#404040"
-
-        self.bg_color_light = "#f3f3f3"
-        self.bg_color_dark = "#202020"
-
-
-        self.fr_color_light = "#fbfbfb"  
-        self.fr_color_dark = "#2b2b2b"  
-
-        self.fr_border_color_light = "#e5e5e5"
-        self.fr_border_color_dark = "#1d1d1d"
-
-
-        self.rr_border_color_dark = "#3f3f3f"
-        self.rr_fg_color_dark = "#373737"
-        self.rr_hover_color_dark = "#2c2c2c"
-
-        self.rr_border_color_light = "#ececec"
-        self.rr_fg_color_light = "#fefefe"
-        self.rr_hover_color_light = "#f0f0f0"
+        self.update_theme_colors(darkdetect.theme())
 
 
 
@@ -164,9 +141,9 @@ class MainWindow(QMainWindow):
         central_widget.setStyleSheet(
             f"""
             #Container {{
-            background: #202020;
+            background: {self.bg_color};
             border-radius: {self.window_corner_radius}px;
-            border: 1px solid #404040;
+            border: 1px solid {self.border_color};
             }}
             """
         )
@@ -205,24 +182,8 @@ class MainWindow(QMainWindow):
         self.bottom_hbox.setContentsMargins(7, 0, 11, 0)
         self.bottom_hbox.setSpacing(5)
 
-        name_title = QLabel("Scroll to adjust brightness")
-        name_title.setStyleSheet("""
-                                 font-size: 14px; 
-                                 padding-left: 5px;
-                                 
-                                 """)
-        
-        settings_button = QPushButton()
-        settings_button.setFixedWidth(41)
-        settings_button.setFixedHeight(39)
-        settings_button.setIcon(QIcon(config.settings_icon_dark_path))
-        settings_button.setIconSize(QSize(21, 21))
-        # settings_button.setStyleSheet("border: none;")
-        # settings_button.setStyleSheet("QPushButton { border: none; }")
-        settings_button.clicked.connect(self.openSettingsWindow)
+        self.updateBottomFrame()
 
-        self.bottom_hbox.addWidget(name_title)
-        self.bottom_hbox.addWidget(settings_button)
         
 
         central_widget_layout = QVBoxLayout(central_widget)
@@ -248,22 +209,23 @@ class MainWindow(QMainWindow):
         # self.bottom_frame.setStyleSheet("background-color: green;") 
         # self.openSettingsWindow() # Open settings window on startup
 
-        
+        self.update_bottom_frame = False
+
 
 
 
 
 
     # MARK: update_rounded_corners()
-    def update_rounded_corners(self):
+    def update_central_widget(self):
         new_corner_radius = 9 if self.enable_rounded_corners else 0
         self.window_corner_radius = new_corner_radius
         self.centralWidget().setStyleSheet(
             f"""
             #Container {{
-            background: #202020;
+            background: {self.bg_color};
             border-radius: {new_corner_radius}px;
-            border: 1px solid #404040;
+            border: 1px solid {self.border_color};
             }}
             """
         )
@@ -271,18 +233,75 @@ class MainWindow(QMainWindow):
         self.edge_padding = 11 if self.enable_rounded_corners else 0
 
 
+    def update_theme_colors(self, theme: str):
+        if theme == "Light":
+            self.bg_color = config.bg_color_light
+            self.border_color = config.border_color_light
+
+            self.fr_color = config.fr_color_light  
+            self.fr_border_color = config.fr_border_color_light
+
+            self.rr_border_color = config.rr_border_color_light
+            self.rr_fg_color = config.rr_fg_color_light
+            self.rr_hover_color = config.rr_hover_color_light
+
+            self.settings_icon_path = config.settings_icon_light_path
+        else:
+            self.bg_color = config.bg_color_dark
+            self.border_color = config.border_color_dark
+
+            self.fr_color = config.fr_color_dark  
+            self.fr_border_color = config.fr_border_color_dark
+
+            self.rr_border_color = config.rr_border_color_dark
+            self.rr_fg_color = config.rr_fg_color_dark
+            self.rr_hover_color = config.rr_hover_color_dark
+
+            self.settings_icon_path = config.settings_icon_dark_path
+
+
     # MARK: on_theme_change()
     def on_theme_change(self, theme: str):
         print(f"Theme changed to: {theme}")
 
-        if theme == "Light":
-            pass
-        else:
-            pass
-    
+        self.update_theme_colors(theme)
+
+        self.update_central_widget()
 
 
-    
+        # self.updateBottomFrame()
+        self.update_bottom_frame = True
+
+
+    # MARK: updateBottomFrame()
+    def updateBottomFrame(self):
+        print("updateBottomFrame count ", self.bottom_hbox.count())
+        while self.bottom_hbox.count():
+            child = self.bottom_hbox.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+
+        name_title = QLabel("Scroll to adjust brightness")
+        name_title.setStyleSheet("""
+                                 font-size: 14px; 
+                                 padding-left: 5px;
+                                 
+                                 """)
+        
+        self.settings_button = QPushButton()
+        self.settings_button.setFixedWidth(41)
+        self.settings_button.setFixedHeight(39)
+        self.settings_button.setIcon(QIcon(self.settings_icon_path))
+        self.settings_button.setIconSize(QSize(21, 21))
+        # self.settings_button.setStyleSheet("border: none;")
+        # self.settings_button.setStyleSheet("QPushButton { border: none; }")
+        self.settings_button.clicked.connect(self.openSettingsWindow)
+
+        self.bottom_hbox.addWidget(name_title)
+        self.bottom_hbox.addWidget(self.settings_button)
+
+        self.bottom_hbox.update()
 
     
 
@@ -294,8 +313,8 @@ class MainWindow(QMainWindow):
 
         # hide window when focus is lost
         if event.type() == QEvent.Type.WindowDeactivate:
-            # self.hide()
-            self.animateWindowClose()
+            self.hide()
+            # self.animateWindowClose()
             return True
         
         # Handle scroll events on the bottom frame
@@ -353,12 +372,12 @@ class MainWindow(QMainWindow):
             monitor_frame = QWidget()
             monitor_frame.setObjectName("MonitorsFrame")
             monitor_frame.setStyleSheet(
-                """
-                #MonitorsFrame {
-                background: #2b2b2b;
+                f"""
+                #MonitorsFrame {{
+                background: {self.fr_color};
                 border-radius: 6px;
-                border: 1px solid #1d1d1d;
-                }
+                border: 1px solid {self.fr_border_color}; 
+                }}
                 """
             )
             monitor_vbox = QVBoxLayout(monitor_frame)
@@ -419,10 +438,10 @@ class MainWindow(QMainWindow):
                     res_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                     res_label.setFixedWidth(105)
                     # res_label.setMinimumWidth(105)
-                    res_label.setStyleSheet("""
+                    res_label.setStyleSheet(f"""
                                             font-size: 14px; font-weight: bold; 
-                                            background-color: #373737; 
-                                            border: 1px solid #3f3f3f; 
+                                            background-color: {self.rr_fg_color}; 
+                                            border: 1px solid {self.rr_border_color};  
                                             border-radius: 6px; 
 
                                             padding: 3px;
@@ -614,6 +633,10 @@ class MainWindow(QMainWindow):
     # MARK: showEvent()
     def showEvent(self, event):
         print("showEvent")
+
+        if self.update_bottom_frame:
+            self.updateBottomFrame()
+            self.update_bottom_frame = False
 
 
         self.updateFrameContents()  # Update frame contents each time the window is shown

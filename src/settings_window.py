@@ -98,7 +98,7 @@ class SettingsWindow(QWidget):
         general_layout.addWidget(create_setting_checkbox("Rounded Corners", 
                                                          "enable_rounded_corners", 
                                                          "EnableRoundedCorners",
-                                                         self.parent.update_rounded_corners
+                                                         self.parent.update_central_widget
                                                          ))
 
 
