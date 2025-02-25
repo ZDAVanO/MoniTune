@@ -23,7 +23,9 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         self.setContextMenu(tray_menu)
         self.activated.connect(self.trayIconClicked)
+        self.messageClicked.connect(self.on_message_click)
         self.show()
+        # self.showMessage("MoniTune", "MoniTune is running in the background.", QIcon(config.app_icon_path))
 
     def trayIconClicked(self, reason):
         # print("trayIconClicked reason:", reason)
@@ -31,4 +33,11 @@ class SystemTrayIcon(QSystemTrayIcon):
             self.parent().show()
         # elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
         #     self.parent().openSettingsWindow()  # Trigger Settings on double-click
+
+    def show_notification(self, title, message, icon):
+        self.showMessage(title, message, icon)
+        
+
+    def on_message_click(self):
+        print("on_message_click")
 

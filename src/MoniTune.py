@@ -41,14 +41,16 @@ import ctypes
 
 
 class CustomSlider(QSlider):
+    def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, *args, **kwargs):
+        super().__init__(orientation, *args, **kwargs)
+        self.scrollStep = scrollStep  # Зберігаємо крок зміни значення
+
     def wheelEvent(self, event: QWheelEvent):
         value = self.value()
         if event.angleDelta().y() > 0:
-            self.setValue(value + 1)
+            self.setValue(value + self.scrollStep)
         else:
-            self.setValue(value - 1)
-
-
+            self.setValue(value - self.scrollStep)
 
 
 class NoScrollComboBox(QComboBox):
@@ -73,6 +75,7 @@ class MainWindow(QMainWindow):
         self.window_width = 358
         self.window_height = 231
 
+
         self.enable_rounded_corners = reg_read_bool(config.REGISTRY_PATH, "EnableRoundedCorners")
         if self.enable_rounded_corners:
             self.window_corner_radius = 9
@@ -80,31 +83,6 @@ class MainWindow(QMainWindow):
         else:
             self.window_corner_radius = 0
             self.edge_padding = 0
-
-
-
-        self.update_theme_colors(darkdetect.theme())
-
-
-
-        self.settings_window = None  # No settings window yet
-        self.rr_buttons = {}  # Dictionary to store refresh rate buttons for each monitor
-        self.br_sliders = []  # List to store brightness sliders
-
-        self.window_open = False
-        self.brightness_sync_thread = None
-
-        self.brightness_values = {}
-        # self.load_brightness_values_from_registry()
-        brightness_data = reg_read_dict(config.REGISTRY_PATH, "BrightnessValues")
-        print(f"brightness_data {brightness_data}")
-        for monitor_serial, br_level in brightness_data.items():
-            self.brightness_values[monitor_serial] = int(br_level)
-        print(f"self.brightness_values {self.brightness_values}")
-
-
-        # self.excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
-        self.excluded_rates = list(map(int, filter(None, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates"))))
 
         self.custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
         print(f"custom_monitor_names {self.custom_monitor_names}")
@@ -115,17 +93,33 @@ class MainWindow(QMainWindow):
         self.show_resolution = reg_read_bool(config.REGISTRY_PATH, "ShowResolution")
         self.allow_res_change = reg_read_bool(config.REGISTRY_PATH, "AllowResolutionChange")
 
+
+        self.show_refresh_rates = reg_read_bool(config.REGISTRY_PATH, "ShowRefreshRates")
+        # self.excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
+        self.excluded_rates = list(map(int, filter(None, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates"))))
+
+        
         self.restore_last_brightness = reg_read_bool(config.REGISTRY_PATH, "RestoreLastBrightness")
         
 
-        # self.show_refresh_rates = read_show_refresh_rates_from_registry()  # Add a flag to control the display of refresh rates
-        self.show_refresh_rates = reg_read_bool(config.REGISTRY_PATH, "ShowRefreshRates")
-        # print(f"show_refresh_rates {self.show_refresh_rates}")
 
 
+        self.settings_window = None  # No settings window yet
+        self.rr_buttons = {}  # Dictionary to store refresh rate buttons for each monitor
+        self.br_sliders = []  # List to store brightness sliders
+
+        self.window_open = False
+        self.brightness_sync_thread = None
+
+        self.brightness_values = reg_read_dict(config.REGISTRY_PATH, "BrightnessValues")
+        print(f"self.brightness_values {self.brightness_values}")
 
 
+        self.update_bottom_frame = False # Flag to update bottom frame
+        self.connected_monitors = []  # List to store currently connected monitors
 
+
+        self.update_theme_colors(darkdetect.theme())
 
 
         self.setWindowTitle("MoniTune")
@@ -135,7 +129,7 @@ class MainWindow(QMainWindow):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.installEventFilter(self)
 
-        # This container holds the window contents, so we can style it.
+        # This container holds the window contents
         central_widget = QWidget()
         central_widget.setObjectName("Container")
         central_widget.setStyleSheet(
@@ -152,22 +146,12 @@ class MainWindow(QMainWindow):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
         self.monitors_frame = QWidget()
         # self.monitors_frame.setStyleSheet("border-radius: 9px; background-color: red")
         self.monitors_layout = QVBoxLayout(self.monitors_frame)
         self.monitors_layout.setContentsMargins(7, 7, 7, 0)
         self.monitors_layout.setSpacing(6) # Set spacing between monitor frames
+
 
         self.bottom_frame = QWidget()
         # self.bottom_frame.setStyleSheet("""
@@ -178,8 +162,8 @@ class MainWindow(QMainWindow):
         self.bottom_frame.setFixedHeight(60)
         self.bottom_frame.installEventFilter(self)
         self.bottom_hbox = QHBoxLayout(self.bottom_frame)
-        # 16 10
         self.bottom_hbox.setContentsMargins(7, 0, 11, 0)
+        # self.bottom_hbox.setContentsMargins(7, 0, 7, 0)
         self.bottom_hbox.setSpacing(5)
 
         self.updateBottomFrame()
@@ -199,6 +183,7 @@ class MainWindow(QMainWindow):
 
         # Create the system tray icon
         self.tray_icon = SystemTrayIcon(self)
+        # self.tray_icon.showMessage("MoniTune", "MoniTune is running", QIcon(config.app_icon_path))
 
         # Run the theme listener in a separate thread
         threading.Thread(target=darkdetect.listener, args=(self.on_theme_change,), daemon=True).start()
@@ -208,8 +193,6 @@ class MainWindow(QMainWindow):
         # self.monitors_frame.setStyleSheet("background-color: red;")
         # self.bottom_frame.setStyleSheet("background-color: green;") 
         # self.openSettingsWindow() # Open settings window on startup
-
-        self.update_bottom_frame = False
 
 
 
@@ -276,6 +259,7 @@ class MainWindow(QMainWindow):
     # MARK: updateBottomFrame()
     def updateBottomFrame(self):
         print("updateBottomFrame count ", self.bottom_hbox.count())
+        # Clear old widgets
         while self.bottom_hbox.count():
             child = self.bottom_hbox.takeAt(0)
             if child.widget():
@@ -286,8 +270,9 @@ class MainWindow(QMainWindow):
         name_title.setStyleSheet("""
                                  font-size: 14px; 
                                  padding-left: 5px;
-                                 
-                                 """)
+                                 padding-bottom: 3px;
+
+                                 """) # padding-left: 5px; background-color: blue;
         
         self.settings_button = QPushButton()
         self.settings_button.setFixedWidth(41)
@@ -301,8 +286,6 @@ class MainWindow(QMainWindow):
         self.bottom_hbox.addWidget(name_title)
         self.bottom_hbox.addWidget(self.settings_button)
 
-        self.bottom_hbox.update()
-
     
 
 
@@ -313,8 +296,8 @@ class MainWindow(QMainWindow):
 
         # hide window when focus is lost
         if event.type() == QEvent.Type.WindowDeactivate:
-            self.hide()
-            # self.animateWindowClose()
+            # self.hide()
+            self.animateWindowClose()
             return True
         
         # Handle scroll events on the bottom frame
@@ -359,6 +342,7 @@ class MainWindow(QMainWindow):
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
         monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
 
+        self.connected_monitors = [monitor['serial'] for monitor in monitors_info]  # Update connected monitors list
 
 
 
@@ -382,13 +366,13 @@ class MainWindow(QMainWindow):
             )
             monitor_vbox = QVBoxLayout(monitor_frame)
             monitor_vbox.setContentsMargins(0, 0, 0, 0)
-            monitor_vbox.setSpacing(5)  # Remove spacing between monitor frames
+            monitor_vbox.setSpacing(5)  # Spacing between monitor frames
             
 
             # MARK: Monitor Label
             label_frame = QWidget()
-            # label_frame.setFixedHeight(120)
-            label_frame.setMinimumHeight(34)
+            # label_frame.setMinimumHeight(34)
+            label_frame.setFixedHeight(34)
             label_hbox = QHBoxLayout(label_frame)
             label_hbox.setContentsMargins(12, 7, 7, 0)
             # label_hbox.setContentsMargins(16, 7, 7, 0)
@@ -456,8 +440,6 @@ class MainWindow(QMainWindow):
             if self.show_refresh_rates:
                 refresh_rates = monitor["AvailableRefreshRates"]
                 refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
-                # rates = ["100 Hz", "2 Hz", "3 Hz", "4 Hz", "5 Hz", "6 Hz", "7 Hz", "8 Hz", "9 Hz", "10 Hz", "11 Hz", "12 Hz", "13 Hz", "14 Hz", "15 Hz", "16 Hz", "17 Hz", "18 Hz", "19 Hz", "20 Hz"]
-                # rates = ["100 Hz", "2 Hz", "3 Hz", "4 Hz", "5 Hz",]
 
                 if len(refresh_rates) >= 2:
                     rr_frame = QWidget()
@@ -499,9 +481,13 @@ class MainWindow(QMainWindow):
             
             br_hbox = QHBoxLayout(br_frame)
             # br_hbox.setContentsMargins(7, 0, 7, 7)
-            br_hbox.setContentsMargins(12, 0, 7, 7)
             # br_hbox.setContentsMargins(16, 0, 7, 7)
-            br_hbox.setSpacing(1)
+
+            # br_hbox.setContentsMargins(12, 0, 7, 7)
+            # br_hbox.setSpacing(1)
+
+            br_hbox.setContentsMargins(12, 0, 9, 7)
+            br_hbox.setSpacing(3)
 
 
             if self.restore_last_brightness and monitor['serial'] in self.brightness_values:
@@ -521,7 +507,9 @@ class MainWindow(QMainWindow):
                                      
             #                          """) # background-color: green;
 
-            br_slider = CustomSlider(Qt.Orientation.Horizontal, singleStep=1)
+            br_slider = CustomSlider(Qt.Orientation.Horizontal, 
+                                     scrollStep=1, 
+                                     singleStep=1)
             br_slider.setMaximum(100)  # Set maximum value to 100
             br_slider.setValue(br_level)
             self.br_sliders.append(br_slider)
@@ -555,12 +543,16 @@ class MainWindow(QMainWindow):
             # QTimer.singleShot(0, lambda: print("br_label width:", br_label.width())) # Print width of br_label after the layout is updated
 
             self.brightness_values[monitor['serial']] = br_level
-            # print(f"self.brightness_values {self.brightness_values}")
+            
+
 
             # label_frame.setStyleSheet("background-color: red")
             # if self.show_refresh_rates: rr_frame.setStyleSheet("background-color: green")
             # br_frame.setStyleSheet("background-color: blue")
             # br_slider.setStyleSheet("background-color: red")
+
+
+        print(f"self.brightness_values {self.brightness_values}")
 
         end_time = time.time()
         print(f"load_ui took {end_time - start_time:.4f} seconds")
@@ -571,13 +563,21 @@ class MainWindow(QMainWindow):
     # MARK: on_rr_button_clicked()
     def on_rr_button_clicked(self, rate, monitor, button):
         print(f"Selected refresh rate: {rate} Hz for monitor {monitor["serial"]}")
+        # print(monitor)
+
         # update button states
         for btn in self.rr_buttons[monitor["serial"]]:
             if btn != button:
                 btn.setChecked(False)
         button.setChecked(True)
+
         # set refresh rate
+        # if monitor["RefreshRate"] == rate:
+        #     print(f"Monitor {monitor['Device']} is already set to {rate} Hz.")
+        #     return
         set_refresh_rate_br(monitor, rate, refresh=False)
+
+        
 
 
     # MARK: on_resolution_select()
@@ -587,7 +587,7 @@ class MainWindow(QMainWindow):
         width, height = map(int, resolution.split('x'))
         set_resolution(monitor["Device"], width, height)
         
-        QTimer.singleShot(250, self.updateSizeAndPosition)
+        QTimer.singleShot(500, self.updateSizeAndPosition)
 
 
     # MARK: on_brightness_change()
@@ -613,18 +613,23 @@ class MainWindow(QMainWindow):
             brightness_values_copy = self.brightness_values.copy()
             # print(f"brightness_values_copy {brightness_values_copy}")
             for monitor_serial, brightness in brightness_values_copy.items():
-                try:
-                    current_brightness = sbc.get_brightness(display=monitor_serial)[0]
-                    if current_brightness != brightness:
-                        print(f"set_brightness {monitor_serial} {brightness}")
+                if monitor_serial in self.connected_monitors:  # Check if monitor is connected
+                    try:
+                        
+                        # current_brightness = sbc.get_brightness(display=monitor_serial)[0]
+                        # if current_brightness != brightness:
+                        #     # print(f"set_brightness {monitor_serial} {brightness}")
+                        #     set_brightness(monitor_serial, brightness)
+
                         set_brightness(monitor_serial, brightness)
-                except Exception as e:
-                    print(f"Error: {e}")
+
+                    except Exception as e:
+                        print(f"Error: {e}")
             
             reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
 
             end_time = time.time()  # End time measurement
-            # print(f"Brightness sync took {end_time - start_time:.4f} seconds")
+            print(f"Brightness sync took {end_time - start_time:.4f} seconds")
 
             time.sleep(0.15)
 
@@ -697,53 +702,61 @@ class MainWindow(QMainWindow):
 
     # MARK: animateWindowOpen()
     def animateWindowOpen(self):
-        # screen_geometry = QGuiApplication.primaryScreen().geometry()
         screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
         # start_rect = QRect(screen_geometry.width(), screen_geometry.height() - self.height() - edge_padding, self.width(), self.height())
         # end_rect = QRect(screen_geometry.width() - self.width() - edge_padding, screen_geometry.height() - self.height() - edge_padding, self.width(), self.height())
         start_rect = QRect(screen_geometry.width(), screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
         end_rect = QRect(screen_geometry.width() - self.width() - self.edge_padding, screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
+
+        self.open_animation = QPropertyAnimation(self, b"geometry") 
+        self.open_animation.setStartValue(start_rect)
+        self.open_animation.setEndValue(end_rect)
+        # self.open_animation.setDuration(300)
+        self.open_animation.setDuration(300)
+        # self.open_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.open_animation.setEasingCurve(QEasingCurve.Type.OutExpo)
+
+        self.open_opacity_effect = QGraphicsOpacityEffect(self)   
+        self.setGraphicsEffect(self.open_opacity_effect)
+        self.open_opacity_animation = QPropertyAnimation(self.open_opacity_effect, b"opacity")
+        self.open_opacity_animation.setDuration(300)
+        # self.open_opacity_animation.setDuration(275)
+        self.open_opacity_animation.setStartValue(0)
+        self.open_opacity_animation.setEndValue(1)
+        # self.open_opacity_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.open_opacity_animation.setEasingCurve(QEasingCurve.Type.OutExpo)
         
-        self.animation = QPropertyAnimation(self, b"geometry")
-        self.animation.setDuration(300)
-        self.animation.setStartValue(start_rect)
-        self.animation.setEndValue(end_rect)
-        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        
-        self.opacity_effect = QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(self.opacity_effect)
-        self.opacity_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
-        self.opacity_animation.setDuration(200)
-        self.opacity_animation.setStartValue(0)
-        self.opacity_animation.setEndValue(1)
-        
-        self.animation.start()
-        self.opacity_animation.start()
+        self.open_animation.start()
+        self.open_opacity_animation.start()
 
     # MARK: animateWindowClose()
     def animateWindowClose(self):
         screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
-        start_rect = QRect(screen_geometry.width() - self.width() - self.edge_padding, screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
+        # start_rect = QRect(screen_geometry.width() - self.width() - self.edge_padding, screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
         current_rect = self.geometry()
         end_rect = QRect(screen_geometry.width(), screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
         
-        self.animation = QPropertyAnimation(self, b"geometry")
-        self.animation.setDuration(300)
-        self.animation.setStartValue(current_rect)
-        self.animation.setEndValue(end_rect)
-        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.close_animation = QPropertyAnimation(self, b"geometry") 
+        self.close_animation.setStartValue(current_rect)
+        self.close_animation.setEndValue(end_rect)
+        # self.close_animation.setDuration(300)
+        self.close_animation.setDuration(250)
+        # self.close_animation.setEasingCurve(QEasingCurve.Type.InCubic)
+        self.close_animation.setEasingCurve(QEasingCurve.Type.InExpo)
         
-        self.opacity_effect = QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(self.opacity_effect)
-        self.opacity_animation = QPropertyAnimation(self.opacity_effect, b"opacity")
-        self.opacity_animation.setDuration(200)
-        self.opacity_animation.setStartValue(1)
-        self.opacity_animation.setEndValue(0)
+        self.close_opacity_effect = QGraphicsOpacityEffect(self)  
+        self.setGraphicsEffect(self.close_opacity_effect)
+        self.close_opacity_animation = QPropertyAnimation(self.close_opacity_effect, b"opacity")
+        self.close_opacity_animation.setDuration(250)
+        self.close_opacity_animation.setStartValue(1)
+        self.close_opacity_animation.setEndValue(0)
+        # self.close_opacity_animation.setEasingCurve(QEasingCurve.Type.InCubic)
+        self.close_opacity_animation.setEasingCurve(QEasingCurve.Type.InExpo)
         
-        self.animation.finished.connect(self.hide) # hide window after animation is done
-        self.animation.start()
-        self.opacity_animation.start()
-
+        self.close_animation.finished.connect(self.hide) # hide window after animation is done
+        self.close_animation.start()
+        self.close_opacity_animation.start()
+        
 
 
 

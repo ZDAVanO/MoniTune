@@ -27,7 +27,7 @@ class SettingsWindow(QWidget):
         settings_layout = QVBoxLayout(self)
         settings_layout.setContentsMargins(0, 0, 0, 0)
         self.tab_widget = QTabWidget()
-        self.tab_widget.setDocumentMode(True)
+        # self.tab_widget.setDocumentMode(True)
         settings_layout.addWidget(self.tab_widget)
 
 
@@ -70,7 +70,7 @@ class SettingsWindow(QWidget):
             if callable(callback):
                 callback()
 
-            self.show_parent_window()
+            # self.show_parent_window()
 
         def create_setting_checkbox(checkbox_label, 
                                     setting_name, 
@@ -94,7 +94,7 @@ class SettingsWindow(QWidget):
         general_tab = QWidget()
         # general_tab.setStyleSheet("background-color: blue")
         general_layout = QVBoxLayout(general_tab)
-        general_layout.setAlignment(Qt.AlignTop)
+        general_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         general_layout.addWidget(create_setting_checkbox("Rounded Corners", 
                                                          "enable_rounded_corners", 
                                                          "EnableRoundedCorners",
@@ -131,7 +131,7 @@ class SettingsWindow(QWidget):
                 custom_monitor_names[monitor_id] = new_name
                 print(f"Updated names: {custom_monitor_names}")
                 self.parent.custom_monitor_names = custom_monitor_names
-                # self.show_parent_window()
+                # # self.show_parent_window()
                 reg_write_dict(config.REGISTRY_PATH, "CustomMonitorNames", custom_monitor_names)
 
         for monitor_id in monitors_order:
@@ -172,7 +172,7 @@ class SettingsWindow(QWidget):
             print("New order:", monitors_order)
             reg_write_list(config.REGISTRY_PATH, "MonitorsOrder", monitors_order)
             self.parent.monitors_order = monitors_order
-            self.show_parent_window()
+            # self.show_parent_window()
 
         reorder_monitors_widget = QFrame()
         reorder_monitors_widget.setFrameShape(QFrame.StyledPanel)
@@ -204,7 +204,7 @@ class SettingsWindow(QWidget):
         # MARK: Resolution Tab
         resolution_tab = QWidget()
         resolution_layout = QVBoxLayout(resolution_tab)
-        resolution_layout.setAlignment(Qt.AlignTop)
+        resolution_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         # show_resolution_checkbox = QCheckBox("Show Resolutions")
         # allow_res_change_checkbox = QCheckBox("Allow Resolution Change")
         resolution_layout.addWidget(create_setting_checkbox("Show Resolutions",
@@ -222,7 +222,7 @@ class SettingsWindow(QWidget):
         # MARK: Refresh Rates Tab
         refresh_rate_tab = QWidget()
         refresh_rate_layout = QVBoxLayout(refresh_rate_tab)
-        refresh_rate_layout.setAlignment(Qt.AlignTop)
+        refresh_rate_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         refresh_rate_layout.addWidget(create_setting_checkbox("Show Refresh Rates",
                                                              "show_refresh_rates",
                                                              "ShowRefreshRates",
@@ -255,7 +255,7 @@ class SettingsWindow(QWidget):
 
             reg_write_list(config.REGISTRY_PATH, "ExcludedHzRates", excluded_rates)
             self.parent.excluded_rates = excluded_rates
-            self.show_parent_window()
+            # self.show_parent_window()
             print(f"Updated excluded list: {excluded_rates}")
 
 
@@ -290,7 +290,7 @@ class SettingsWindow(QWidget):
         # MARK: Brightness Tab
         brightness_tab = QWidget()
         brightness_layout = QVBoxLayout(brightness_tab)
-        brightness_layout.setAlignment(Qt.AlignTop)
+        brightness_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         brightness_layout.addWidget(create_setting_checkbox("Restore Last Brightness",
                                                            "restore_last_brightness",
                                                            "RestoreLastBrightness",
@@ -302,12 +302,21 @@ class SettingsWindow(QWidget):
         # MARK: About Tab
         about_tab = QWidget()
         about_layout = QVBoxLayout(about_tab)
-        about_layout.setAlignment(Qt.AlignTop)
+        about_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
         about_label = QLabel(f"{config.app_name} v{config.version}")
+        about_label.setStyleSheet("font-size: 20px; font-weight: bold;")
+        
         check_update_button = QPushButton("Check for Updates")
+        check_update_button.setMinimumWidth(150)
         check_update_button.clicked.connect(lambda: webbrowser.open("https://github.com/ZDAVanO/MoniTune/releases/latest"))
-        about_layout.addWidget(about_label)
-        about_layout.addWidget(check_update_button)
+        
+        learn_more_label = QLabel('<a href="https://github.com/ZDAVanO/MoniTune" style="text-decoration: none;">Learn More</a>')
+        learn_more_label.setOpenExternalLinks(True)  # Дозволяє відкривати посилання у браузері
+
+        about_layout.addWidget(about_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        about_layout.addWidget(check_update_button, alignment=Qt.AlignmentFlag.AlignCenter)
+        about_layout.addWidget(learn_more_label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.tab_widget.addTab(about_tab, "About")
         
 
