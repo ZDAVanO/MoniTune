@@ -1,7 +1,8 @@
 
 
 others
-local_build.bat
+local_build_ctk.bat
+# local_build_qt.bat
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/python

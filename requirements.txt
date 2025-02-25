@@ -1,6 +1,7 @@
-keyboard==0.13.5
-Pillow==11.0.0
-pystray==0.19.5
+PySide6==6.8.2.1
+PySide6_Addons==6.8.2.1
+PySide6_Essentials==6.8.2.1
 pywin32==308
+Pillow==11.1.0
 screen_brightness_control==0.24.1
-winotify==1.1.0
+darkdetect==0.8.0
