@@ -1,4 +1,4 @@
-from PySide6.QtGui import QIcon, QPixmap, QGuiApplication
+from PySide6.QtGui import QIcon, QGuiApplication
 from PySide6.QtWidgets import QSystemTrayIcon, QMenu
 
 import config
@@ -13,7 +13,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         show_action = tray_menu.addAction("Quick Access \tLeft-click")
         show_action.triggered.connect(parent.show)
         
-        settings_action = tray_menu.addAction("Settings")  # Add this action
+        settings_action = tray_menu.addAction("Settings")
         settings_action.triggered.connect(parent.openSettingsWindow)  # Connect to openSettingsWindow method
         
         tray_menu.addSeparator()  # Add separator before Exit action

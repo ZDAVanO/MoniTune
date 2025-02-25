@@ -1,6 +1,5 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel, QSlider, QPushButton, QApplication, QMainWindow, QHBoxLayout, QComboBox, QFrame, QCheckBox, QScrollArea, QLineEdit, QListWidget, QListWidgetItem, QSizePolicy
-from PySide6.QtCore import QEvent, QSize, Qt, QPropertyAnimation, QRect, QEasingCurve, QTimer
-import random
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel, QSlider, QPushButton, QHBoxLayout, QComboBox, QFrame, QCheckBox, QScrollArea, QLineEdit, QListWidget, QListWidgetItem
+from PySide6.QtCore import Qt, QTimer
 import webbrowser
 
 import config
@@ -31,17 +30,6 @@ class SettingsWindow(QWidget):
         settings_layout.addWidget(self.tab_widget)
 
 
-        # Add button to show parent window
-        # self.show_parent_button = QPushButton("Show Parent Window")
-        # self.show_parent_button.clicked.connect(self.parent.show)
-        # settings_layout.addWidget(self.show_parent_button)
-
-        # Add button to change parent window's test_var
-        # self.change_var_button = QPushButton("Change Parent Variable")
-        # self.change_var_button.clicked.connect(self.change_parent_var)
-        # settings_layout.addWidget(self.change_var_button)
-
-        
 
     def closeEvent(self, event):
         print("Settings window closeEvent")
@@ -323,9 +311,6 @@ class SettingsWindow(QWidget):
     def show_parent_window(self):
         QTimer.singleShot(400, self.parent.show)
 
-    def change_parent_var(self):
-        setattr(self.parent, "test_var", random.randint(1, 100))
-        # self.parent.test_var = 100
 
 
 

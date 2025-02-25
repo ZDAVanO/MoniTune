@@ -1,5 +1,5 @@
 from PySide6.QtCore import QEvent, QSize, Qt, QPropertyAnimation, QRect, QEasingCurve, QTimer
-from PySide6.QtGui import QIcon, QPixmap, QGuiApplication, QWheelEvent, QFontMetrics
+from PySide6.QtGui import QIcon, QGuiApplication, QWheelEvent
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -9,14 +9,12 @@ from PySide6.QtWidgets import (
     QToolButton,
     QVBoxLayout,
     QWidget,
-    QSystemTrayIcon,
     QMenu,
     QSlider,
     QGraphicsOpacityEffect,
     QStyleFactory,
     QTabWidget,
     QPushButton,
-    QDialog,
     QFrame,
     QComboBox,
     QGridLayout
@@ -24,20 +22,19 @@ from PySide6.QtWidgets import (
 
 from system_tray_icon import SystemTrayIcon
 from settings_window import SettingsWindow 
-import config
-
-import random
-import threading
-import darkdetect
 
 from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
 from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
+import config
 
-import time
 import screen_brightness_control as sbc
+import darkdetect
 
 import sys
 import ctypes
+import threading
+import time
+
 
 
 class CustomSlider(QSlider):
@@ -69,13 +66,11 @@ class NoScrollComboBox(QComboBox):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        
-        self.test_var = 5
 
         self.window_width = 358
         self.window_height = 231
 
-
+        
         self.enable_rounded_corners = reg_read_bool(config.REGISTRY_PATH, "EnableRoundedCorners")
         if self.enable_rounded_corners:
             self.window_corner_radius = 9
@@ -115,7 +110,7 @@ class MainWindow(QMainWindow):
         print(f"self.brightness_values {self.brightness_values}")
 
 
-        self.update_bottom_frame = False # Flag to update bottom frame
+        self.update_bottom_frame = True # Flag to update bottom frame
         self.connected_monitors = []  # List to store currently connected monitors
 
 
@@ -166,7 +161,7 @@ class MainWindow(QMainWindow):
         # self.bottom_hbox.setContentsMargins(7, 0, 7, 0)
         self.bottom_hbox.setSpacing(5)
 
-        self.updateBottomFrame()
+        # self.updateBottomFrame()
 
         
 
@@ -201,21 +196,20 @@ class MainWindow(QMainWindow):
 
     # MARK: update_rounded_corners()
     def update_central_widget(self):
-        new_corner_radius = 9 if self.enable_rounded_corners else 0
-        self.window_corner_radius = new_corner_radius
+        self.edge_padding = 11 if self.enable_rounded_corners else 0
+        corner_radius = 9 if self.enable_rounded_corners else 0
         self.centralWidget().setStyleSheet(
             f"""
             #Container {{
             background: {self.bg_color};
-            border-radius: {new_corner_radius}px;
+            border-radius: {corner_radius}px;
             border: 1px solid {self.border_color};
             }}
             """
         )
 
-        self.edge_padding = 11 if self.enable_rounded_corners else 0
 
-
+    # MARK: update_theme_colors()
     def update_theme_colors(self, theme: str):
         if theme == "Light":
             self.bg_color = config.bg_color_light
@@ -246,47 +240,9 @@ class MainWindow(QMainWindow):
     # MARK: on_theme_change()
     def on_theme_change(self, theme: str):
         print(f"Theme changed to: {theme}")
-
         self.update_theme_colors(theme)
-
         self.update_central_widget()
-
-
-        # self.updateBottomFrame()
         self.update_bottom_frame = True
-
-
-    # MARK: updateBottomFrame()
-    def updateBottomFrame(self):
-        print("updateBottomFrame count ", self.bottom_hbox.count())
-        # Clear old widgets
-        while self.bottom_hbox.count():
-            child = self.bottom_hbox.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-
-
-        name_title = QLabel("Scroll to adjust brightness")
-        name_title.setStyleSheet("""
-                                 font-size: 14px; 
-                                 padding-left: 5px;
-                                 padding-bottom: 3px;
-
-                                 """) # padding-left: 5px; background-color: blue;
-        
-        self.settings_button = QPushButton()
-        self.settings_button.setFixedWidth(41)
-        self.settings_button.setFixedHeight(39)
-        self.settings_button.setIcon(QIcon(self.settings_icon_path))
-        self.settings_button.setIconSize(QSize(21, 21))
-        # self.settings_button.setStyleSheet("border: none;")
-        # self.settings_button.setStyleSheet("QPushButton { border: none; }")
-        self.settings_button.clicked.connect(self.openSettingsWindow)
-
-        self.bottom_hbox.addWidget(name_title)
-        self.bottom_hbox.addWidget(self.settings_button)
-
-    
 
 
 
@@ -316,9 +272,9 @@ class MainWindow(QMainWindow):
 
 
 
-    # MARK: updateFrameContents()
-    def updateFrameContents(self):
-        print("test_var", self.test_var)
+    # MARK: updateMonitorsFrame()
+    def updateMonitorsFrame(self):
+        
         start_time = time.time()
 
 
@@ -477,8 +433,8 @@ class MainWindow(QMainWindow):
 
 
             # MARK: Brightness
+
             br_frame = QWidget()
-            
             br_hbox = QHBoxLayout(br_frame)
             # br_hbox.setContentsMargins(7, 0, 7, 7)
             # br_hbox.setContentsMargins(16, 0, 7, 7)
@@ -494,6 +450,8 @@ class MainWindow(QMainWindow):
                 br_level = int(self.brightness_values[monitor['serial']])
             else:
                 br_level = sbc.get_brightness(display=monitor['serial'])[0]
+
+            self.brightness_values[monitor['serial']] = br_level
 
             # sun_icon = QPixmap("src/assets/icons/sun_dark.png")
             # sun_icon = QPixmap("src/assets/icons/sun_dark.png").scaled(26, 26, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -515,9 +473,9 @@ class MainWindow(QMainWindow):
             self.br_sliders.append(br_slider)
             
             br_label = QLabel()
-            # br_label.setFixedWidth(50) # 2-26 3-39px
+            # br_label.setFixedWidth(50) 
             # br_label.setFixedWidth(26) 
-            br_label.setFixedWidth(39) 
+            br_label.setFixedWidth(39) # 2-26 3-39px
             # br_label.setFixedHeight(100)
             br_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             # br_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
@@ -529,7 +487,6 @@ class MainWindow(QMainWindow):
                                    """) # padding-bottom: 4px; background-color: green;
             
             
-
             br_slider.valueChanged.connect(lambda value, label=br_label, ms=monitor_serial: self.on_brightness_change(value, label, ms))
             
             # br_hbox.addWidget(icon_label)
@@ -540,11 +497,9 @@ class MainWindow(QMainWindow):
             
             self.monitors_layout.addWidget(monitor_frame)
 
+
+
             # QTimer.singleShot(0, lambda: print("br_label width:", br_label.width())) # Print width of br_label after the layout is updated
-
-            self.brightness_values[monitor['serial']] = br_level
-            
-
 
             # label_frame.setStyleSheet("background-color: red")
             # if self.show_refresh_rates: rr_frame.setStyleSheet("background-color: green")
@@ -555,10 +510,42 @@ class MainWindow(QMainWindow):
         print(f"self.brightness_values {self.brightness_values}")
 
         end_time = time.time()
-        print(f"load_ui took {end_time - start_time:.4f} seconds")
+        print(f"updateMonitorsFrame took {end_time - start_time:.4f} seconds")
 
+    
+    
+    # MARK: updateBottomFrame()
+    def updateBottomFrame(self):
+        print("updateBottomFrame count ", self.bottom_hbox.count())
+        # Clear old widgets
+        while self.bottom_hbox.count():
+            child = self.bottom_hbox.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+
+        name_title = QLabel("Scroll to adjust brightness")
+        name_title.setStyleSheet("""
+                                 font-size: 14px; 
+                                 padding-left: 5px;
+                                 padding-bottom: 3px;
+
+                                 """) # padding-left: 5px; background-color: blue;
         
-            
+        self.settings_button = QPushButton()
+        self.settings_button.setFixedWidth(41)
+        self.settings_button.setFixedHeight(39)
+        self.settings_button.setIcon(QIcon(self.settings_icon_path))
+        self.settings_button.setIconSize(QSize(21, 21))
+        # self.settings_button.setStyleSheet("border: none;")
+        # self.settings_button.setStyleSheet("QPushButton { border: none; }")
+        self.settings_button.clicked.connect(self.openSettingsWindow)
+
+        self.bottom_hbox.addWidget(name_title)
+        self.bottom_hbox.addWidget(self.settings_button)
+
+
+
 
     # MARK: on_rr_button_clicked()
     def on_rr_button_clicked(self, rate, monitor, button):
@@ -606,7 +593,6 @@ class MainWindow(QMainWindow):
     # MARK: brightness_sync()
     def brightness_sync(self):
         while self.window_open:
-            # print("brightness_sync")
 
             start_time = time.time()
 
@@ -615,7 +601,6 @@ class MainWindow(QMainWindow):
             for monitor_serial, brightness in brightness_values_copy.items():
                 if monitor_serial in self.connected_monitors:  # Check if monitor is connected
                     try:
-                        
                         # current_brightness = sbc.get_brightness(display=monitor_serial)[0]
                         # if current_brightness != brightness:
                         #     # print(f"set_brightness {monitor_serial} {brightness}")
@@ -643,22 +628,14 @@ class MainWindow(QMainWindow):
             self.updateBottomFrame()
             self.update_bottom_frame = False
 
-
-        self.updateFrameContents()  # Update frame contents each time the window is shown
+        self.updateMonitorsFrame()  # Update frame contents each time the window is shown
         
-        screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
+        # hide window to avoid flickering before opening animation (when close animation disabled)
+        screen_geometry = QGuiApplication.primaryScreen().geometry()
         self.move(screen_geometry.width(), screen_geometry.height())
-        # self.animateWindowOpen()
+
         QTimer.singleShot(0, self.animateWindowOpen)
         # QTimer.singleShot(0, self.updateSizeAndPosition)
-
-        # window_height = self.sizeHint().height()  # Use sizeHint().height() instead of self.height()
-        # self.move(screen_geometry.width() - self.width() - edge_padding, screen_geometry.height() - window_height - edge_padding)
-        
-        print("self.width()", self.width(), "self.height()", self.height())
-        # print("self.height():", self.height(), "sizeHint:", self.sizeHint().height())
-        # self.move(screen_geometry.width() - self.width() - edge_padding, screen_geometry.height() - self.height() - edge_padding)
-        
 
         self.activateWindow()
         self.raise_()
@@ -691,7 +668,7 @@ class MainWindow(QMainWindow):
 
 
 
-
+    # MARK: updateSizeAndPosition()
     def updateSizeAndPosition(self):
         print("updateSizeAndPosition sizeHint:", self.sizeHint().height(), "self.height()", self.height())
         screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
@@ -707,6 +684,8 @@ class MainWindow(QMainWindow):
         # end_rect = QRect(screen_geometry.width() - self.width() - edge_padding, screen_geometry.height() - self.height() - edge_padding, self.width(), self.height())
         start_rect = QRect(screen_geometry.width(), screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
         end_rect = QRect(screen_geometry.width() - self.width() - self.edge_padding, screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
+
+        print("self.width()", self.width(), "self.height()", self.sizeHint().height())
 
         self.open_animation = QPropertyAnimation(self, b"geometry") 
         self.open_animation.setStartValue(start_rect)
