@@ -1,15 +1,95 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel, QSlider, QPushButton, QHBoxLayout, QComboBox, QFrame, QCheckBox, QScrollArea, QLineEdit, QListWidget, QListWidgetItem
-from PySide6.QtCore import Qt, QTimer
-import webbrowser
-
-import config
-from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
-from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel, QSlider, QPushButton, QHBoxLayout, QComboBox, QFrame, QCheckBox, QScrollArea, QLineEdit, QListWidget, QListWidgetItem, QTimeEdit, QSizePolicy
+from PySide6.QtCore import Qt, QTimer, QTime
 from PySide6.QtGui import QIcon
 
+from custom_sliders import NoScrollSlider
+
+from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
+from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
+import config
+
+import webbrowser
 import time
 
 
+
+
+
+
+# MARK: TimeAdjustmentFrame
+class TimeAdjustmentFrame(QFrame):
+    def __init__(self, parent, monitors_order, monitors_dict, time_str=None, brightness_data=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.monitors_order = monitors_order
+        self.monitors_dict = monitors_dict
+        self.setMaximumWidth(400)
+        self.setFrameShape(QFrame.StyledPanel)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)  # Prevent frame from expanding
+        self.frame_layout = QVBoxLayout(self)
+
+        self.time_edit_layout = QHBoxLayout()
+        self.time_edit = QTimeEdit()
+        self.time_edit.setDisplayFormat("HH:mm")
+        if time_str:
+            self.time_edit.setTime(QTime.fromString(time_str, 'HH:mm'))
+        else:
+            # self.time_edit.setTime(QTime.fromString("12:30", 'HH:mm'))
+            self.time_edit.setTime(self.time_edit.time().currentTime())
+        self.time_edit_layout.addWidget(self.time_edit)
+
+        self.delete_button = QPushButton("Remove time")
+        self.delete_button.clicked.connect(self.delete_frame)
+        self.time_edit_layout.addWidget(self.delete_button)
+
+        self.frame_layout.addLayout(self.time_edit_layout)
+
+
+        self.time_edit.timeChanged.connect(self.update_time)
+
+        self.sliders = {}
+        self.brightness_data = brightness_data if brightness_data else {monitor_id: 50 for monitor_id in self.monitors_order}  # Initialize brightness data
+
+        for monitor_id in self.monitors_order:
+            slider_label = QLabel(f"{self.monitors_dict[monitor_id]['display_name']}")
+
+            slider_layout = QHBoxLayout()
+            slider = NoScrollSlider(Qt.Horizontal)
+            slider.setMinimum(0)
+            slider.setMaximum(100)
+            slider.setValue(self.brightness_data.get(monitor_id, 50))
+            slider.valueChanged.connect(lambda value, monitor_id=monitor_id: self.update_brightness(monitor_id, value))
+            slider_layout.addWidget(slider)
+
+            value_label = QLabel(f"{slider.value()}")
+            slider.valueChanged.connect(lambda value, label=value_label: label.setText(f"{value}"))
+            slider_layout.addWidget(value_label)
+
+            self.frame_layout.addWidget(slider_label)
+            self.frame_layout.addLayout(slider_layout)
+
+            self.sliders[monitor_id] = slider
+
+    def update_brightness(self, monitor_id, value):
+        self.brightness_data[monitor_id] = value
+        # print(f"Updated brightness data: {self.brightness_data}")
+
+    def update_time(self):
+        new_time_str = self.time_edit.time().toString('HH:mm')
+        # print(f"Updated time: {new_time_str}")
+
+    def delete_frame(self):
+        self.parent.time_adjustment_frames.remove(self)
+        self.deleteLater()
+        # print("Frame deleted")
+
+    def get_data(self):
+        return {
+            "time": self.time_edit.time().toString('HH:mm'),
+            "brightness": self.brightness_data
+        }
+
+# MARK: SettingsWindow
 class SettingsWindow(QWidget):
     def __init__(self, parent_window):
         super().__init__()
@@ -19,7 +99,7 @@ class SettingsWindow(QWidget):
         self.setWindowTitle(f"{config.app_name} Settings")
         self.setWindowIcon(QIcon(config.app_icon_path))
         
-        self.resize(450, 400)
+        self.resize(450, 450)
         self.setMinimumWidth(400)
         self.setMinimumHeight(300)
 
@@ -29,19 +109,51 @@ class SettingsWindow(QWidget):
         # self.tab_widget.setDocumentMode(True)
         settings_layout.addWidget(self.tab_widget)
 
+        
+        self.time_adjustment_data = {}  # Dictionary to store time and brightness data
+        self.time_adjustment_frames = []  # List to store TimeAdjustmentFrame instances
+        # print("self.time_adjustment_data", self.time_adjustment_data)
 
 
+    # MARK: closeEvent
     def closeEvent(self, event):
         print("Settings window closeEvent")
+
+        
+        self.save_adjustment_data()
+
         event.ignore()
         self.hide()
         # self.close()
 
+    # MARK: showEvent
     def showEvent(self, event):
         print("Settings window showEvent")
         self.updateLayout()
         super().showEvent(event)
 
+
+    # MARK: save_adjustment_data
+    def save_adjustment_data(self):
+        # self.time_adjustment_data.clear()
+        
+        self.time_adjustment_data = {
+            frame.get_data()["time"]: frame.get_data()["brightness"]
+            for frame in self.time_adjustment_frames
+        }
+        self.time_adjustment_frames = []
+
+        print(f"Collected time adjustment data: {self.time_adjustment_data}")
+        reg_write_dict(config.REGISTRY_PATH, "TimeAdjustmentData", self.time_adjustment_data)
+
+        self.parent.time_adjustment_data = self.time_adjustment_data
+        self.parent.update_scheduler_tasks()
+
+
+
+
+
+    # MARK: updateLayout
     def updateLayout(self):
 
         # Clear old widgets
@@ -64,8 +176,10 @@ class SettingsWindow(QWidget):
                                     setting_name, 
                                     reg_setting_name, 
                                     callback=None,
+                                    tool_tip=""
                                     ):
             checkbox = QCheckBox(checkbox_label)
+            checkbox.setToolTip(tool_tip)
             var = getattr(self.parent, setting_name)
             checkbox.setChecked(var)
             checkbox.stateChanged.connect(lambda: toggle_setting(setting_name, 
@@ -117,10 +231,12 @@ class SettingsWindow(QWidget):
         def save_name(monitor_id, new_name):
             if 0 < len(new_name) <= 50:
                 custom_monitor_names[monitor_id] = new_name
-                print(f"Updated names: {custom_monitor_names}")
-                self.parent.custom_monitor_names = custom_monitor_names
-                # # self.show_parent_window()
-                reg_write_dict(config.REGISTRY_PATH, "CustomMonitorNames", custom_monitor_names)
+            elif len(new_name) == 0:
+                custom_monitor_names.pop(monitor_id, None)
+            print(f"Updated names: {custom_monitor_names}")
+            self.parent.custom_monitor_names = custom_monitor_names
+            # # self.show_parent_window()
+            reg_write_dict(config.REGISTRY_PATH, "CustomMonitorNames", custom_monitor_names)
 
         for monitor_id in monitors_order:
             row_frame = QWidget()
@@ -284,7 +400,50 @@ class SettingsWindow(QWidget):
                                                            "RestoreLastBrightness",
                                                            ))
         self.tab_widget.addTab(brightness_tab, "Brightness")
-        
+
+
+
+        # MARK: Time adjustment Frame
+        time_adjustment_frame = QFrame()
+        time_adjustment_frame.setFrameShape(QFrame.StyledPanel)
+        time_adjustment_layout = QVBoxLayout(time_adjustment_frame)
+        time_adjustment_label = QLabel("Time adjustment")
+        time_adjustment_layout.addWidget(time_adjustment_label)
+
+        time_adjustment_layout.addWidget(create_setting_checkbox("Check at app startup",
+                                                             "time_adjustment_startup",
+                                                             "TimeAdjustmentStartup",
+                                                             tool_tip="Adjust the brightness to match the most relecant time when the app starts"
+                                                             ))
+
+        def add_time_adjustment_frame(time_str=None, brightness_data=None):
+            # print("Adding time adjustment frame")
+            frame = TimeAdjustmentFrame(self, monitors_order, monitors_dict, time_str, brightness_data)
+            self.time_adjustment_frames.append(frame)
+            scroll_layout.addWidget(frame)
+
+        add_frame_button = QPushButton("Add a time")
+        add_frame_button.clicked.connect(lambda: add_time_adjustment_frame())
+        time_adjustment_layout.addWidget(add_frame_button)
+
+        scroll_area = QScrollArea()
+        # scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setWidgetResizable(True)
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        scroll_area.setWidget(scroll_content)
+        time_adjustment_layout.addWidget(scroll_area)
+        brightness_layout.addWidget(time_adjustment_frame)
+
+        # Restore TimeAdjustmentFrame widgets from registry
+        saved_data = reg_read_dict(config.REGISTRY_PATH, "TimeAdjustmentData")
+        print("Saved data:", saved_data)
+        for time_str, brightness_data in saved_data.items():
+            # print(f"Adding frame with time: {time_str}, brightness: {brightness_data}")
+            add_time_adjustment_frame(time_str, brightness_data)
+
 
 
         # MARK: About Tab
