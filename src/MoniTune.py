@@ -183,6 +183,8 @@ class MainWindow(QMainWindow):
         # self.bottom_frame.setStyleSheet("background-color: green;") 
         # self.openSettingsWindow() # Open settings window on startup
 
+        self.previous_brightness_values = {}  # Dictionary to store previous brightness values
+
 
 
     def update_scheduler_tasks(self):
@@ -637,33 +639,32 @@ class MainWindow(QMainWindow):
 
     # MARK: brightness_sync()
     def brightness_sync(self):
+        first_iteration = True
         while self.window_open:
-
             start_time = time.time()
-
+            
             brightness_values_copy = self.brightness_values.copy()
-            # print(f"brightness_values_copy {brightness_values_copy}")
             for monitor_serial, brightness in brightness_values_copy.items():
-                if monitor_serial in self.connected_monitors:  # Check if monitor is connected
+                if monitor_serial in self.connected_monitors:  # Перевірка підключення монітора
                     try:
-                        # current_brightness = sbc.get_brightness(display=monitor_serial)[0]
-                        # if current_brightness != brightness:
-                        #     # print(f"set_brightness {monitor_serial} {brightness}")
-                        #     set_brightness(monitor_serial, brightness)
-
-                        set_brightness(monitor_serial, brightness)
-                        # print(f"set_brightness {monitor_serial} {brightness}")
+                        if first_iteration or self.previous_brightness_values.get(monitor_serial) != brightness:
+                            print(f"brightness_sync set_brightness {monitor_serial} {brightness}")
+                            set_brightness(monitor_serial, brightness)
+                            self.previous_brightness_values[monitor_serial] = brightness
                     except Exception as e:
                         print(f"Error: {e}")
             
-            # print("brightness_sync brightness_values_copy", brightness_values_copy)
-            # print("brightness_sync self.brightness_values", self.brightness_values)
             reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
-
-            end_time = time.time()  # End time measurement
+            
+            first_iteration = False
+            
+            end_time = time.time()
             # print(f"Brightness sync took {end_time - start_time:.4f} seconds")
+            
+            # time.sleep(0.15)
+            time.sleep(0.10)
 
-            time.sleep(0.15)
+
 
     def brightness_sync_onetime(self):
         print("brightness_sync_onetime")
