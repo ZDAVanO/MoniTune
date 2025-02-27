@@ -6,11 +6,12 @@ import sys
 
 app_name = "MoniTune"
 
-version = "0.2.0"
+version = "0.2.3"
 
 REGISTRY_PATH = r"Software\MoniTune\Settings"
 
-
+WIN11_WINDOW_CORNER_RADIUS = 9
+WIN11_WINDOW_OFFSET = 11
 
 
 # MARK: Theme

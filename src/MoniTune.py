@@ -1,5 +1,5 @@
 from PySide6.QtCore import QEvent, QSize, Qt, QPropertyAnimation, QRect, QEasingCurve, QTimer
-from PySide6.QtGui import QIcon, QGuiApplication, QWheelEvent
+from PySide6.QtGui import QIcon, QGuiApplication, QWheelEvent, QKeyEvent
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -22,10 +22,14 @@ from PySide6.QtWidgets import (
 
 from system_tray_icon import SystemTrayIcon
 from settings_window import SettingsWindow 
+from custom_comboboxes import NoScrollComboBox
+from custom_sliders import CustomSlider, AnimatedSlider, AnimatedSliderBlockSignals
+from brightness_scheduler import BrightnessScheduler
 
 from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
 from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 import config
+from config import WIN11_WINDOW_CORNER_RADIUS, WIN11_WINDOW_OFFSET
 
 import screen_brightness_control as sbc
 import darkdetect
@@ -37,28 +41,6 @@ import time
 
 
 
-class CustomSlider(QSlider):
-    def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, *args, **kwargs):
-        super().__init__(orientation, *args, **kwargs)
-        self.scrollStep = scrollStep  # Зберігаємо крок зміни значення
-
-    def wheelEvent(self, event: QWheelEvent):
-        value = self.value()
-        if event.angleDelta().y() > 0:
-            self.setValue(value + self.scrollStep)
-        else:
-            self.setValue(value - self.scrollStep)
-
-
-class NoScrollComboBox(QComboBox):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        # fusion_style = QStyleFactory.create("Fusion")
-        # self.setStyle(fusion_style)  # Встановлюємо стиль Fusion
-
-    def wheelEvent(self, event: QWheelEvent):
-        event.ignore()  # Ігноруємо прокрутку
 
 
 
@@ -70,14 +52,14 @@ class MainWindow(QMainWindow):
         self.window_width = 358
         self.window_height = 231
 
-        
+
         self.enable_rounded_corners = reg_read_bool(config.REGISTRY_PATH, "EnableRoundedCorners")
         if self.enable_rounded_corners:
-            self.window_corner_radius = 9
-            self.edge_padding = 11
+            self.window_corner_radius = WIN11_WINDOW_CORNER_RADIUS
+            self.window_offset = WIN11_WINDOW_OFFSET
         else:
             self.window_corner_radius = 0
-            self.edge_padding = 0
+            self.window_offset = 0
 
         self.custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
         print(f"custom_monitor_names {self.custom_monitor_names}")
@@ -101,7 +83,7 @@ class MainWindow(QMainWindow):
 
         self.settings_window = None  # No settings window yet
         self.rr_buttons = {}  # Dictionary to store refresh rate buttons for each monitor
-        self.br_sliders = []  # List to store brightness sliders
+        self.br_sliders = {}  # Dictionary to store brightness sliders
 
         self.window_open = False
         self.brightness_sync_thread = None
@@ -185,9 +167,65 @@ class MainWindow(QMainWindow):
 
 
 
+
+        self.time_adjustment_startup = reg_read_bool(config.REGISTRY_PATH, "TimeAdjustmentStartup")
+        self.scheduler = BrightnessScheduler()
+
+        self.time_adjustment_data = reg_read_dict(config.REGISTRY_PATH, "TimeAdjustmentData")
+        if self.time_adjustment_startup:
+            self.update_scheduler_tasks()
+        self.scheduler.execute_recent_task()
+
+
+
+
         # self.monitors_frame.setStyleSheet("background-color: red;")
         # self.bottom_frame.setStyleSheet("background-color: green;") 
         # self.openSettingsWindow() # Open settings window on startup
+
+        self.previous_brightness_values = {}  # Dictionary to store previous brightness values
+
+
+
+    def update_scheduler_tasks(self):
+        print("update_scheduler_tasks")
+        self.scheduler.clear_all_tasks()
+
+        for time_str, brightness_data in self.time_adjustment_data.items():
+            # self.scheduler.add_task(time_str, lambda: self.test_br_change_to(brightness_data))
+            self.scheduler.add_task(time_str, lambda bd=brightness_data: self.bg_br_change(bd))
+
+        self.scheduler.start_checking()
+
+
+
+    def bg_br_change(self, brightness_data):
+        print("bg_br_change")
+        self.update_connected_monitors()
+        # print(f"self.connected_monitors {self.connected_monitors}")
+        for monitor_serial in self.connected_monitors:
+            if monitor_serial in brightness_data:
+                # update brightness slider
+                if monitor_serial in self.br_sliders:
+                    if self.window_open:
+                        QTimer.singleShot(0, self.start_brightness_animation) # play slider animation if window is open
+                    else:
+                        self.br_sliders[monitor_serial].setValue(brightness_data[monitor_serial])
+                self.brightness_values[monitor_serial] = brightness_data[monitor_serial]
+            else:
+                print(f"Monitor {monitor_serial} not found in brightness_data ----------------------------------------------------------------")
+
+        self.brightness_sync_onetime()
+
+
+
+    # MARK: update_connected_monitors()
+    def update_connected_monitors(self):
+        monitors_info = get_monitors_info()
+        self.connected_monitors = [monitor['serial'] for monitor in monitors_info]
+
+
+
 
 
 
@@ -196,8 +234,8 @@ class MainWindow(QMainWindow):
 
     # MARK: update_rounded_corners()
     def update_central_widget(self):
-        self.edge_padding = 11 if self.enable_rounded_corners else 0
-        corner_radius = 9 if self.enable_rounded_corners else 0
+        self.window_offset = WIN11_WINDOW_OFFSET if self.enable_rounded_corners else 0
+        corner_radius = WIN11_WINDOW_CORNER_RADIUS if self.enable_rounded_corners else 0
         self.centralWidget().setStyleSheet(
             f"""
             #Container {{
@@ -271,7 +309,6 @@ class MainWindow(QMainWindow):
 
 
 
-
     # MARK: updateMonitorsFrame()
     def updateMonitorsFrame(self):
         
@@ -284,7 +321,7 @@ class MainWindow(QMainWindow):
             if child.widget():
                 child.widget().deleteLater()
 
-        self.br_sliders.clear() # Clear brightness sliders list
+        self.br_sliders.clear()  # Clear brightness sliders dictionary
 
 
 
@@ -315,14 +352,15 @@ class MainWindow(QMainWindow):
                 f"""
                 #MonitorsFrame {{
                 background: {self.fr_color};
-                border-radius: 6px;
+                border-radius: {6 if self.enable_rounded_corners else 0}px;
                 border: 1px solid {self.fr_border_color}; 
                 }}
                 """
             )
             monitor_vbox = QVBoxLayout(monitor_frame)
             monitor_vbox.setContentsMargins(0, 0, 0, 0)
-            monitor_vbox.setSpacing(5)  # Spacing between monitor frames
+            # monitor_vbox.setSpacing(5)  # Spacing between monitor frames
+            monitor_vbox.setSpacing(0)  # Spacing between monitor frames
             
 
             # MARK: Monitor Label
@@ -376,13 +414,13 @@ class MainWindow(QMainWindow):
                 else:
                     res_label = QLabel(monitor['Resolution'])
                     res_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    res_label.setFixedWidth(105)
                     # res_label.setMinimumWidth(105)
+                    res_label.setFixedWidth(105)
                     res_label.setStyleSheet(f"""
                                             font-size: 14px; font-weight: bold; 
                                             background-color: {self.rr_fg_color}; 
                                             border: 1px solid {self.rr_border_color};  
-                                            border-radius: 6px; 
+                                            border-radius: {6 if self.enable_rounded_corners else 0}px; 
 
                                             padding: 3px;
                                             padding-bottom: 3px;
@@ -394,6 +432,9 @@ class MainWindow(QMainWindow):
 
             # MARK: Refresh Rates
             if self.show_refresh_rates:
+
+                monitor_vbox.setSpacing(5)  # Spacing between monitor frames //////////////////////////////////////////////////////////////////
+
                 refresh_rates = monitor["AvailableRefreshRates"]
                 refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
 
@@ -445,13 +486,18 @@ class MainWindow(QMainWindow):
             br_hbox.setContentsMargins(12, 0, 9, 7)
             br_hbox.setSpacing(3)
 
-
+            # print(f"-------------- br_level {monitor['serial']} {self.brightness_values[monitor['serial']]}")
             if self.restore_last_brightness and monitor['serial'] in self.brightness_values:
-                br_level = int(self.brightness_values[monitor['serial']])
+                # br_level = int(self.brightness_values[monitor['serial']])
+                pass
             else:
-                br_level = sbc.get_brightness(display=monitor['serial'])[0]
+                # br_level = sbc.get_brightness(display=monitor['serial'])[0]
+                self.brightness_values[monitor['serial']] = sbc.get_brightness(display=monitor['serial'])[0]
+            # print(f"xxxxxxxxxxxxxxxxxxxx br_level {monitor['serial']} {self.brightness_values[monitor['serial']]}")
 
-            self.brightness_values[monitor['serial']] = br_level
+
+
+            br_level = sbc.get_brightness(display=monitor['serial'])[0]
 
             # sun_icon = QPixmap("src/assets/icons/sun_dark.png")
             # sun_icon = QPixmap("src/assets/icons/sun_dark.png").scaled(26, 26, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -465,12 +511,12 @@ class MainWindow(QMainWindow):
                                      
             #                          """) # background-color: green;
 
-            br_slider = CustomSlider(Qt.Orientation.Horizontal, 
+            br_slider = AnimatedSliderBlockSignals(Qt.Orientation.Horizontal, 
                                      scrollStep=1, 
-                                     singleStep=1)
+                                     singleStep=1) # keyboard step
             br_slider.setMaximum(100)  # Set maximum value to 100
             br_slider.setValue(br_level)
-            self.br_sliders.append(br_slider)
+            self.br_sliders[monitor['serial']] = br_slider  # Store slider in dictionary
             
             br_label = QLabel()
             # br_label.setFixedWidth(50) 
@@ -486,7 +532,7 @@ class MainWindow(QMainWindow):
                                    
                                    """) # padding-bottom: 4px; background-color: green;
             
-            
+            br_slider.add_label(br_label) # Connect label to slider to animate the label
             br_slider.valueChanged.connect(lambda value, label=br_label, ms=monitor_serial: self.on_brightness_change(value, label, ms))
             
             # br_hbox.addWidget(icon_label)
@@ -582,43 +628,66 @@ class MainWindow(QMainWindow):
         # print(f"on_brightness_change {value} {label} {monitor_serial}")
         label.setText(str(value))
         self.brightness_values[monitor_serial] = int(value)
+        # print(f"on_brightness_change {monitor_serial}", self.brightness_values[monitor_serial])
 
     # MARK: on_bottom_frame_scroll()
     def on_bottom_frame_scroll(self, delta):
         # print("on_bottom_frame_scroll ", delta)
-        for slider in self.br_sliders:
+        for slider in self.br_sliders.values():
             new_value = max(0, min(100, slider.value() + (1 if delta > 0 else -1)))
             slider.setValue(new_value)
 
     # MARK: brightness_sync()
     def brightness_sync(self):
+        first_iteration = True
         while self.window_open:
-
             start_time = time.time()
-
+            
             brightness_values_copy = self.brightness_values.copy()
-            # print(f"brightness_values_copy {brightness_values_copy}")
             for monitor_serial, brightness in brightness_values_copy.items():
-                if monitor_serial in self.connected_monitors:  # Check if monitor is connected
+                if monitor_serial in self.connected_monitors:  # Перевірка підключення монітора
                     try:
-                        # current_brightness = sbc.get_brightness(display=monitor_serial)[0]
-                        # if current_brightness != brightness:
-                        #     # print(f"set_brightness {monitor_serial} {brightness}")
-                        #     set_brightness(monitor_serial, brightness)
-
-                        set_brightness(monitor_serial, brightness)
-
+                        if first_iteration or self.previous_brightness_values.get(monitor_serial) != brightness:
+                            print(f"brightness_sync set_brightness {monitor_serial} {brightness}")
+                            set_brightness(monitor_serial, brightness)
+                            self.previous_brightness_values[monitor_serial] = brightness
                     except Exception as e:
                         print(f"Error: {e}")
             
             reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
+            
+            first_iteration = False
+            
+            end_time = time.time()
+            # print(f"Brightness sync took {end_time - start_time:.4f} seconds")
+            
+            # time.sleep(0.15)
+            time.sleep(0.10)
 
-            end_time = time.time()  # End time measurement
-            print(f"Brightness sync took {end_time - start_time:.4f} seconds")
-
-            time.sleep(0.15)
 
 
+    def brightness_sync_onetime(self):
+        print("brightness_sync_onetime")
+        start_time = time.time()
+        brightness_values_copy = self.brightness_values.copy()
+        # print(f"brightness_values_copy {brightness_values_copy}")
+        for monitor_serial, brightness in brightness_values_copy.items():
+            if monitor_serial in self.connected_monitors:  # Check if monitor is connected
+                try:
+                    # current_brightness = sbc.get_brightness(display=monitor_serial)[0]
+                    # if current_brightness != brightness:
+                    #     # print(f"set_brightness {monitor_serial} {brightness}")
+                    #     set_brightness(monitor_serial, brightness)
+
+                    set_brightness(monitor_serial, brightness)
+                    print(f"brightness_sync_onetime set_brightness {monitor_serial} {brightness}")
+                except Exception as e:
+                    print(f"Error: {e}")
+        
+        reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
+
+        end_time = time.time()  # End time measurement
+        print(f"brightness_sync_onetime sync took {end_time - start_time:.4f} seconds")
 
     # MARK: showEvent()
     def showEvent(self, event):
@@ -643,36 +712,78 @@ class MainWindow(QMainWindow):
         self.window_open = True
         if self.brightness_sync_thread is None or not self.brightness_sync_thread.is_alive():
             print("brightness_sync_thread.start()")
-            self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
-            self.brightness_sync_thread.start()
+
+            # self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
+            # self.brightness_sync_thread.start()
+
+            # QTimer.singleShot(1300, self.start_brightness_sync_thread) 
+
+            # if self.restore_last_brightness:
+            #     QTimer.singleShot(350, self.start_brightness_sync_thread) 
+            # else:
+            #     QTimer.singleShot(1300, self.start_brightness_sync_thread) 
+
+            QTimer.singleShot(250, self.start_brightness_sync_thread) 
+
         else:
             print("Brightness sync thread is already running")
 
         super().showEvent(event)
 
+        # for slider in self.br_sliders:
+        #     slider.animate_to(100)
+        # for index, slider in enumerate(self.br_sliders):
+        #     QTimer.singleShot(index * 150, lambda s=slider: s.animate_to(100))
+        # QTimer.singleShot(300, self.start_brightness_animation)
+        if self.restore_last_brightness:
+            # QTimer.singleShot(300, self.start_brightness_animation)
+            QTimer.singleShot(150, self.start_brightness_animation)
 
 
+    def start_brightness_animation(self):
+        for index, (serial, slider) in enumerate(self.br_sliders.items()):
+            # QTimer.singleShot(index * 100, lambda s=slider: s.animate_to(100))
+            # QTimer.singleShot(index * 100, lambda s=slider: s.animate_to(int(self.brightness_values[serial])))
+            print(f"start_brightness_animation {serial} {self.brightness_values[serial]}")
+            slider.animate_to(int(self.brightness_values[serial]))
+
+
+    def start_brightness_sync_thread(self):
+        self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
+        self.brightness_sync_thread.start()
+
+
+
+    # MARK: hideEvent()
     def hideEvent(self, event):
         print("hideEvent")
 
+        self.stop_brightness_sync_thread()
+        # QTimer.singleShot(2000, self.stop_brightness_sync_thread)  # Add 2-second delay
+
+        # QTimer.singleShot(1000, self.brightness_sync_onetime)
+        
+
+        super().hideEvent(event)
+
+    def stop_brightness_sync_thread(self):
         self.window_open = False
         if self.brightness_sync_thread and self.brightness_sync_thread.is_alive():
-            print("brightness_sync_thread.join()")
+            # print("brightness_sync_thread.join()")
             self.brightness_sync_thread.join()  # Stop brightness sync thread
             if not self.brightness_sync_thread.is_alive():
                 print("thread is dead")
             else:
                 print("thread is still alive")
-
-        super().hideEvent(event)
-
+        else:
+            print("brightness_sync_thread is not running")
 
 
     # MARK: updateSizeAndPosition()
     def updateSizeAndPosition(self):
         print("updateSizeAndPosition sizeHint:", self.sizeHint().height(), "self.height()", self.height())
         screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
-        self.move(screen_geometry.width() - self.width() - self.edge_padding, screen_geometry.height() - self.sizeHint().height() - self.edge_padding)
+        self.move(screen_geometry.width() - self.width() - self.window_offset, screen_geometry.height() - self.sizeHint().height() - self.window_offset)
         self.resize(self.width(), self.sizeHint().height())
 
 
@@ -682,8 +793,8 @@ class MainWindow(QMainWindow):
         screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
         # start_rect = QRect(screen_geometry.width(), screen_geometry.height() - self.height() - edge_padding, self.width(), self.height())
         # end_rect = QRect(screen_geometry.width() - self.width() - edge_padding, screen_geometry.height() - self.height() - edge_padding, self.width(), self.height())
-        start_rect = QRect(screen_geometry.width(), screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
-        end_rect = QRect(screen_geometry.width() - self.width() - self.edge_padding, screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
+        start_rect = QRect(screen_geometry.width(), screen_geometry.height() - self.sizeHint().height() - self.window_offset, self.width(), self.sizeHint().height())
+        end_rect = QRect(screen_geometry.width() - self.width() - self.window_offset, screen_geometry.height() - self.sizeHint().height() - self.window_offset, self.width(), self.sizeHint().height())
 
         print("self.width()", self.width(), "self.height()", self.sizeHint().height())
 
@@ -711,9 +822,9 @@ class MainWindow(QMainWindow):
     # MARK: animateWindowClose()
     def animateWindowClose(self):
         screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
-        # start_rect = QRect(screen_geometry.width() - self.width() - self.edge_padding, screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
+        # start_rect = QRect(screen_geometry.width() - self.width() - self.window_offset, screen_geometry.height() - self.sizeHint().height() - self.window_offset, self.width(), self.sizeHint().height())
         current_rect = self.geometry()
-        end_rect = QRect(screen_geometry.width(), screen_geometry.height() - self.sizeHint().height() - self.edge_padding, self.width(), self.sizeHint().height())
+        end_rect = QRect(screen_geometry.width(), screen_geometry.height() - self.sizeHint().height() - self.window_offset, self.width(), self.sizeHint().height())
         
         self.close_animation = QPropertyAnimation(self, b"geometry") 
         self.close_animation.setStartValue(current_rect)
@@ -743,7 +854,7 @@ class MainWindow(QMainWindow):
     def openSettingsWindow(self):
         if self.settings_window is None:
             self.settings_window = SettingsWindow(self)
-        if self.settings_window.isMinimized():
+        elif self.settings_window.isMinimized():
             self.settings_window.showNormal()
         self.settings_window.show()
         self.settings_window.activateWindow()
@@ -757,7 +868,7 @@ if __name__ == "__main__":
     # Check if another instance is already running
     if getattr(sys, 'frozen', False):
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        mutex = kernel32.CreateMutexW(None, False, "MoniTune")
+        mutex = kernel32.CreateMutexW(None, False, "MoniTune-Qt")
         if not mutex: # Помилка створення м'ютекса
             print(f"Error code: {ctypes.get_last_error()}")
             sys.exit(1)
@@ -767,8 +878,10 @@ if __name__ == "__main__":
 
     app = QApplication([])
 
-    # print(QStyleFactory.keys())
+    # print(QStyleFactory.keys()) # ['windows11', 'windowsvista', 'Windows', 'Fusion']
     # app.setStyle("windows11")
+    print(f"Current style: {app.style().objectName()}")
+
 
     window = MainWindow()
     window.show()
