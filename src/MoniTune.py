@@ -205,7 +205,10 @@ class MainWindow(QMainWindow):
             if monitor_serial in brightness_data:
                 # update brightness slider
                 if monitor_serial in self.br_sliders:
-                    self.br_sliders[monitor_serial].setValue(brightness_data[monitor_serial])
+                    if self.window_open:
+                        QTimer.singleShot(0, self.start_brightness_animation) # play slider animation if window is open
+                    else:
+                        self.br_sliders[monitor_serial].setValue(brightness_data[monitor_serial])
                 self.brightness_values[monitor_serial] = brightness_data[monitor_serial]
             else:
                 print(f"Monitor {monitor_serial} not found in brightness_data ----------------------------------------------------------------")
@@ -708,8 +711,10 @@ class MainWindow(QMainWindow):
         self.window_open = True
         if self.brightness_sync_thread is None or not self.brightness_sync_thread.is_alive():
             print("brightness_sync_thread.start()")
+
             # self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
             # self.brightness_sync_thread.start()
+
             # QTimer.singleShot(1300, self.start_brightness_sync_thread) 
 
             # if self.restore_last_brightness:
@@ -717,7 +722,7 @@ class MainWindow(QMainWindow):
             # else:
             #     QTimer.singleShot(1300, self.start_brightness_sync_thread) 
 
-            QTimer.singleShot(350, self.start_brightness_sync_thread) 
+            QTimer.singleShot(250, self.start_brightness_sync_thread) 
 
         else:
             print("Brightness sync thread is already running")
@@ -738,8 +743,8 @@ class MainWindow(QMainWindow):
         for index, (serial, slider) in enumerate(self.br_sliders.items()):
             # QTimer.singleShot(index * 100, lambda s=slider: s.animate_to(100))
             # QTimer.singleShot(index * 100, lambda s=slider: s.animate_to(int(self.brightness_values[serial])))
-            slider.animate_to(int(self.brightness_values[serial]))
             print(f"start_brightness_animation {serial} {self.brightness_values[serial]}")
+            slider.animate_to(int(self.brightness_values[serial]))
 
 
     def start_brightness_sync_thread(self):

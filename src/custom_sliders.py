@@ -80,6 +80,9 @@ class AnimatedSliderBlockSignals(QSlider):
 
     def animate_to(self, target_value, duration=1000, easing_curve=QEasingCurve.Type.OutCubic):
         distance = abs(target_value - self.value())
+        if distance == 0:
+            print("Animation distance is 0, skipping animation")
+            return
         duration = max(250, (duration * distance / 100)) # Scale duration based on distance
         # print(f"Animating to {target_value} in {duration} ms")
 

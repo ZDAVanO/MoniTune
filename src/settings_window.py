@@ -14,6 +14,30 @@ import time
 
 
 
+# MARK: SettingToggle
+class SettingToggle:
+    def __init__(self, parent, setting_name, reg_setting_name, callback=None):
+        self.parent = parent
+        self.setting_name = setting_name
+        self.reg_setting_name = reg_setting_name
+        self.callback = callback
+
+    def toggle(self, state):
+        print(f"Setting {self.setting_name} to {state}")
+        setattr(self.parent, self.setting_name, state)
+        reg_write_bool(config.REGISTRY_PATH, self.reg_setting_name, state)
+        if callable(self.callback):
+            self.callback()
+
+    def create_toggle(self, label, tool_tip=""):
+        checkbox = QCheckBox(label)
+        checkbox.setToolTip(tool_tip)
+        var = getattr(self.parent, self.setting_name)
+        checkbox.setChecked(var)
+        checkbox.stateChanged.connect(lambda: self.toggle(checkbox.isChecked()))
+        return checkbox
+
+
 
 
 # MARK: TimeAdjustmentFrame
@@ -89,6 +113,9 @@ class TimeAdjustmentFrame(QFrame):
             "brightness": self.brightness_data
         }
 
+
+
+
 # MARK: SettingsWindow
 class SettingsWindow(QWidget):
     def __init__(self, parent_window):
@@ -109,7 +136,6 @@ class SettingsWindow(QWidget):
         # self.tab_widget.setDocumentMode(True)
         settings_layout.addWidget(self.tab_widget)
 
-        
         self.time_adjustment_data = {}  # Dictionary to store time and brightness data
         self.time_adjustment_frames = []  # List to store TimeAdjustmentFrame instances
         # print("self.time_adjustment_data", self.time_adjustment_data)
@@ -153,7 +179,6 @@ class SettingsWindow(QWidget):
 
 
 
-
     # MARK: updateLayout
     def updateLayout(self):
 
@@ -164,47 +189,20 @@ class SettingsWindow(QWidget):
 
 
 
-
-        def toggle_setting(setting_name, reg_setting_name, bool, callback=None):
-            print(f"Setting {setting_name} to {bool}")
-            setattr(self.parent, setting_name, bool)
-            reg_write_bool(config.REGISTRY_PATH, reg_setting_name, bool)
-            if callable(callback):
-                callback()
-
-            # self.show_parent_window()
-
-        def create_setting_checkbox(checkbox_label, 
-                                    setting_name, 
-                                    reg_setting_name, 
-                                    callback=None,
-                                    tool_tip=""
-                                    ):
-            checkbox = QCheckBox(checkbox_label)
-            checkbox.setToolTip(tool_tip)
-            var = getattr(self.parent, setting_name)
-            checkbox.setChecked(var)
-            checkbox.stateChanged.connect(lambda: toggle_setting(setting_name, 
-                                                                 reg_setting_name, 
-                                                                 checkbox.isChecked(), 
-                                                                 callback,
-                                                                 ))
-            return checkbox
-
-        
-
         # MARK: General Tab
 
         general_tab = QWidget()
         # general_tab.setStyleSheet("background-color: blue")
         general_layout = QVBoxLayout(general_tab)
         general_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        general_layout.addWidget(create_setting_checkbox("Rounded Corners", 
-                                                         "enable_rounded_corners", 
-                                                         "EnableRoundedCorners",
-                                                         self.parent.update_central_widget
-                                                         ))
-
+        general_layout.addWidget(SettingToggle(self.parent, 
+                                               "enable_rounded_corners", 
+                                               "EnableRoundedCorners",
+                                               self.parent.update_central_widget)
+                                               .create_toggle(
+                                                   "Rounded Corners", 
+                                                   "Enable rounded corners for the main window"
+                                                   ))
 
 
         # get monitors info
@@ -218,7 +216,6 @@ class SettingsWindow(QWidget):
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
         monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
         custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
-
 
 
         # Add Rename Monitors setting
@@ -263,10 +260,6 @@ class SettingsWindow(QWidget):
 
             rename_monitors_layout.addWidget(row_frame)
 
-
-
-
-
         general_layout.addWidget(rename_monitors_widget)
 
 
@@ -302,7 +295,6 @@ class SettingsWindow(QWidget):
         general_layout.addWidget(reorder_monitors_widget)
 
 
-
         self.tab_widget.addTab(general_tab, "General")
         
 
@@ -313,14 +305,22 @@ class SettingsWindow(QWidget):
         resolution_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         # show_resolution_checkbox = QCheckBox("Show Resolutions")
         # allow_res_change_checkbox = QCheckBox("Allow Resolution Change")
-        resolution_layout.addWidget(create_setting_checkbox("Show Resolutions",
-                                                            "show_resolution",
-                                                            "ShowResolution",
-                                                            ))
-        resolution_layout.addWidget(create_setting_checkbox("Allow Resolution Change",
-                                                            "allow_res_change",
-                                                            "AllowResolutionChange",
-                                                            ))
+        resolution_layout.addWidget(SettingToggle(self.parent,
+                                                  "show_resolution",
+                                                  "ShowResolution")
+                                                  .create_toggle(
+                                                      "Show Resolutions",
+                                                      "Show resolution for each monitor"
+                                                      ))
+        resolution_layout.addWidget(SettingToggle(self.parent,
+                                                  "allow_res_change",
+                                                  "AllowResolutionChange")
+                                                  .create_toggle(
+                                                      "Allow Resolution Change",
+                                                      "Allow changing the resolution of monitors"
+                                                      ))
+
+
         self.tab_widget.addTab(resolution_tab, "Resolution")
         
 
@@ -329,11 +329,13 @@ class SettingsWindow(QWidget):
         refresh_rate_tab = QWidget()
         refresh_rate_layout = QVBoxLayout(refresh_rate_tab)
         refresh_rate_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        refresh_rate_layout.addWidget(create_setting_checkbox("Show Refresh Rates",
-                                                             "show_refresh_rates",
-                                                             "ShowRefreshRates",
-                                                             ))
-        
+        refresh_rate_layout.addWidget(SettingToggle(self.parent,
+                                                    "show_refresh_rates",
+                                                    "ShowRefreshRates")
+                                                    .create_toggle(
+                                                        "Show Refresh Rates",
+                                                        "Show buttons to change refresh rate"
+                                                        ))
 
 
         # Add Exclude Refresh Rate setting
@@ -397,10 +399,13 @@ class SettingsWindow(QWidget):
         brightness_tab = QWidget()
         brightness_layout = QVBoxLayout(brightness_tab)
         brightness_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        brightness_layout.addWidget(create_setting_checkbox("Restore Last Brightness",
-                                                           "restore_last_brightness",
-                                                           "RestoreLastBrightness",
-                                                           ))
+        brightness_layout.addWidget(SettingToggle(self.parent,
+                                                  "restore_last_brightness",
+                                                  "RestoreLastBrightness")
+                                                  .create_toggle(
+                                                      "Restore Last Brightness",
+                                                      "Restore the last brightness level when window opens"
+                                                      ))
         self.tab_widget.addTab(brightness_tab, "Brightness")
 
 
@@ -411,12 +416,13 @@ class SettingsWindow(QWidget):
         time_adjustment_layout = QVBoxLayout(time_adjustment_frame)
         time_adjustment_label = QLabel("Time adjustment")
         time_adjustment_layout.addWidget(time_adjustment_label)
-
-        time_adjustment_layout.addWidget(create_setting_checkbox("Check at app startup",
-                                                             "time_adjustment_startup",
-                                                             "TimeAdjustmentStartup",
-                                                             tool_tip="Adjust the brightness to match the most relecant time when the app starts"
-                                                             ))
+        time_adjustment_layout.addWidget(SettingToggle(self.parent,
+                                                       "time_adjustment_startup",
+                                                       "TimeAdjustmentStartup")
+                                                       .create_toggle(
+                                                              "Check at app startup",
+                                                              "Adjust the brightness to match the most relecant time when the app starts"
+                                                              ))
 
         def add_time_adjustment_frame(time_str=None, brightness_data=None):
             # print("Adding time adjustment frame")
