@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 from system_tray_icon import SystemTrayIcon
 from settings_window import SettingsWindow 
 from custom_comboboxes import NoScrollComboBox
-from custom_sliders import CustomSlider, AnimatedSlider
+from custom_sliders import CustomSlider, AnimatedSlider, AnimatedSliderBlockSignals
 from brightness_scheduler import BrightnessScheduler
 
 from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
@@ -347,7 +347,7 @@ class MainWindow(QMainWindow):
                 f"""
                 #MonitorsFrame {{
                 background: {self.fr_color};
-                border-radius: 6px;
+                border-radius: {6 if self.enable_rounded_corners else 0}px;
                 border: 1px solid {self.fr_border_color}; 
                 }}
                 """
@@ -506,9 +506,9 @@ class MainWindow(QMainWindow):
                                      
             #                          """) # background-color: green;
 
-            br_slider = AnimatedSlider(Qt.Orientation.Horizontal, 
+            br_slider = AnimatedSliderBlockSignals(Qt.Orientation.Horizontal, 
                                      scrollStep=1, 
-                                     singleStep=1)
+                                     singleStep=1) # keyboard step
             br_slider.setMaximum(100)  # Set maximum value to 100
             br_slider.setValue(br_level)
             self.br_sliders[monitor['serial']] = br_slider  # Store slider in dictionary
@@ -527,7 +527,7 @@ class MainWindow(QMainWindow):
                                    
                                    """) # padding-bottom: 4px; background-color: green;
             
-            
+            br_slider.add_label(br_label) # Connect label to slider to animate the label
             br_slider.valueChanged.connect(lambda value, label=br_label, ms=monitor_serial: self.on_brightness_change(value, label, ms))
             
             # br_hbox.addWidget(icon_label)

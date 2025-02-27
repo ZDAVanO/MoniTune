@@ -1,5 +1,5 @@
 import sys
-from PySide6.QtCore import QTimer, QTime
+from PySide6.QtCore import QTimer, QTime, QDateTime, QThread, QCoreApplication
 from PySide6.QtWidgets import QApplication
 
 
@@ -9,6 +9,7 @@ class BrightnessScheduler:
         self.tasks = {}
         self.timer = QTimer()
         self.timer.timeout.connect(self.check_all_tasks)
+        self.last_check_time = QDateTime.currentDateTime()
 
     def add_task(self, time_str, callback):
         self.tasks[time_str] = callback
@@ -38,11 +39,23 @@ class BrightnessScheduler:
 
     def check_all_tasks(self):
         current_time = QTime.currentTime().toString("HH:mm")
+        current_datetime = QDateTime.currentDateTime()
+        time_diff = self.last_check_time.secsTo(current_datetime)
+
         print(f"Checking tasks at: {current_time}")
-        if current_time in self.tasks:
-            self.tasks[current_time]() # execute the callback
+        print(f"Time difference: {time_diff} seconds")
+        if time_diff > 120:  # more than 2 minutes
+            print("Time difference is more than 2 minutes, waiting for monitors to turn on")
+            QThread.sleep(7)  # wait for 7 seconds to ensure monitors are on
+            print("Executing recent task after delay")
+            self.execute_recent_task()
+        elif current_time in self.tasks:
+            self.tasks[current_time]()  # execute the callback
         else:
             print("No tasks at this time")
+
+        self.last_check_time = current_datetime
+        
 
     def get_tasks(self):
         return self.tasks
@@ -53,23 +66,22 @@ class BrightnessScheduler:
         self.stop_timer()
 
     def execute_recent_task(self):
-
         if not self.tasks:
             print("No tasks found")
             return
-        
+
         current_time = QTime.currentTime().toString("HH:mm")
-        past_tasks = [time for time in self.tasks.keys() if time < current_time]
+        past_tasks = [time for time in self.tasks.keys() if time <= current_time]
         if past_tasks:
             recent_task_time = max(past_tasks)
             print(f"Executing recent task at: {recent_task_time}")
-            self.tasks[recent_task_time]() # execute the callback
+            self.tasks[recent_task_time]()  # execute the callback
         else:
             print("No past tasks to execute for today, checking previous day")
             if self.tasks:
                 recent_task_time = max(self.tasks.keys())
                 print(f"Executing last task from previous day at: {recent_task_time}")
-                self.tasks[recent_task_time]() # execute the callback
+                self.tasks[recent_task_time]()  # execute the callback
 
 
 

@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QApplication, QMainWindow, QSlider, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QMainWindow, QSlider, QPushButton, QVBoxLayout, QWidget, QLabel
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer
 from PySide6.QtGui import QWheelEvent, QKeyEvent
 
@@ -66,6 +66,67 @@ class AnimatedSlider(QSlider):
 
 
 
+class AnimatedSliderBlockSignals(QSlider):
+    def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, label=None, *args, **kwargs):
+        super().__init__(orientation, *args, **kwargs)
+
+        self.animation = None
+        self.scrollStep = scrollStep
+        self.label = label  # QLabel to update
+
+        self.setMinimum(0)
+        self.setMaximum(100)
+
+
+    def animate_to(self, target_value, duration=1000, easing_curve=QEasingCurve.Type.OutCubic):
+        distance = abs(target_value - self.value())
+        duration = max(250, (duration * distance / 100)) # Scale duration based on distance
+        # print(f"Animating to {target_value} in {duration} ms")
+
+        self.animation = QPropertyAnimation(self, b"value")
+        self.animation.setDuration(int(duration))
+        self.animation.setStartValue(self.value())
+        self.animation.setEndValue(target_value)
+        self.animation.setEasingCurve(easing_curve)
+
+        self.blockSignals(True)  # Block signals during animation
+        self.animation.finished.connect(lambda: self.blockSignals(False))  
+        self.animation.valueChanged.connect(self.update_label)  # Connect to update label
+
+        self.animation.start()
+    
+    def stop_animation(self):
+        if self.animation:
+            self.animation.stop()
+            self.blockSignals(False)  # Ensure signals are unblocked
+
+    def update_label(self, value):
+        if self.label:
+            self.label.setText(str(value))
+
+    # Stop animation when user interacts with the slider
+    def wheelEvent(self, event: QWheelEvent):
+        if event.angleDelta().y() > 0:
+            self.setValue(self.value() + self.scrollStep)
+        else:
+            self.setValue(self.value() - self.scrollStep)
+        self.stop_animation()
+        # self.update_label(self.value())
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self.stop_animation()
+        # self.update_label(self.value())
+
+    def keyPressEvent(self, event: QKeyEvent):
+        super().keyPressEvent(event)
+        self.stop_animation()
+        # self.update_label(self.value())
+
+    def add_label(self, label):
+        self.label = label
+
+
 
 class SliderAnimationDemo(QMainWindow):
     def __init__(self):
@@ -110,13 +171,24 @@ class SliderAnimationDemo(QMainWindow):
         self.continuous_slider.setValue(0)
         self.animate_continuous_slider()
 
+        # Demonstration of AnimatedSliderBlockSignals with QLabel
+        self.label_slider_label = QLabel("0")
+        self.label_slider = AnimatedSliderBlockSignals(label=self.label_slider_label)
+        self.label_slider.setValue(50)
+        self.label_slider_button = QPushButton("Animate to 100")
+        self.label_slider_button.clicked.connect(lambda: self.label_slider.animate_to(100))
+        layout.addWidget(self.label_slider)
+        layout.addWidget(self.label_slider_label)
+        layout.addWidget(self.label_slider_button)
 
+        # Connect QLabel to slider's valueChanged signal
+        self.label_slider.valueChanged.connect(lambda value: self.label_slider_label.setText(str(value)))
 
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-        QTimer.singleShot(1000, self.sleep)
+        # QTimer.singleShot(1000, self.sleep)
 
 
     def animate_sliders(self):
