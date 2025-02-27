@@ -181,7 +181,7 @@ class MainWindow(QMainWindow):
 
         # self.monitors_frame.setStyleSheet("background-color: red;")
         # self.bottom_frame.setStyleSheet("background-color: green;") 
-        self.openSettingsWindow() # Open settings window on startup
+        # self.openSettingsWindow() # Open settings window on startup
 
 
 
@@ -415,7 +415,7 @@ class MainWindow(QMainWindow):
                                             font-size: 14px; font-weight: bold; 
                                             background-color: {self.rr_fg_color}; 
                                             border: 1px solid {self.rr_border_color};  
-                                            border-radius: 6px; 
+                                            border-radius: {6 if self.enable_rounded_corners else 0}px; 
 
                                             padding: 3px;
                                             padding-bottom: 3px;
@@ -848,7 +848,7 @@ class MainWindow(QMainWindow):
     def openSettingsWindow(self):
         if self.settings_window is None:
             self.settings_window = SettingsWindow(self)
-        if self.settings_window.isMinimized():
+        elif self.settings_window.isMinimized():
             self.settings_window.showNormal()
         self.settings_window.show()
         self.settings_window.activateWindow()

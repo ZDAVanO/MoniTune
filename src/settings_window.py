@@ -129,7 +129,8 @@ class SettingsWindow(QWidget):
     # MARK: showEvent
     def showEvent(self, event):
         print("Settings window showEvent")
-        self.updateLayout()
+        # self.updateLayout()
+        QTimer.singleShot(0, self.updateLayout)
         super().showEvent(event)
 
 
@@ -157,6 +158,7 @@ class SettingsWindow(QWidget):
     def updateLayout(self):
 
         # Clear old widgets
+        # print("Clearing tabs : ", self.tab_widget.count())
         while self.tab_widget.count(): # num of tabs
             self.tab_widget.removeTab(0) # remove the first tab
 
@@ -439,7 +441,7 @@ class SettingsWindow(QWidget):
 
         # Restore TimeAdjustmentFrame widgets from registry
         saved_data = reg_read_dict(config.REGISTRY_PATH, "TimeAdjustmentData")
-        print("Saved data:", saved_data)
+        # print("Saved data:", saved_data)
         for time_str, brightness_data in saved_data.items():
             # print(f"Adding frame with time: {time_str}, brightness: {brightness_data}")
             add_time_adjustment_frame(time_str, brightness_data)
