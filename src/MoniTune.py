@@ -26,18 +26,18 @@ from custom_comboboxes import NoScrollComboBox
 from custom_sliders import CustomSlider, AnimatedSlider, AnimatedSliderBlockSignals
 from brightness_scheduler import BrightnessScheduler
 
-from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
+from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, get_brightness, set_brightness, set_resolution
 from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 import config
 from config import WIN11_WINDOW_CORNER_RADIUS, WIN11_WINDOW_OFFSET
 
-import screen_brightness_control as sbc
 import darkdetect
 
 import sys
 import ctypes
 import threading
 import time
+import platform
 
 
 
@@ -48,6 +48,8 @@ import time
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        
 
         self.window_width = 358
         self.window_height = 231
@@ -96,6 +98,10 @@ class MainWindow(QMainWindow):
         self.connected_monitors = []  # List to store currently connected monitors
 
 
+        self.win_release = platform.release()
+        self.enable_fusion_theme = reg_read_bool(config.REGISTRY_PATH, "EnableFusionTheme")
+        if self.enable_fusion_theme:
+            QApplication.instance().setStyle("Fusion")
         self.update_theme_colors(darkdetect.theme())
 
 
@@ -186,7 +192,7 @@ class MainWindow(QMainWindow):
         self.previous_brightness_values = {}  # Dictionary to store previous brightness values
 
 
-
+    # MARK: update_scheduler_tasks()
     def update_scheduler_tasks(self):
         print("update_scheduler_tasks")
         self.scheduler.clear_all_tasks()
@@ -198,7 +204,7 @@ class MainWindow(QMainWindow):
         self.scheduler.start_checking()
 
 
-
+    # MARK: bg_br_change()
     def bg_br_change(self, brightness_data):
         print("bg_br_change")
         self.update_connected_monitors()
@@ -209,8 +215,8 @@ class MainWindow(QMainWindow):
                 if monitor_serial in self.br_sliders:
                     if self.window_open:
                         QTimer.singleShot(0, self.start_brightness_animation) # play slider animation if window is open
-                    else:
-                        self.br_sliders[monitor_serial].setValue(brightness_data[monitor_serial])
+                    # else:
+                    #     self.br_sliders[monitor_serial].setValue(brightness_data[monitor_serial])
                 self.brightness_values[monitor_serial] = brightness_data[monitor_serial]
             else:
                 print(f"Monitor {monitor_serial} not found in brightness_data ----------------------------------------------------------------")
@@ -232,7 +238,7 @@ class MainWindow(QMainWindow):
 
 
 
-    # MARK: update_rounded_corners()
+    # MARK: update_central_widget()
     def update_central_widget(self):
         self.window_offset = WIN11_WINDOW_OFFSET if self.enable_rounded_corners else 0
         corner_radius = WIN11_WINDOW_CORNER_RADIUS if self.enable_rounded_corners else 0
@@ -249,7 +255,7 @@ class MainWindow(QMainWindow):
 
     # MARK: update_theme_colors()
     def update_theme_colors(self, theme: str):
-        if theme == "Light":
+        if theme == "Light" or (self.win_release != "11" and not self.enable_fusion_theme):
             self.bg_color = config.bg_color_light
             self.border_color = config.border_color_light
 
@@ -276,7 +282,7 @@ class MainWindow(QMainWindow):
 
 
     # MARK: on_theme_change()
-    def on_theme_change(self, theme: str):
+    def on_theme_change(self, theme: str): # "Light" or "Dark"
         print(f"Theme changed to: {theme}")
         self.update_theme_colors(theme)
         self.update_central_widget()
@@ -491,13 +497,13 @@ class MainWindow(QMainWindow):
                 # br_level = int(self.brightness_values[monitor['serial']])
                 pass
             else:
-                # br_level = sbc.get_brightness(display=monitor['serial'])[0]
-                self.brightness_values[monitor['serial']] = sbc.get_brightness(display=monitor['serial'])[0]
+                # br_level = get_brightness(display=monitor['serial'])[0]
+                self.brightness_values[monitor['serial']] = get_brightness(display=monitor['serial'])[0]
             # print(f"xxxxxxxxxxxxxxxxxxxx br_level {monitor['serial']} {self.brightness_values[monitor['serial']]}")
 
 
 
-            br_level = sbc.get_brightness(display=monitor['serial'])[0]
+            br_level = get_brightness(display=monitor['serial'])[0]
 
             # sun_icon = QPixmap("src/assets/icons/sun_dark.png")
             # sun_icon = QPixmap("src/assets/icons/sun_dark.png").scaled(26, 26, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -665,7 +671,7 @@ class MainWindow(QMainWindow):
             time.sleep(0.10)
 
 
-
+    # MARK: brightness_sync_onetime()
     def brightness_sync_onetime(self):
         print("brightness_sync_onetime")
         start_time = time.time()
@@ -674,17 +680,12 @@ class MainWindow(QMainWindow):
         for monitor_serial, brightness in brightness_values_copy.items():
             if monitor_serial in self.connected_monitors:  # Check if monitor is connected
                 try:
-                    # current_brightness = sbc.get_brightness(display=monitor_serial)[0]
-                    # if current_brightness != brightness:
-                    #     # print(f"set_brightness {monitor_serial} {brightness}")
-                    #     set_brightness(monitor_serial, brightness)
-
                     set_brightness(monitor_serial, brightness)
                     print(f"brightness_sync_onetime set_brightness {monitor_serial} {brightness}")
                 except Exception as e:
                     print(f"Error: {e}")
         
-        reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
+        # reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
 
         end_time = time.time()  # End time measurement
         print(f"brightness_sync_onetime sync took {end_time - start_time:.4f} seconds")
@@ -739,7 +740,7 @@ class MainWindow(QMainWindow):
             # QTimer.singleShot(300, self.start_brightness_animation)
             QTimer.singleShot(150, self.start_brightness_animation)
 
-
+    # MARK: start_brightness_animation()
     def start_brightness_animation(self):
         for index, (serial, slider) in enumerate(self.br_sliders.items()):
             # QTimer.singleShot(index * 100, lambda s=slider: s.animate_to(100))
@@ -747,7 +748,7 @@ class MainWindow(QMainWindow):
             print(f"start_brightness_animation {serial} {self.brightness_values[serial]}")
             slider.animate_to(int(self.brightness_values[serial]))
 
-
+    # MARK: start_brightness_sync_thread()
     def start_brightness_sync_thread(self):
         self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
         self.brightness_sync_thread.start()
@@ -766,6 +767,7 @@ class MainWindow(QMainWindow):
 
         super().hideEvent(event)
 
+    # MARK: stop_brightness_sync_thread()
     def stop_brightness_sync_thread(self):
         self.window_open = False
         if self.brightness_sync_thread and self.brightness_sync_thread.is_alive():
@@ -862,7 +864,7 @@ class MainWindow(QMainWindow):
 
 
 
-
+# MARK: main
 if __name__ == "__main__":
 
     # Check if another instance is already running

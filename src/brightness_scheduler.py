@@ -46,9 +46,7 @@ class BrightnessScheduler:
         print(f"Time difference: {time_diff} seconds")
         if time_diff > 120:  # more than 2 minutes
             print("Time difference is more than 2 minutes, waiting for monitors to turn on")
-            QThread.sleep(7)  # wait for 7 seconds to ensure monitors are on
-            print("Executing recent task after delay")
-            self.execute_recent_task()
+            QTimer.singleShot(10000, self.execute_recent_task) # wait for monitors to turn on
         elif current_time in self.tasks:
             self.tasks[current_time]()  # execute the callback
         else:

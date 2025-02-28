@@ -2,7 +2,7 @@
 
 others
 local_build_ctk.bat
-# local_build_qt.bat
+src/drafts
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/python

@@ -203,6 +203,13 @@ class SettingsWindow(QWidget):
                                                    "Rounded Corners", 
                                                    "Enable rounded corners for the main window"
                                                    ))
+        general_layout.addWidget(SettingToggle(self.parent, 
+                                               "enable_fusion_theme", 
+                                               "EnableFusionTheme")
+                                               .create_toggle(
+                                                   "Fusion Theme", 
+                                                   "Enables Fusion theme. Requires app restart"
+                                                   ))
 
 
         # get monitors info
