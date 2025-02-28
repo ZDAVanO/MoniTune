@@ -54,6 +54,12 @@ if getattr(sys, 'frozen', False):
     settings_icon_light_path = os.path.join(sys._MEIPASS, 'setting_light.png')
     settings_icon_dark_path = os.path.join(sys._MEIPASS, 'setting_dark.png')
 
+    tray_icon_light_fluent_path = os.path.join(sys._MEIPASS, 'tray-icons/light/fluent.ico')
+    tray_icon_dark_fluent_path = os.path.join(sys._MEIPASS, 'tray-icons/dark/fluent.ico')
+
+    tray_icon_light_mdl2_path = os.path.join(sys._MEIPASS, 'tray-icons/light/mdl2.ico')
+    tray_icon_dark_mdl2_path = os.path.join(sys._MEIPASS, 'tray-icons/dark/mdl2.ico')
+
 else:
     # Якщо програма запущена з Python, використовуємо поточну директорію
     app_icon_path = 'src/assets/icons/icon_color_dev.ico'
@@ -63,3 +69,26 @@ else:
     #     icon_path = 'icons/icon_dark.ico'
     settings_icon_light_path = 'src/assets/icons/setting_light.png'
     settings_icon_dark_path = 'src/assets/icons/setting_dark.png'
+
+    tray_icon_light_mdl2_path = 'src/assets/tray-icons/light/mdl2.ico'
+    tray_icon_dark_mdl2_path = 'src/assets/tray-icons/dark/mdl2.ico'
+
+    tray_icon_light_fluent_path = 'src/assets/tray-icons/light/fluent.ico'
+    tray_icon_dark_fluent_path = 'src/assets/tray-icons/dark/fluent.ico'
+
+
+
+tray_icons = {
+    "monitune": {
+        "Light": app_icon_path,
+        "Dark": app_icon_path
+    },
+    "mdl2": {
+        "Light": tray_icon_light_mdl2_path,
+        "Dark": tray_icon_dark_mdl2_path
+    },
+    "fluent": {
+        "Light": tray_icon_light_fluent_path,
+        "Dark": tray_icon_dark_fluent_path
+    }
+}

@@ -167,6 +167,8 @@ class MainWindow(QMainWindow):
         # Create the system tray icon
         self.tray_icon = SystemTrayIcon(self)
         # self.tray_icon.showMessage("MoniTune", "MoniTune is running", QIcon(config.app_icon_path))
+        # self.tray_icon.changeIconTheme(darkdetect.theme())
+        # self.tray_icon.changeIconName("monitune")
 
         # Run the theme listener in a separate thread
         threading.Thread(target=darkdetect.listener, args=(self.on_theme_change,), daemon=True).start()
@@ -287,6 +289,9 @@ class MainWindow(QMainWindow):
         self.update_theme_colors(theme)
         self.update_central_widget()
         self.update_bottom_frame = True
+        self.tray_icon.changeIconTheme(theme)
+
+        
 
 
 
@@ -712,7 +717,7 @@ class MainWindow(QMainWindow):
         
         self.window_open = True
         if self.brightness_sync_thread is None or not self.brightness_sync_thread.is_alive():
-            print("brightness_sync_thread.start()")
+            print("brightness_sync_thread start")
 
             # self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
             # self.brightness_sync_thread.start()
@@ -727,7 +732,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(250, self.start_brightness_sync_thread) 
 
         else:
-            print("Brightness sync thread is already running")
+            print("brightness_sync_thread is already running")
 
         super().showEvent(event)
 
@@ -750,6 +755,7 @@ class MainWindow(QMainWindow):
 
     # MARK: start_brightness_sync_thread()
     def start_brightness_sync_thread(self):
+        print("brightness_sync_thread started")
         self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
         self.brightness_sync_thread.start()
 

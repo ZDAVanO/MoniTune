@@ -7,6 +7,7 @@ from custom_sliders import NoScrollSlider
 from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
 from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 import config
+from config import tray_icons
 
 import webbrowser
 import time
@@ -37,6 +38,51 @@ class SettingToggle:
         checkbox.stateChanged.connect(lambda: self.toggle(checkbox.isChecked()))
         return checkbox
 
+
+
+# MARK: ChooseIconWidget
+class ChooseIconWidget(QWidget):
+    def __init__(self, parent):
+        super().__init__()
+
+        self.parent = parent
+
+        layout = QHBoxLayout()
+        
+        label = QLabel("Tray icon")
+        layout.addWidget(label)
+
+        self.icon_buttons = []
+        self.tray_icons = tray_icons
+
+        for icon_name, icon_variants in self.tray_icons.items():
+            button = QPushButton()
+            button.setFixedHeight(32)
+            button.setIcon(QIcon(icon_variants["Dark"]))  # Assuming dark theme for now
+            button.setCheckable(True)
+            button.setStyleSheet("background-color: #515151;")
+            button.clicked.connect(lambda checked, btn=button, name=icon_name: self.on_icon_button_clicked(btn, name))
+            layout.addWidget(button)
+            self.icon_buttons.append(button)
+
+        self.setLayout(layout)
+
+    def on_icon_button_clicked(self, button, icon_name):
+        for btn in self.icon_buttons:
+            btn.setChecked(False)
+        button.setChecked(True)
+        print(f"Selected icon: {icon_name}")
+
+        self.parent.tray_icon.changeIconName(icon_name)
+        reg_write_list(config.REGISTRY_PATH, "TrayIcon", [icon_name])
+
+    def select_icon(self, icon_name):
+        if icon_name in self.tray_icons:
+            for button in self.icon_buttons:
+                button.setChecked(False)
+            selected_button = next(btn for btn, name in zip(self.icon_buttons, self.tray_icons.keys()) if name == icon_name)
+            selected_button.setChecked(True)
+            print(f"select_icon Selected icon: {icon_name}")
 
 
 
@@ -211,6 +257,11 @@ class SettingsWindow(QWidget):
                                                    "Enables Fusion theme. Requires app restart"
                                                    ))
 
+        icon_widget = ChooseIconWidget(self.parent)
+        icon = reg_read_list(config.REGISTRY_PATH, "TrayIcon")
+        print("Icon:", icon) # ['fluent']
+        icon_widget.select_icon(icon[0] if icon else "monitune")
+        general_layout.addWidget(icon_widget)
 
         # get monitors info
 
