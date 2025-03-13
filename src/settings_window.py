@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel, QSlider,
 from PySide6.QtCore import Qt, QTimer, QTime
 from PySide6.QtGui import QIcon
 
-from custom_sliders import NoScrollSlider
+from custom_widgets.custom_sliders import NoScrollSlider
 
 from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
 from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
@@ -41,10 +41,10 @@ class SettingToggle:
 
 
 # MARK: ChooseIconWidget
-class ChooseIconWidget(QWidget):
+class ChooseIconWidget(QFrame):
     def __init__(self, parent):
         super().__init__()
-
+        self.setFrameShape(QFrame.StyledPanel)
         self.parent = parent
 
         layout = QHBoxLayout()
@@ -172,14 +172,14 @@ class SettingsWindow(QWidget):
         self.setWindowTitle(f"{config.app_name} Settings")
         self.setWindowIcon(QIcon(config.app_icon_path))
         
-        self.resize(450, 450)
+        self.resize(450, 500)
         self.setMinimumWidth(400)
-        self.setMinimumHeight(300)
+        self.setMinimumHeight(500)
 
         settings_layout = QVBoxLayout(self)
         settings_layout.setContentsMargins(0, 0, 0, 0)
         self.tab_widget = QTabWidget()
-        # self.tab_widget.setDocumentMode(True)
+        self.tab_widget.setDocumentMode(True)
         settings_layout.addWidget(self.tab_widget)
 
         self.time_adjustment_data = {}  # Dictionary to store time and brightness data
@@ -216,10 +216,13 @@ class SettingsWindow(QWidget):
         }
         self.time_adjustment_frames = []
 
-        print(f"Collected time adjustment data: {self.time_adjustment_data}")
-        reg_write_dict(config.REGISTRY_PATH, "TimeAdjustmentData", self.time_adjustment_data)
+        # Sort the time adjustment data by time
+        sorted_time_adjustment_data = dict(sorted(self.time_adjustment_data.items()))
 
-        self.parent.time_adjustment_data = self.time_adjustment_data
+        print(f"Collected time adjustment data: {sorted_time_adjustment_data}")
+        reg_write_dict(config.REGISTRY_PATH, "TimeAdjustmentData", sorted_time_adjustment_data)
+
+        self.parent.time_adjustment_data = sorted_time_adjustment_data
         self.parent.update_scheduler_tasks()
 
 
@@ -266,6 +269,11 @@ class SettingsWindow(QWidget):
         # get monitors info
 
         monitors_info = get_monitors_info()
+
+        # hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
+        # # Exclude monitors that are in self.hidden_displays
+        # monitors_info = [monitor for monitor in monitors_info if monitor['serial'] not in hidden_displays]
+
         # Створюємо словник, де ключ — серійний номер
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
         reg_order = reg_read_list(config.REGISTRY_PATH, "MonitorsOrder")
@@ -274,6 +282,47 @@ class SettingsWindow(QWidget):
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
         monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
         custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
+
+
+
+
+        # Add Hide Displays setting
+        hide_displays_widget = QFrame()
+        hide_displays_widget.setFrameShape(QFrame.StyledPanel)
+        hide_displays_layout = QVBoxLayout(hide_displays_widget)
+        hide_displays_label = QLabel("Hide Displays")
+        hide_displays_layout.addWidget(hide_displays_label)
+
+        hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
+
+        def update_hidden_displays(monitor_id, state):
+            # print(f"Monitor ID: {monitor_id}, State: {state}")
+            if state == 2:
+                if monitor_id not in hidden_displays:
+                    hidden_displays.append(monitor_id)
+            else:
+                if monitor_id in hidden_displays:
+                    hidden_displays.remove(monitor_id)
+            reg_write_list(config.REGISTRY_PATH, "HiddenDisplays", hidden_displays)
+            self.parent.hidden_displays = hidden_displays
+
+        for monitor_id in monitors_order:
+            checkbox = QCheckBox(f"{monitors_dict[monitor_id]['display_name']}")
+            checkbox.setChecked(monitor_id in hidden_displays)
+            checkbox.stateChanged.connect(lambda state, mid=monitor_id: update_hidden_displays(mid, state))
+            hide_displays_layout.addWidget(checkbox)
+
+        general_layout.addWidget(hide_displays_widget)
+
+
+
+
+
+
+
+
+
+
 
 
         # Add Rename Monitors setting

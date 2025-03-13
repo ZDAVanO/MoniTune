@@ -17,13 +17,19 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFrame,
     QComboBox,
-    QGridLayout
+    QGridLayout,
+    QSpacerItem,
+    QSizePolicy
 )
 
 from system_tray_icon import SystemTrayIcon
 from settings_window import SettingsWindow 
-from custom_comboboxes import NoScrollComboBox
-from custom_sliders import CustomSlider, AnimatedSlider, AnimatedSliderBlockSignals
+
+from custom_widgets.custom_comboboxes import NoScrollComboBox
+from custom_widgets.custom_sliders import CustomSlider, AnimatedSlider, AnimatedSliderBlockSignals
+from custom_widgets.custom_buttons import RRButton
+from custom_widgets.custom_labels import BrightnessIcon
+
 from brightness_scheduler import BrightnessScheduler
 
 from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, get_brightness, set_brightness, set_resolution
@@ -39,7 +45,11 @@ import threading
 import time
 import platform
 
+import psutil
 
+def is_laptop():
+    battery = psutil.sensors_battery()
+    return battery is not None
 
 
 
@@ -49,7 +59,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        
+        self.is_laptop = is_laptop()
 
         self.window_width = 358
         self.window_height = 231
@@ -80,6 +90,7 @@ class MainWindow(QMainWindow):
         
         self.restore_last_brightness = reg_read_bool(config.REGISTRY_PATH, "RestoreLastBrightness")
         
+        self.hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
 
 
 
@@ -92,6 +103,7 @@ class MainWindow(QMainWindow):
 
         self.brightness_values = reg_read_dict(config.REGISTRY_PATH, "BrightnessValues")
         print(f"self.brightness_values {self.brightness_values}")
+        self.previous_brightness_values = {}  # Dictionary to store previous brightness values
 
 
         self.update_bottom_frame = True # Flag to update bottom frame
@@ -175,14 +187,13 @@ class MainWindow(QMainWindow):
 
 
 
-
+        # Time adjustment
         self.time_adjustment_startup = reg_read_bool(config.REGISTRY_PATH, "TimeAdjustmentStartup")
-        self.scheduler = BrightnessScheduler()
-
         self.time_adjustment_data = reg_read_dict(config.REGISTRY_PATH, "TimeAdjustmentData")
+        self.scheduler = BrightnessScheduler()
+        self.update_scheduler_tasks()
         if self.time_adjustment_startup:
-            self.update_scheduler_tasks()
-        self.scheduler.execute_recent_task()
+            self.scheduler.execute_recent_task()
 
 
 
@@ -191,7 +202,7 @@ class MainWindow(QMainWindow):
         # self.bottom_frame.setStyleSheet("background-color: green;") 
         # self.openSettingsWindow() # Open settings window on startup
 
-        self.previous_brightness_values = {}  # Dictionary to store previous brightness values
+        
 
 
     # MARK: update_scheduler_tasks()
@@ -230,6 +241,11 @@ class MainWindow(QMainWindow):
     # MARK: update_connected_monitors()
     def update_connected_monitors(self):
         monitors_info = get_monitors_info()
+
+        # Exclude monitors that are in self.hidden_displays
+        monitors_info = [monitor for monitor in monitors_info if monitor['serial'] not in self.hidden_displays]
+        print(f" -------- update_connected_monitors monitors_info {monitors_info}")
+
         self.connected_monitors = [monitor['serial'] for monitor in monitors_info]
 
 
@@ -269,6 +285,11 @@ class MainWindow(QMainWindow):
             self.rr_hover_color = config.rr_hover_color_light
 
             self.settings_icon_path = config.settings_icon_light_path
+
+            self.monitor_icon_path = config.monitor_icon_light_path
+            self.laptop_icon_path = config.laptop_icon_light_path
+
+            self.sun_icon_path = config.sun_icon_light_path
         else:
             self.bg_color = config.bg_color_dark
             self.border_color = config.border_color_dark
@@ -281,6 +302,11 @@ class MainWindow(QMainWindow):
             self.rr_hover_color = config.rr_hover_color_dark
 
             self.settings_icon_path = config.settings_icon_dark_path
+
+            self.monitor_icon_path = config.monitor_icon_dark_path
+            self.laptop_icon_path = config.laptop_icon_dark_path
+
+            self.sun_icon_path = config.sun_icon_dark_path
 
 
     # MARK: on_theme_change()
@@ -338,7 +364,11 @@ class MainWindow(QMainWindow):
 
 
         monitors_info = get_monitors_info()
-        # print(f"monitors_info {monitors_info}")
+
+        # Exclude monitors that are in self.hidden_displays
+        monitors_info = [monitor for monitor in monitors_info if monitor['serial'] not in self.hidden_displays]
+
+        print(f"monitors_info {monitors_info}")
         # monitors_info.reverse()  # Invert the order of monitors
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
         # Сортуємо список моніторів відповідно до порядку з реєстру
@@ -353,6 +383,8 @@ class MainWindow(QMainWindow):
 
 
         for index, monitor_serial in enumerate(monitors_order):
+            if monitor_serial in self.hidden_displays:
+                continue
 
             monitor = monitors_dict[monitor_serial]
 
@@ -372,16 +404,35 @@ class MainWindow(QMainWindow):
             monitor_vbox.setContentsMargins(0, 0, 0, 0)
             # monitor_vbox.setSpacing(5)  # Spacing between monitor frames
             monitor_vbox.setSpacing(0)  # Spacing between monitor frames
+            monitor_vbox.setContentsMargins(7, 7, 7, 7)
+            # monitor_vbox.setContentsMargins(0, 5, 0, 5)
             
 
             # MARK: Monitor Label
             label_frame = QWidget()
             # label_frame.setMinimumHeight(34)
-            label_frame.setFixedHeight(34)
+            # label_frame.setFixedHeight(34)
             label_hbox = QHBoxLayout(label_frame)
-            label_hbox.setContentsMargins(12, 7, 7, 0)
-            # label_hbox.setContentsMargins(16, 7, 7, 0)
-            label_hbox.setSpacing(5)
+            # label_hbox.setContentsMargins(12, 7, 7, 0)
+            label_hbox.setContentsMargins(7, 7, 7, 0)
+            label_hbox.setContentsMargins(0, 0, 0, 0)
+            # label_hbox.setSpacing(5)
+            label_hbox.setSpacing(7)
+            label_hbox.setSpacing(6)
+            # label_hbox.setSpacing(2)
+
+            # Add monitor icon
+            monitor_icon = QLabel()
+            # monitor_icon.setStyleSheet("""background-color: blue;""")
+            icon_size = 30
+            if (monitor["Device"] == "\\\\.\\DISPLAY1") and self.is_laptop:
+                monitor_icon.setPixmap(QIcon(self.laptop_icon_path).pixmap(26, 26))
+            else:
+                monitor_icon.setPixmap(QIcon(self.monitor_icon_path).pixmap(icon_size, icon_size))
+            monitor_icon.setFixedSize(icon_size, icon_size)
+            monitor_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label_hbox.addWidget(monitor_icon)
+
 
             monitor_label_text = self.custom_monitor_names[monitor_serial] if monitor_serial in self.custom_monitor_names else monitor["display_name"]
             monitor_label = QLabel(monitor_label_text)
@@ -390,9 +441,11 @@ class MainWindow(QMainWindow):
             # monitor_label.setFixedHeight(80)
             monitor_label.setStyleSheet("""
                                         font-size: 16px; font-weight: bold;
+
                                         
+
                                         
-                                        """) # padding-left: 1px; background-color: blue;
+                                        """) # padding-left: 1px; background-color: blue; padding-bottom: 2px;
             label_hbox.addWidget(monitor_label)
             
             
@@ -440,12 +493,28 @@ class MainWindow(QMainWindow):
 
             monitor_vbox.addWidget(label_frame)
             
+            monitor_vbox.setSpacing(5)
+
+
+            # Add separator line
+            separator_line1 = QFrame()
+            separator_line1.setFrameShape(QFrame.Shape.HLine)
+            separator_line1.setFrameShadow(QFrame.Shadow.Sunken)
+            # separator_line1.setStyleSheet(
+            #     f"""
+            #     QFrame {{
+            #     background-color: {self.fr_border_color};
+            #     }}
+            #     """
+            # )
+            monitor_vbox.addWidget(separator_line1)
+
 
             # MARK: Refresh Rates
             if self.show_refresh_rates:
 
                 monitor_vbox.setSpacing(5)  # Spacing between monitor frames //////////////////////////////////////////////////////////////////
-
+                
                 refresh_rates = monitor["AvailableRefreshRates"]
                 refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
 
@@ -454,6 +523,8 @@ class MainWindow(QMainWindow):
                     rr_grid = QGridLayout(rr_frame)
                     # rr_grid.setContentsMargins(5, 0, 5, 0)
                     rr_grid.setContentsMargins(6, 0, 6, 0)
+                    rr_grid.setContentsMargins(0, 0, 0, 0)
+
                     # rr_grid.setContentsMargins(11, 0, 11, 0)
                     # rr_grid.setContentsMargins(10, 0, 10, 0)
                     rr_grid.setSpacing(0)
@@ -462,11 +533,7 @@ class MainWindow(QMainWindow):
 
                     num_columns = 6
                     for idx, rate in enumerate(refresh_rates):
-                        rr_button = QPushButton(f"{rate} Hz")
-                        rr_button.setMinimumWidth(55)
-                        rr_button.setFixedHeight(28)
-                        # rr_button.setFixedHeight(26)
-                        rr_button.setCheckable(True)
+                        rr_button = RRButton(f"{rate} Hz")
                         if rate == monitor["RefreshRate"]:
                             rr_button.setChecked(True)
                         rr_button.clicked.connect(lambda checked, r=rate, m=monitor, btn=rr_button: self.on_rr_button_clicked(r, m, btn))
@@ -480,6 +547,12 @@ class MainWindow(QMainWindow):
                         self.rr_buttons[monitor_serial].append(rr_button)  # Store button
 
                     monitor_vbox.addWidget(rr_frame)
+
+                    # Add separator line
+                    separator_line2 = QFrame()
+                    separator_line2.setFrameShape(QFrame.Shape.HLine)
+                    separator_line2.setFrameShadow(QFrame.Shadow.Sunken)
+                    monitor_vbox.addWidget(separator_line2)
             
 
 
@@ -494,8 +567,12 @@ class MainWindow(QMainWindow):
             # br_hbox.setContentsMargins(12, 0, 7, 7)
             # br_hbox.setSpacing(1)
 
-            br_hbox.setContentsMargins(12, 0, 9, 7)
+            # br_hbox.setContentsMargins(12, 0, 9, 7)
+            br_hbox.setContentsMargins(5, 0, 2, 0)
+            
+            
             br_hbox.setSpacing(3)
+            br_hbox.setSpacing(0)
 
             # print(f"-------------- br_level {monitor['serial']} {self.brightness_values[monitor['serial']]}")
             if self.restore_last_brightness and monitor['serial'] in self.brightness_values:
@@ -510,23 +587,44 @@ class MainWindow(QMainWindow):
 
             br_level = get_brightness(display=monitor['serial'])[0]
 
-            # sun_icon = QPixmap("src/assets/icons/sun_dark.png")
+
+
             # sun_icon = QPixmap("src/assets/icons/sun_dark.png").scaled(26, 26, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            # icon_label = QLabel()
-            # icon_label.setFixedWidth(50)
-            # icon_label.setPixmap(sun_icon)
-            # # icon_label.setFixedSize(icon_label.sizeHint())
-            # icon_label.setAlignment(Qt.AlignCenter)
-            # icon_label.setStyleSheet("""
-            #                          padding-right: 5px;
-                                     
-            #                          """) # background-color: green;
+            sun_icon = BrightnessIcon(icon_path=self.sun_icon_path)
+            # sun_icon.setStyleSheet("""
+            #                        background-color: green;
+
+            #                        """) # background-color: yellow;
+            sun_icon.set_value(br_level)
+
+            br_hbox.addWidget(sun_icon)
+
+
+
+
+
+
+
+
+            br_hbox.setContentsMargins(0, 0, 2, 0)
+            # br_hbox.setContentsMargins(0, 0, 0, 0)
+
+            # Add spacer between sun icon and slider
+            sun_slider_spacer = QSpacerItem(6, 0, QSizePolicy.Minimum, QSizePolicy.Expanding) # 3
+            br_hbox.addItem(sun_slider_spacer)
+
+
+
+
+
 
             br_slider = AnimatedSliderBlockSignals(Qt.Orientation.Horizontal, 
                                      scrollStep=1, 
-                                     singleStep=1) # keyboard step
+                                     singleStep=1,
+                                     pageStep=10) # keyboard step
             br_slider.setMaximum(100)  # Set maximum value to 100
             br_slider.setValue(br_level)
+            
             self.br_sliders[monitor['serial']] = br_slider  # Store slider in dictionary
             
             br_label = QLabel()
@@ -540,14 +638,21 @@ class MainWindow(QMainWindow):
             br_label.setStyleSheet("""
                                    font-size: 22px; font-weight: bold; 
                                    padding-bottom: 2px;
+
                                    
-                                   """) # padding-bottom: 4px; background-color: green;
+                                   """) # padding-bottom: 4px; background-color: yellow;
             
+            br_slider.add_icon(sun_icon) # Connect icon to slider to animate the icon
             br_slider.add_label(br_label) # Connect label to slider to animate the label
-            br_slider.valueChanged.connect(lambda value, label=br_label, ms=monitor_serial: self.on_brightness_change(value, label, ms))
-            
-            # br_hbox.addWidget(icon_label)
+            br_slider.valueChanged.connect(lambda value, icon=sun_icon, label=br_label, ms=monitor_serial: self.on_brightness_change(value, icon, label, ms))
             br_hbox.addWidget(br_slider)
+
+
+            # Add spacer between slider and label
+            slider_label_spacer = QSpacerItem(3, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
+            br_hbox.addItem(slider_label_spacer)
+
+
             br_hbox.addWidget(br_label)
 
             monitor_vbox.addWidget(br_frame)
@@ -590,7 +695,12 @@ class MainWindow(QMainWindow):
                                  """) # padding-left: 5px; background-color: blue;
         
         self.settings_button = QPushButton()
+        # self.settings_button.setFlat(True)
+        # self.settings_button.setStyleSheet("""
+                                 
+        #                          """)
         self.settings_button.setFixedWidth(41)
+        # self.settings_button.setFixedWidth(39)
         self.settings_button.setFixedHeight(39)
         self.settings_button.setIcon(QIcon(self.settings_icon_path))
         self.settings_button.setIconSize(QSize(21, 21))
@@ -635,8 +745,9 @@ class MainWindow(QMainWindow):
 
 
     # MARK: on_brightness_change()
-    def on_brightness_change(self, value, label, monitor_serial):
+    def on_brightness_change(self, value, icon, label, monitor_serial):
         # print(f"on_brightness_change {value} {label} {monitor_serial}")
+        icon.set_value(value)
         label.setText(str(value))
         self.brightness_values[monitor_serial] = int(value)
         # print(f"on_brightness_change {monitor_serial}", self.brightness_values[monitor_serial])
@@ -718,17 +829,8 @@ class MainWindow(QMainWindow):
         self.window_open = True
         if self.brightness_sync_thread is None or not self.brightness_sync_thread.is_alive():
             print("brightness_sync_thread start")
-
             # self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
             # self.brightness_sync_thread.start()
-
-            # QTimer.singleShot(1300, self.start_brightness_sync_thread) 
-
-            # if self.restore_last_brightness:
-            #     QTimer.singleShot(350, self.start_brightness_sync_thread) 
-            # else:
-            #     QTimer.singleShot(1300, self.start_brightness_sync_thread) 
-
             QTimer.singleShot(250, self.start_brightness_sync_thread) 
 
         else:
@@ -736,13 +838,7 @@ class MainWindow(QMainWindow):
 
         super().showEvent(event)
 
-        # for slider in self.br_sliders:
-        #     slider.animate_to(100)
-        # for index, slider in enumerate(self.br_sliders):
-        #     QTimer.singleShot(index * 150, lambda s=slider: s.animate_to(100))
-        # QTimer.singleShot(300, self.start_brightness_animation)
         if self.restore_last_brightness:
-            # QTimer.singleShot(300, self.start_brightness_animation)
             QTimer.singleShot(150, self.start_brightness_animation)
 
     # MARK: start_brightness_animation()

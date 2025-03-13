@@ -6,7 +6,7 @@ import sys
 
 app_name = "MoniTune"
 
-version = "0.2.3"
+version = "0.3.0"
 
 REGISTRY_PATH = r"Software\MoniTune\Settings"
 
@@ -14,7 +14,8 @@ WIN11_WINDOW_CORNER_RADIUS = 9
 WIN11_WINDOW_OFFSET = 11
 
 
-# MARK: Theme
+
+# MARK: Colors
 border_color_light = "#bebebe"
 border_color_dark = "#404040"
 
@@ -47,10 +48,7 @@ rr_hover_color_dark = "#2c2c2c"
 if getattr(sys, 'frozen', False):
     # Якщо програма запущена як EXE, шлях до іконки відносно до виконуваного файлу
     app_icon_path = os.path.join(sys._MEIPASS, 'icon_color.ico')
-    # if is_dark_theme():
-    #     icon_path = os.path.join(sys._MEIPASS, 'icon_light.ico')
-    # else:
-    #     icon_path = os.path.join(sys._MEIPASS, 'icon_dark.ico')
+    
     settings_icon_light_path = os.path.join(sys._MEIPASS, 'setting_light.png')
     settings_icon_dark_path = os.path.join(sys._MEIPASS, 'setting_dark.png')
 
@@ -60,24 +58,42 @@ if getattr(sys, 'frozen', False):
     tray_icon_light_mdl2_path = os.path.join(sys._MEIPASS, 'tray-icons/light/mdl2.ico')
     tray_icon_dark_mdl2_path = os.path.join(sys._MEIPASS, 'tray-icons/dark/mdl2.ico')
 
+
+    monitor_icon_light_path = os.path.join(sys._MEIPASS, 'monitor_light.png')
+    monitor_icon_dark_path = os.path.join(sys._MEIPASS, 'monitor_dark.png')
+
+    laptop_icon_light_path = os.path.join(sys._MEIPASS, 'laptop_light.png')
+    laptop_icon_dark_path = os.path.join(sys._MEIPASS, 'laptop_dark.png')
+
+    sun_icon_light_path = os.path.join(sys._MEIPASS, 'sun_light.png')
+    sun_icon_dark_path = os.path.join(sys._MEIPASS, 'sun_dark.png')
+
+
 else:
     # Якщо програма запущена з Python, використовуємо поточну директорію
     app_icon_path = 'src/assets/icons/icon_color_dev.ico'
-    # if is_dark_theme():
-    #     icon_path = 'icons/icon_light.ico' 
-    # else:
-    #     icon_path = 'icons/icon_dark.ico'
+
     settings_icon_light_path = 'src/assets/icons/setting_light.png'
     settings_icon_dark_path = 'src/assets/icons/setting_dark.png'
-
-    tray_icon_light_mdl2_path = 'src/assets/tray-icons/light/mdl2.ico'
-    tray_icon_dark_mdl2_path = 'src/assets/tray-icons/dark/mdl2.ico'
 
     tray_icon_light_fluent_path = 'src/assets/tray-icons/light/fluent.ico'
     tray_icon_dark_fluent_path = 'src/assets/tray-icons/dark/fluent.ico'
 
+    tray_icon_light_mdl2_path = 'src/assets/tray-icons/light/mdl2.ico'
+    tray_icon_dark_mdl2_path = 'src/assets/tray-icons/dark/mdl2.ico'
+
+    
+    monitor_icon_light_path = 'src/assets/icons/monitor_light.png'
+    monitor_icon_dark_path = 'src/assets/icons/monitor_dark.png'
+    
+    laptop_icon_light_path = 'src/assets/icons/laptop_light.png'
+    laptop_icon_dark_path = 'src/assets/icons/laptop_dark.png'
+
+    sun_icon_light_path = 'src/assets/icons/sun_light.png'
+    sun_icon_dark_path = 'src/assets/icons/sun_dark.png'
 
 
+# MARK: Tray Icons
 tray_icons = {
     "monitune": {
         "Light": app_icon_path,

@@ -1,12 +1,11 @@
 from PySide6.QtGui import QIcon, QGuiApplication
 from PySide6.QtWidgets import QSystemTrayIcon, QMenu
 
+from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 import config
 from config import tray_icons
+
 import darkdetect
-
-
-from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 
 
 

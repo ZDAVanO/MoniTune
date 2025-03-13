@@ -1,10 +1,9 @@
+
 import win32api, win32con
-
-import time
-import threading
-
 import ctypes
 from ctypes import wintypes
+import time
+import threading
 
 import screen_brightness_control as sbc
 
