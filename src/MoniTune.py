@@ -368,6 +368,43 @@ class MainWindow(QMainWindow):
         # Exclude monitors that are in self.hidden_displays
         monitors_info = [monitor for monitor in monitors_info if monitor['serial'] not in self.hidden_displays]
 
+        if not monitors_info:  # Check if no monitors are available
+            placeholder_frame = QWidget()
+            placeholder_frame.setObjectName("EmptyPlaceholder")
+            placeholder_frame.setStyleSheet(
+                f"""
+                #EmptyPlaceholder {{
+                background: {self.fr_color};
+                border-radius: {6 if self.enable_rounded_corners else 0}px;
+                border: 1px solid {self.fr_border_color}; 
+                }}
+                """
+            )
+            placeholder_layout = QVBoxLayout(placeholder_frame)
+            placeholder_layout.setContentsMargins(14, 12, 14, 14)
+            # placeholder_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            # placeholder_label = QLabel("No monitors found")
+            placeholder_label = QLabel(
+                'No compatible displays found. '
+                'Please check that "DDC/CI" is enabled for your displays, '
+                'or make sure the monitors are not currently hidden.'
+            )
+            placeholder_label.setWordWrap(True)
+            placeholder_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            placeholder_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+            placeholder_label.setStyleSheet("""
+                                            font-size: 16px;
+                                            font-weight: bold;
+                                            color: lightgray;
+                                            """)
+            placeholder_layout.addWidget(placeholder_label)
+
+            self.monitors_layout.addWidget(placeholder_frame)
+
+            return
+
+
         print(f"monitors_info {monitors_info}")
         # monitors_info.reverse()  # Invert the order of monitors
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
