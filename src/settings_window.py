@@ -581,7 +581,8 @@ class SettingsWindow(QWidget):
         about_layout.addWidget(learn_more_label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.tab_widget.addTab(about_tab, "About")
         
-
+        
+    # MARK: show_parent_window
     def show_parent_window(self):
         QTimer.singleShot(400, self.parent.show)
 

@@ -22,6 +22,7 @@ class BrightnessIcon(QLabel):
         self.setFixedSize(self.icon_size, self.icon_size)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setPixmap(self.sun_icon.pixmap(self.icon_size, self.icon_size))
+        # sun_icon = QPixmap("src/assets/icons/sun_dark.png").scaled(26, 26, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
 
 

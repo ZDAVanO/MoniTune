@@ -1,5 +1,5 @@
 from PySide6.QtCore import QEvent, QSize, Qt, QPropertyAnimation, QRect, QEasingCurve, QTimer
-from PySide6.QtGui import QIcon, QGuiApplication, QWheelEvent, QKeyEvent
+from PySide6.QtGui import QIcon, QGuiApplication, QWheelEvent, QKeyEvent, QFont
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -439,13 +439,13 @@ class MainWindow(QMainWindow):
             # monitor_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
             # monitor_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
             # monitor_label.setFixedHeight(80)
-            monitor_label.setStyleSheet("""
+            monitor_label.setStyleSheet(f"""
                                         font-size: 16px; font-weight: bold;
 
                                         
 
                                         
-                                        """) # padding-left: 1px; background-color: blue; padding-bottom: 2px;
+                                        """) # padding-left: 1px; background-color: blue; padding-bottom: 2px; font-size: 16px; font-weight: bold; font: 16px "{config.font_family}";
             label_hbox.addWidget(monitor_label)
             
             
@@ -568,11 +568,16 @@ class MainWindow(QMainWindow):
             # br_hbox.setSpacing(1)
 
             # br_hbox.setContentsMargins(12, 0, 9, 7)
-            br_hbox.setContentsMargins(5, 0, 2, 0)
+            # br_hbox.setContentsMargins(5, 0, 2, 0)
+            br_hbox.setContentsMargins(0, 0, 2, 0)
+            # br_hbox.setContentsMargins(0, 0, 0, 0)
             
-            
-            br_hbox.setSpacing(3)
+            # br_hbox.setSpacing(3)
             br_hbox.setSpacing(0)
+
+
+
+            br_level = get_brightness(display=monitor['serial'])[0]
 
             # print(f"-------------- br_level {monitor['serial']} {self.brightness_values[monitor['serial']]}")
             if self.restore_last_brightness and monitor['serial'] in self.brightness_values:
@@ -580,34 +585,25 @@ class MainWindow(QMainWindow):
                 pass
             else:
                 # br_level = get_brightness(display=monitor['serial'])[0]
-                self.brightness_values[monitor['serial']] = get_brightness(display=monitor['serial'])[0]
+                # self.brightness_values[monitor['serial']] = get_brightness(display=monitor['serial'])[0]
+                self.brightness_values[monitor['serial']] = br_level
             # print(f"xxxxxxxxxxxxxxxxxxxx br_level {monitor['serial']} {self.brightness_values[monitor['serial']]}")
 
 
 
-            br_level = get_brightness(display=monitor['serial'])[0]
+            
 
 
-
-            # sun_icon = QPixmap("src/assets/icons/sun_dark.png").scaled(26, 26, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            
             sun_icon = BrightnessIcon(icon_path=self.sun_icon_path)
             # sun_icon.setStyleSheet("""
             #                        background-color: green;
 
-            #                        """) # background-color: yellow;
+            #                        """) # background-color: green;
             sun_icon.set_value(br_level)
-
             br_hbox.addWidget(sun_icon)
 
 
-
-
-
-
-
-
-            br_hbox.setContentsMargins(0, 0, 2, 0)
-            # br_hbox.setContentsMargins(0, 0, 0, 0)
 
             # Add spacer between sun icon and slider
             sun_slider_spacer = QSpacerItem(6, 0, QSizePolicy.Minimum, QSizePolicy.Expanding) # 3
@@ -628,19 +624,19 @@ class MainWindow(QMainWindow):
             self.br_sliders[monitor['serial']] = br_slider  # Store slider in dictionary
             
             br_label = QLabel()
-            # br_label.setFixedWidth(50) 
             # br_label.setFixedWidth(26) 
             br_label.setFixedWidth(39) # 2-26 3-39px
+            # br_label.setFixedWidth(32) # 2-23 3-32px
             # br_label.setFixedHeight(100)
             br_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             # br_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
             br_label.setText(str(br_level))
-            br_label.setStyleSheet("""
+            br_label.setStyleSheet(f"""
                                    font-size: 22px; font-weight: bold; 
                                    padding-bottom: 2px;
 
                                    
-                                   """) # padding-bottom: 4px; background-color: yellow;
+                                   """) # padding-bottom: 4px; background-color: green; font-size: 22px; font-weight: bold; font: 600 16pt "{config.font_family}";
             
             br_slider.add_icon(sun_icon) # Connect icon to slider to animate the icon
             br_slider.add_label(br_label) # Connect label to slider to animate the label
@@ -719,19 +715,23 @@ class MainWindow(QMainWindow):
         print(f"Selected refresh rate: {rate} Hz for monitor {monitor["serial"]}")
         # print(monitor)
 
-        # update button states
-        for btn in self.rr_buttons[monitor["serial"]]:
-            if btn != button:
-                btn.setChecked(False)
-        button.setChecked(True)
-
-        # set refresh rate
-        # if monitor["RefreshRate"] == rate:
-        #     print(f"Monitor {monitor['Device']} is already set to {rate} Hz.")
-        #     return
         set_refresh_rate_br(monitor, rate, refresh=False)
 
-        
+        monitors_info = get_monitors_info()
+        monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
+        current_rr = monitors_dict[monitor["serial"]]["RefreshRate"]
+        # print(f"Current refresh rate: {current_rr} Hz")
+        # print(f"Selected refresh rate: {rate} Hz")
+
+        if monitor["serial"] in monitors_dict:
+            if current_rr != rate:
+                button.setChecked(False)
+            else:
+                for btn in self.rr_buttons[monitor["serial"]]:
+                    if btn != button:
+                        btn.setChecked(False)
+                button.setChecked(True)
+
 
 
     # MARK: on_resolution_select()
