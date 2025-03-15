@@ -179,7 +179,7 @@ class SettingsWindow(QWidget):
         settings_layout = QVBoxLayout(self)
         settings_layout.setContentsMargins(0, 0, 0, 0)
         self.tab_widget = QTabWidget()
-        self.tab_widget.setDocumentMode(True)
+        # self.tab_widget.setDocumentMode(True)
         settings_layout.addWidget(self.tab_widget)
 
         self.time_adjustment_data = {}  # Dictionary to store time and brightness data
@@ -238,8 +238,25 @@ class SettingsWindow(QWidget):
 
 
 
-        # MARK: General Tab
+        # MARK: get monitors info
+        monitors_info = get_monitors_info()
 
+        # hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
+        # # Exclude monitors that are in self.hidden_displays
+        # monitors_info = [monitor for monitor in monitors_info if monitor['serial'] not in hidden_displays]
+
+        # Створюємо словник, де ключ — серійний номер
+        monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
+        reg_order = reg_read_list(config.REGISTRY_PATH, "MonitorsOrder")
+        # Сортуємо список моніторів відповідно до порядку з реєстру
+        monitors_order = [serial for serial in reg_order if serial in monitors_dict]
+        # Додаємо монітори, яких немає в реєстрі, в кінець списку
+        monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
+        custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
+
+
+
+        # MARK: General Tab
         general_tab = QWidget()
         # general_tab.setStyleSheet("background-color: blue")
         general_layout = QVBoxLayout(general_tab)
@@ -266,27 +283,23 @@ class SettingsWindow(QWidget):
         icon_widget.select_icon(icon[0] if icon else "monitune")
         general_layout.addWidget(icon_widget)
 
-        # get monitors info
-
-        monitors_info = get_monitors_info()
-
-        # hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
-        # # Exclude monitors that are in self.hidden_displays
-        # monitors_info = [monitor for monitor in monitors_info if monitor['serial'] not in hidden_displays]
-
-        # Створюємо словник, де ключ — серійний номер
-        monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
-        reg_order = reg_read_list(config.REGISTRY_PATH, "MonitorsOrder")
-        # Сортуємо список моніторів відповідно до порядку з реєстру
-        monitors_order = [serial for serial in reg_order if serial in monitors_dict]
-        # Додаємо монітори, яких немає в реєстрі, в кінець списку
-        monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
-        custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
 
 
 
 
-        # Add Hide Displays setting
+        # # MARK: Monitor Settings Tab
+        # monitor_settings_tab = QWidget()
+        # # general_tab.setStyleSheet("background-color: blue")
+        # monitor_settings_layout = QVBoxLayout(monitor_settings_tab)
+
+        # self.tab_widget.addTab(monitor_settings_tab, "Monitor Settings")
+
+
+
+
+
+
+        # MARK: Hide Displays
         hide_displays_widget = QFrame()
         hide_displays_widget.setFrameShape(QFrame.StyledPanel)
         hide_displays_layout = QVBoxLayout(hide_displays_widget)
@@ -294,6 +307,8 @@ class SettingsWindow(QWidget):
         hide_displays_layout.addWidget(hide_displays_label)
 
         hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
+        # hidden_displays = list(map(str, filter(None, reg_read_list(config.REGISTRY_PATH, "HiddenDisplays"))))
+        print("reg Hidden displays:", hidden_displays)
 
         def update_hidden_displays(monitor_id, state):
             # print(f"Monitor ID: {monitor_id}, State: {state}")
@@ -305,6 +320,7 @@ class SettingsWindow(QWidget):
                     hidden_displays.remove(monitor_id)
             reg_write_list(config.REGISTRY_PATH, "HiddenDisplays", hidden_displays)
             self.parent.hidden_displays = hidden_displays
+            print(f"Updated hidden displays: {hidden_displays}")
 
         for monitor_id in monitors_order:
             checkbox = QCheckBox(f"{monitors_dict[monitor_id]['display_name']}")
@@ -325,8 +341,7 @@ class SettingsWindow(QWidget):
 
 
 
-        # Add Rename Monitors setting
-
+        # MARK: Rename Monitors
         rename_monitors_widget = QFrame()
         rename_monitors_widget.setFrameShape(QFrame.StyledPanel)
         rename_monitors_layout = QVBoxLayout(rename_monitors_widget)
@@ -371,8 +386,7 @@ class SettingsWindow(QWidget):
 
 
 
-        # Add Reorder Monitors setting
-        
+        # MARK: Reorder Monitors
         def save_order():
             monitors_order = [self.list_widget.item(i).data(Qt.UserRole) for i in range(self.list_widget.count())]
             print("New order:", monitors_order)
@@ -445,8 +459,7 @@ class SettingsWindow(QWidget):
                                                         ))
 
 
-        # Add Exclude Refresh Rate setting
-
+        # MARK: Exclude Refresh Rates
         all_rates = set()
         for monitor in monitors_info:
             all_rates.update(monitor['AvailableRefreshRates'])

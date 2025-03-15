@@ -40,6 +40,7 @@ from config import WIN11_WINDOW_CORNER_RADIUS, WIN11_WINDOW_OFFSET
 import darkdetect
 
 import sys
+import os
 import ctypes
 import threading
 import time
@@ -47,10 +48,26 @@ import platform
 
 import psutil
 
+
+
 def is_laptop():
     battery = psutil.sensors_battery()
     return battery is not None
 
+
+
+class SeparatorLine(QFrame):
+    def __init__(self, color: str = None, line_width: int = 1, parent=None):
+        super().__init__(parent)
+
+        fusion_style = QStyleFactory.create("Fusion")
+
+        self.setFrameShape(QFrame.Shape.HLine)
+        self.setFrameShadow(QFrame.Shadow.Plain)
+        self.setStyle(fusion_style)
+        if color:
+            self.setStyleSheet(f"color: {color};")
+        self.setLineWidth(line_width)
 
 
 
@@ -84,8 +101,8 @@ class MainWindow(QMainWindow):
 
 
         self.show_refresh_rates = reg_read_bool(config.REGISTRY_PATH, "ShowRefreshRates")
-        # self.excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
-        self.excluded_rates = list(map(int, filter(None, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates"))))
+        self.excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
+        # self.excluded_rates = list(map(int, filter(None, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates"))))
 
         
         self.restore_last_brightness = reg_read_bool(config.REGISTRY_PATH, "RestoreLastBrightness")
@@ -220,6 +237,7 @@ class MainWindow(QMainWindow):
     # MARK: bg_br_change()
     def bg_br_change(self, brightness_data):
         print("bg_br_change")
+        # self.show()
         self.update_connected_monitors()
         # print(f"self.connected_monitors {self.connected_monitors}")
         for monitor_serial in self.connected_monitors:
@@ -236,6 +254,7 @@ class MainWindow(QMainWindow):
 
         self.brightness_sync_onetime()
 
+        # QTimer.singleShot(1000, self.animateWindowClose)
 
 
     # MARK: update_connected_monitors()
@@ -244,7 +263,7 @@ class MainWindow(QMainWindow):
 
         # Exclude monitors that are in self.hidden_displays
         monitors_info = [monitor for monitor in monitors_info if monitor['serial'] not in self.hidden_displays]
-        print(f" -------- update_connected_monitors monitors_info {monitors_info}")
+        # print(f" -------- update_connected_monitors monitors_info {monitors_info}")
 
         self.connected_monitors = [monitor['serial'] for monitor in monitors_info]
 
@@ -274,6 +293,7 @@ class MainWindow(QMainWindow):
     # MARK: update_theme_colors()
     def update_theme_colors(self, theme: str):
         if theme == "Light" or (self.win_release != "11" and not self.enable_fusion_theme):
+            # colors for light theme
             self.bg_color = config.bg_color_light
             self.border_color = config.border_color_light
 
@@ -284,13 +304,19 @@ class MainWindow(QMainWindow):
             self.rr_fg_color = config.rr_fg_color_light
             self.rr_hover_color = config.rr_hover_color_light
 
+            self.separator_color = config.separator_color_light
+
+            # icons
             self.settings_icon_path = config.settings_icon_light_path
 
             self.monitor_icon_path = config.monitor_icon_light_path
             self.laptop_icon_path = config.laptop_icon_light_path
 
             self.sun_icon_path = config.sun_icon_light_path
+
+            self.down_arrow_icon_path = config.down_arrow_icon_light_path
         else:
+            # colors for dark theme
             self.bg_color = config.bg_color_dark
             self.border_color = config.border_color_dark
 
@@ -301,6 +327,9 @@ class MainWindow(QMainWindow):
             self.rr_fg_color = config.rr_fg_color_dark
             self.rr_hover_color = config.rr_hover_color_dark
 
+            self.separator_color = config.separator_color_dark
+
+            # icons
             self.settings_icon_path = config.settings_icon_dark_path
 
             self.monitor_icon_path = config.monitor_icon_dark_path
@@ -308,6 +337,10 @@ class MainWindow(QMainWindow):
 
             self.sun_icon_path = config.sun_icon_dark_path
 
+            self.down_arrow_icon_path = config.down_arrow_icon_dark_path
+
+        # print("Checking MEIPASS contents:")
+        # print(os.listdir(sys._MEIPASS))
 
     # MARK: on_theme_change()
     def on_theme_change(self, theme: str): # "Light" or "Dark"
@@ -491,23 +524,33 @@ class MainWindow(QMainWindow):
                     available_resolutions = monitor["AvailableResolutions"]
                     sorted_resolutions = sorted(available_resolutions, key=lambda res: res[0] * res[1], reverse=True)
                     formatted_resolutions = [f"{width}x{height}" for width, height in sorted_resolutions]
-
+                    
                     res_combobox = NoScrollComboBox()
-                    res_combobox.setStyleSheet("""
+                    absolute_icon_path = os.path.abspath(self.down_arrow_icon_path).replace('\\', '/')
+                    res_combobox.setStyleSheet(f"""
                                                /* Основний стиль QComboBox */
-                                                QComboBox {
+                                                QComboBox {{
                                                     font-size: 14px; font-weight: bold;
                                                     padding-left: 7px;
-                                                }
+                                                    background-color: {self.rr_fg_color};
+                                                }}
                                                 /* Стиль випадаючого списку */
-                                                QComboBox QAbstractItemView {
-                                                    padding: 0px;  /* Випадаючий список без відступу */
-                                                }
+                                                QComboBox QAbstractItemView {{
+                                                    padding: 0px;
+                                                }}
+                                                QComboBox::drop-down {{
+                                                    border: 0px;
+                                                }}
+                                                QComboBox::down-arrow {{
+                                                    image: url('{absolute_icon_path}'); /* Використовуйте прямі слеші */
+                                                    width: 11px;
+                                                    height: 11px;
+                                                    margin-right: 10px;
+                                                    }}
                                                 """)
                     res_combobox.setFixedWidth(120)
                     # res_combobox.setFixedWidth(105)
-                    # res_combobox.setFixedHeight(32)
-                    res_combobox.setFixedHeight(27)
+                    res_combobox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
                     res_combobox.addItems(formatted_resolutions)
                     res_combobox.setCurrentText(monitor["Resolution"])
                     res_combobox.currentIndexChanged.connect(lambda index, m=monitor, cb=res_combobox: self.on_resolution_select(m, cb.currentText()))
@@ -534,16 +577,7 @@ class MainWindow(QMainWindow):
 
 
             # Add separator line
-            separator_line1 = QFrame()
-            separator_line1.setFrameShape(QFrame.Shape.HLine)
-            separator_line1.setFrameShadow(QFrame.Shadow.Sunken)
-            # separator_line1.setStyleSheet(
-            #     f"""
-            #     QFrame {{
-            #     background-color: {self.fr_border_color};
-            #     }}
-            #     """
-            # )
+            separator_line1 = SeparatorLine(color=self.separator_color)
             monitor_vbox.addWidget(separator_line1)
 
 
@@ -586,9 +620,7 @@ class MainWindow(QMainWindow):
                     monitor_vbox.addWidget(rr_frame)
 
                     # Add separator line
-                    separator_line2 = QFrame()
-                    separator_line2.setFrameShape(QFrame.Shape.HLine)
-                    separator_line2.setFrameShadow(QFrame.Shadow.Sunken)
+                    separator_line2 = SeparatorLine(color=self.separator_color)
                     monitor_vbox.addWidget(separator_line2)
             
 

@@ -83,13 +83,20 @@ def reg_read_list(reg_path, dword_name):
         
         try:
             value, _ = winreg.QueryValueEx(key, dword_name)
-            value_split = value.split(",")
+            raw_list = value.split(",")  # Розбиваємо рядок на список
+            
+            filtered_list = []  # Створюємо порожній список для відфільтрованих значень
+            for item in raw_list:
+                cleaned_item = item.strip()  # Видаляємо зайві пробіли
+                if cleaned_item:  # Перевіряємо, чи не порожнє значення
+                    filtered_list.append(cleaned_item)
+            
         except FileNotFoundError:
-            value_split = []
+            filtered_list = []
 
         winreg.CloseKey(key)
 
-        return value_split
+        return filtered_list
     
     except Exception as e:
         print(f"Error reading from registry: {e}")

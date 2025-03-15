@@ -40,6 +40,9 @@ rr_hover_color_light = "#f0f0f0"
 rr_hover_color_dark = "#2c2c2c"
 
 
+separator_color_light = "#d2d2d2" # #dcdcdc bebebe
+separator_color_dark = "#555555" # 5f5f5f
+
 
 
 
@@ -68,6 +71,9 @@ if getattr(sys, 'frozen', False):
     sun_icon_light_path = os.path.join(sys._MEIPASS, 'sun_light.png')
     sun_icon_dark_path = os.path.join(sys._MEIPASS, 'sun_dark.png')
 
+    down_arrow_icon_light_path = os.path.join(sys._MEIPASS, 'down_arrow_light.png')
+    down_arrow_icon_dark_path = os.path.join(sys._MEIPASS, 'down_arrow_dark.png')
+
 
 else:
     # Якщо програма запущена з Python, використовуємо поточну директорію
@@ -91,6 +97,9 @@ else:
 
     sun_icon_light_path = 'src/assets/icons/sun_light.png'
     sun_icon_dark_path = 'src/assets/icons/sun_dark.png'
+
+    down_arrow_icon_light_path = 'src/assets/icons/down_arrow_light.png'
+    down_arrow_icon_dark_path = 'src/assets/icons/down_arrow_dark.png'
 
 
 # MARK: Tray Icons
