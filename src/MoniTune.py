@@ -532,7 +532,7 @@ class MainWindow(QMainWindow):
                                                 QComboBox {{
                                                     font-size: 14px; font-weight: bold;
                                                     padding-left: 7px;
-                                                    background-color: {self.rr_fg_color};
+                                                    {"background-color: " + self.rr_fg_color + ";" if not self.enable_fusion_theme else ""}
                                                 }}
                                                 /* Стиль випадаючого списку */
                                                 QComboBox QAbstractItemView {{

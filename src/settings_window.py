@@ -17,15 +17,18 @@ import time
 
 # MARK: SettingToggle
 class SettingToggle:
-    def __init__(self, parent, setting_name, reg_setting_name, callback=None):
+    def __init__(self, parent, setting_name, reg_setting_name, callback=None, after_restart=False):
         self.parent = parent
         self.setting_name = setting_name
         self.reg_setting_name = reg_setting_name
         self.callback = callback
+        self.after_restart = after_restart
+
 
     def toggle(self, state):
         print(f"Setting {self.setting_name} to {state}")
-        setattr(self.parent, self.setting_name, state)
+        if not self.after_restart:
+            setattr(self.parent, self.setting_name, state)
         reg_write_bool(config.REGISTRY_PATH, self.reg_setting_name, state)
         if callable(self.callback):
             self.callback()
@@ -271,7 +274,9 @@ class SettingsWindow(QWidget):
                                                    ))
         general_layout.addWidget(SettingToggle(self.parent, 
                                                "enable_fusion_theme", 
-                                               "EnableFusionTheme")
+                                               "EnableFusionTheme",
+                                               None,
+                                               True)
                                                .create_toggle(
                                                    "Fusion Theme", 
                                                    "Enables Fusion theme. Requires app restart"
