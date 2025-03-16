@@ -1,7 +1,7 @@
-import sys
 from PySide6.QtCore import QTimer, QTime, QDateTime, QThread, QCoreApplication
 from PySide6.QtWidgets import QApplication
 
+import sys
 
 
 class BrightnessScheduler:
@@ -11,20 +11,30 @@ class BrightnessScheduler:
         self.timer.timeout.connect(self.check_all_tasks)
         self.last_check_time = QDateTime.currentDateTime()
 
+
+    def get_tasks(self):
+        return self.tasks
+
     def add_task(self, time_str, callback):
         self.tasks[time_str] = callback
         print(f"Task added at {time_str}")
-
+    
     def remove_task(self, time_str):
         if time_str in self.tasks:
             del self.tasks[time_str]
             print(f"Task at {time_str} removed")
         else:
             print(f"No task found at {time_str}")
+        
+    def clear_all_tasks(self):
+        self.tasks.clear()
+        print("All tasks cleared")
+        self.stop_timer()
+
 
     def stop_timer(self):
         self.timer.stop()
-        print("Timer stopped")
+        print("Task checking stopped")
 
     def start_checking(self, interval=60000):
         if self.tasks:
@@ -33,9 +43,6 @@ class BrightnessScheduler:
         else:
             print("No tasks to check, timer not started")
 
-    def stop_checking(self):
-        self.timer.stop()
-        print("Task checking stopped")
 
     def check_all_tasks(self):
         current_time = QTime.currentTime().toString("HH:mm")
@@ -46,9 +53,7 @@ class BrightnessScheduler:
         print(f"Time difference: {time_diff} seconds")
         if time_diff > 120:  # more than 2 minutes
             print("Time difference is more than 2 minutes, waiting for monitors to turn on")
-            QThread.sleep(7)  # wait for 7 seconds to ensure monitors are on
-            print("Executing recent task after delay")
-            self.execute_recent_task()
+            QTimer.singleShot(10000, self.execute_recent_task) # wait for monitors to turn on
         elif current_time in self.tasks:
             self.tasks[current_time]()  # execute the callback
         else:
@@ -56,14 +61,6 @@ class BrightnessScheduler:
 
         self.last_check_time = current_datetime
         
-
-    def get_tasks(self):
-        return self.tasks
-
-    def clear_all_tasks(self):
-        self.tasks.clear()
-        print("All tasks cleared")
-        self.stop_timer()
 
     def execute_recent_task(self):
         if not self.tasks:

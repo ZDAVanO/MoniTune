@@ -1,10 +1,9 @@
+
 import win32api, win32con
-
-import time
-import threading
-
 import ctypes
 from ctypes import wintypes
+import time
+import threading
 
 import screen_brightness_control as sbc
 
@@ -160,11 +159,15 @@ def set_refresh_rate_br(monitor, refresh_rate, refresh=False):
 
 
 
+# MARK: set_brightness()
 def set_brightness(monitor_serial, br_value):
         # monitor_serial = get_monitors_info()[monitor_index]['serial']
         sbc.set_brightness(int(br_value), display=monitor_serial)
 
 
+# MARK: get_brightness()
+def get_brightness(display):
+    return sbc.get_brightness(display=display)
 
 
 

@@ -2,11 +2,12 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel, QSlider,
 from PySide6.QtCore import Qt, QTimer, QTime
 from PySide6.QtGui import QIcon
 
-from custom_sliders import NoScrollSlider
+from custom_widgets.custom_sliders import NoScrollSlider
 
 from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
 from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 import config
+from config import tray_icons
 
 import webbrowser
 import time
@@ -16,15 +17,18 @@ import time
 
 # MARK: SettingToggle
 class SettingToggle:
-    def __init__(self, parent, setting_name, reg_setting_name, callback=None):
+    def __init__(self, parent, setting_name, reg_setting_name, callback=None, after_restart=False):
         self.parent = parent
         self.setting_name = setting_name
         self.reg_setting_name = reg_setting_name
         self.callback = callback
+        self.after_restart = after_restart
+
 
     def toggle(self, state):
         print(f"Setting {self.setting_name} to {state}")
-        setattr(self.parent, self.setting_name, state)
+        if not self.after_restart:
+            setattr(self.parent, self.setting_name, state)
         reg_write_bool(config.REGISTRY_PATH, self.reg_setting_name, state)
         if callable(self.callback):
             self.callback()
@@ -37,6 +41,51 @@ class SettingToggle:
         checkbox.stateChanged.connect(lambda: self.toggle(checkbox.isChecked()))
         return checkbox
 
+
+
+# MARK: ChooseIconWidget
+class ChooseIconWidget(QFrame):
+    def __init__(self, parent):
+        super().__init__()
+        self.setFrameShape(QFrame.StyledPanel)
+        self.parent = parent
+
+        layout = QHBoxLayout()
+        
+        label = QLabel("Tray icon")
+        layout.addWidget(label)
+
+        self.icon_buttons = []
+        self.tray_icons = tray_icons
+
+        for icon_name, icon_variants in self.tray_icons.items():
+            button = QPushButton()
+            button.setFixedHeight(32)
+            button.setIcon(QIcon(icon_variants["Dark"]))  # Assuming dark theme for now
+            button.setCheckable(True)
+            button.setStyleSheet("background-color: #515151;")
+            button.clicked.connect(lambda checked, btn=button, name=icon_name: self.on_icon_button_clicked(btn, name))
+            layout.addWidget(button)
+            self.icon_buttons.append(button)
+
+        self.setLayout(layout)
+
+    def on_icon_button_clicked(self, button, icon_name):
+        for btn in self.icon_buttons:
+            btn.setChecked(False)
+        button.setChecked(True)
+        print(f"Selected icon: {icon_name}")
+
+        self.parent.tray_icon.changeIconName(icon_name)
+        reg_write_list(config.REGISTRY_PATH, "TrayIcon", [icon_name])
+
+    def select_icon(self, icon_name):
+        if icon_name in self.tray_icons:
+            for button in self.icon_buttons:
+                button.setChecked(False)
+            selected_button = next(btn for btn, name in zip(self.icon_buttons, self.tray_icons.keys()) if name == icon_name)
+            selected_button.setChecked(True)
+            print(f"select_icon Selected icon: {icon_name}")
 
 
 
@@ -126,9 +175,9 @@ class SettingsWindow(QWidget):
         self.setWindowTitle(f"{config.app_name} Settings")
         self.setWindowIcon(QIcon(config.app_icon_path))
         
-        self.resize(450, 450)
+        self.resize(450, 500)
         self.setMinimumWidth(400)
-        self.setMinimumHeight(300)
+        self.setMinimumHeight(500)
 
         settings_layout = QVBoxLayout(self)
         settings_layout.setContentsMargins(0, 0, 0, 0)
@@ -170,10 +219,13 @@ class SettingsWindow(QWidget):
         }
         self.time_adjustment_frames = []
 
-        print(f"Collected time adjustment data: {self.time_adjustment_data}")
-        reg_write_dict(config.REGISTRY_PATH, "TimeAdjustmentData", self.time_adjustment_data)
+        # Sort the time adjustment data by time
+        sorted_time_adjustment_data = dict(sorted(self.time_adjustment_data.items()))
 
-        self.parent.time_adjustment_data = self.time_adjustment_data
+        print(f"Collected time adjustment data: {sorted_time_adjustment_data}")
+        reg_write_dict(config.REGISTRY_PATH, "TimeAdjustmentData", sorted_time_adjustment_data)
+
+        self.parent.time_adjustment_data = sorted_time_adjustment_data
         self.parent.update_scheduler_tasks()
 
 
@@ -189,8 +241,25 @@ class SettingsWindow(QWidget):
 
 
 
-        # MARK: General Tab
+        # MARK: get monitors info
+        monitors_info = get_monitors_info()
 
+        # hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
+        # # Exclude monitors that are in self.hidden_displays
+        # monitors_info = [monitor for monitor in monitors_info if monitor['serial'] not in hidden_displays]
+
+        # Створюємо словник, де ключ — серійний номер
+        monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
+        reg_order = reg_read_list(config.REGISTRY_PATH, "MonitorsOrder")
+        # Сортуємо список моніторів відповідно до порядку з реєстру
+        monitors_order = [serial for serial in reg_order if serial in monitors_dict]
+        # Додаємо монітори, яких немає в реєстрі, в кінець списку
+        monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
+        custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
+
+
+
+        # MARK: General Tab
         general_tab = QWidget()
         # general_tab.setStyleSheet("background-color: blue")
         general_layout = QVBoxLayout(general_tab)
@@ -203,23 +272,81 @@ class SettingsWindow(QWidget):
                                                    "Rounded Corners", 
                                                    "Enable rounded corners for the main window"
                                                    ))
+        general_layout.addWidget(SettingToggle(self.parent, 
+                                               "enable_fusion_theme", 
+                                               "EnableFusionTheme",
+                                               None,
+                                               True)
+                                               .create_toggle(
+                                                   "Fusion Theme", 
+                                                   "Enables Fusion theme. Requires app restart"
+                                                   ))
+
+        icon_widget = ChooseIconWidget(self.parent)
+        icon = reg_read_list(config.REGISTRY_PATH, "TrayIcon")
+        print("Icon:", icon) # ['fluent']
+        icon_widget.select_icon(icon[0] if icon else "monitune")
+        general_layout.addWidget(icon_widget)
 
 
-        # get monitors info
-
-        monitors_info = get_monitors_info()
-        # Створюємо словник, де ключ — серійний номер
-        monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
-        reg_order = reg_read_list(config.REGISTRY_PATH, "MonitorsOrder")
-        # Сортуємо список моніторів відповідно до порядку з реєстру
-        monitors_order = [serial for serial in reg_order if serial in monitors_dict]
-        # Додаємо монітори, яких немає в реєстрі, в кінець списку
-        monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
-        custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
 
 
-        # Add Rename Monitors setting
 
+        # # MARK: Monitor Settings Tab
+        # monitor_settings_tab = QWidget()
+        # # general_tab.setStyleSheet("background-color: blue")
+        # monitor_settings_layout = QVBoxLayout(monitor_settings_tab)
+
+        # self.tab_widget.addTab(monitor_settings_tab, "Monitor Settings")
+
+
+
+
+
+
+        # MARK: Hide Displays
+        hide_displays_widget = QFrame()
+        hide_displays_widget.setFrameShape(QFrame.StyledPanel)
+        hide_displays_layout = QVBoxLayout(hide_displays_widget)
+        hide_displays_label = QLabel("Hide Displays")
+        hide_displays_layout.addWidget(hide_displays_label)
+
+        hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
+        # hidden_displays = list(map(str, filter(None, reg_read_list(config.REGISTRY_PATH, "HiddenDisplays"))))
+        print("reg Hidden displays:", hidden_displays)
+
+        def update_hidden_displays(monitor_id, state):
+            # print(f"Monitor ID: {monitor_id}, State: {state}")
+            if state == 2:
+                if monitor_id not in hidden_displays:
+                    hidden_displays.append(monitor_id)
+            else:
+                if monitor_id in hidden_displays:
+                    hidden_displays.remove(monitor_id)
+            reg_write_list(config.REGISTRY_PATH, "HiddenDisplays", hidden_displays)
+            self.parent.hidden_displays = hidden_displays
+            print(f"Updated hidden displays: {hidden_displays}")
+
+        for monitor_id in monitors_order:
+            checkbox = QCheckBox(f"{monitors_dict[monitor_id]['display_name']}")
+            checkbox.setChecked(monitor_id in hidden_displays)
+            checkbox.stateChanged.connect(lambda state, mid=monitor_id: update_hidden_displays(mid, state))
+            hide_displays_layout.addWidget(checkbox)
+
+        general_layout.addWidget(hide_displays_widget)
+
+
+
+
+
+
+
+
+
+
+
+
+        # MARK: Rename Monitors
         rename_monitors_widget = QFrame()
         rename_monitors_widget.setFrameShape(QFrame.StyledPanel)
         rename_monitors_layout = QVBoxLayout(rename_monitors_widget)
@@ -264,8 +391,7 @@ class SettingsWindow(QWidget):
 
 
 
-        # Add Reorder Monitors setting
-        
+        # MARK: Reorder Monitors
         def save_order():
             monitors_order = [self.list_widget.item(i).data(Qt.UserRole) for i in range(self.list_widget.count())]
             print("New order:", monitors_order)
@@ -338,8 +464,7 @@ class SettingsWindow(QWidget):
                                                         ))
 
 
-        # Add Exclude Refresh Rate setting
-
+        # MARK: Exclude Refresh Rates
         all_rates = set()
         for monitor in monitors_info:
             all_rates.update(monitor['AvailableRefreshRates'])
@@ -474,7 +599,8 @@ class SettingsWindow(QWidget):
         about_layout.addWidget(learn_more_label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.tab_widget.addTab(about_tab, "About")
         
-
+        
+    # MARK: show_parent_window
     def show_parent_window(self):
         QTimer.singleShot(400, self.parent.show)
 

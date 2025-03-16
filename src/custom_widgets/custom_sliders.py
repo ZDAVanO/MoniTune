@@ -2,6 +2,13 @@ from PySide6.QtWidgets import QApplication, QMainWindow, QSlider, QPushButton, Q
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer
 from PySide6.QtGui import QWheelEvent, QKeyEvent
 
+# from custom_widgets.custom_labels import BrightnessIcon
+try:
+    from custom_labels import BrightnessIcon
+except ImportError:
+    print("Importing from custom_widgets")
+    from custom_widgets.custom_labels import BrightnessIcon
+
 import time
 
 class CustomSlider(QSlider):
@@ -67,11 +74,13 @@ class AnimatedSlider(QSlider):
 
 
 class AnimatedSliderBlockSignals(QSlider):
-    def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, label=None, *args, **kwargs):
+    def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, icon=None, label=None, *args, **kwargs):
         super().__init__(orientation, *args, **kwargs)
 
         self.animation = None
         self.scrollStep = scrollStep
+
+        self.icon = icon  # BrightnessIcon to update
         self.label = label  # QLabel to update
 
         self.setMinimum(0)
@@ -94,7 +103,7 @@ class AnimatedSliderBlockSignals(QSlider):
 
         self.blockSignals(True)  # Block signals during animation
         self.animation.finished.connect(lambda: self.blockSignals(False))  
-        self.animation.valueChanged.connect(self.update_label)  # Connect to update label
+        self.animation.valueChanged.connect(self.update_ui_elements)  # Connect to update label
 
         self.animation.start()
     
@@ -103,9 +112,12 @@ class AnimatedSliderBlockSignals(QSlider):
             self.animation.stop()
             self.blockSignals(False)  # Ensure signals are unblocked
 
-    def update_label(self, value):
+    def update_ui_elements(self, value):
         if self.label:
             self.label.setText(str(value))
+
+        if self.icon:
+            self.icon.set_value(value)
 
     # Stop animation when user interacts with the slider
     def wheelEvent(self, event: QWheelEvent):
@@ -114,17 +126,20 @@ class AnimatedSliderBlockSignals(QSlider):
         else:
             self.setValue(self.value() - self.scrollStep)
         self.stop_animation()
-        # self.update_label(self.value())
+        # self.update_ui_elements(self.value())
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
         self.stop_animation()
-        # self.update_label(self.value())
+        self.update_ui_elements(self.value())
 
     def keyPressEvent(self, event: QKeyEvent):
         super().keyPressEvent(event)
         self.stop_animation()
-        # self.update_label(self.value())
+        # self.update_ui_elements(self.value())
+
+    def add_icon(self, icon):
+        self.icon = icon
 
     def add_label(self, label):
         self.label = label
@@ -182,6 +197,14 @@ class SliderAnimationDemo(QMainWindow):
         self.label_slider_button.clicked.connect(lambda: self.label_slider.animate_to(100))
         layout.addWidget(self.label_slider)
         layout.addWidget(self.label_slider_label)
+
+        # Demonstration with BrightnessIcon
+        self.br_icon = BrightnessIcon(icon_path="src/assets/icons/sun_dark.png")
+        self.br_icon.set_value(50)
+        self.label_slider.valueChanged.connect(lambda value, ico=self.br_icon: ico.set_value(value))
+        self.label_slider.add_icon(self.br_icon)
+        layout.addWidget(self.br_icon)
+
         layout.addWidget(self.label_slider_button)
 
         # Connect QLabel to slider's valueChanged signal
