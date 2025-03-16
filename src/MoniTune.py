@@ -81,7 +81,9 @@ class MainWindow(QMainWindow):
         self.window_width = 358
         self.window_height = 231
 
-
+        self.setMinimumWidth(self.window_width)
+        self.setMaximumWidth(self.window_width)
+        
         self.enable_rounded_corners = reg_read_bool(config.REGISTRY_PATH, "EnableRoundedCorners")
         if self.enable_rounded_corners:
             self.window_corner_radius = WIN11_WINDOW_CORNER_RADIUS
