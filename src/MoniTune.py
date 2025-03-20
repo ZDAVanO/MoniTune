@@ -99,7 +99,6 @@ class MainWindow(QMainWindow):
 
 
         self.show_resolution = reg_read_bool(config.REGISTRY_PATH, "ShowResolution")
-        self.allow_res_change = reg_read_bool(config.REGISTRY_PATH, "AllowResolutionChange")
 
 
         self.show_refresh_rates = reg_read_bool(config.REGISTRY_PATH, "ShowRefreshRates")
@@ -127,6 +126,7 @@ class MainWindow(QMainWindow):
 
         self.update_bottom_frame = True # Flag to update bottom frame
         self.connected_monitors = []  # List to store currently connected monitors
+        self.update_connected_monitors()
 
 
         self.win_release = platform.release()
@@ -209,7 +209,8 @@ class MainWindow(QMainWindow):
         # Time adjustment
         self.time_adjustment_startup = reg_read_bool(config.REGISTRY_PATH, "TimeAdjustmentStartup")
         self.time_adjustment_data = reg_read_dict(config.REGISTRY_PATH, "TimeAdjustmentData")
-        self.scheduler = BrightnessScheduler()
+        # self.time_adjustment_data = {}
+        self.scheduler = BrightnessScheduler(self)
         self.update_scheduler_tasks()
         if self.time_adjustment_startup:
             self.scheduler.execute_recent_task()
@@ -522,56 +523,41 @@ class MainWindow(QMainWindow):
             
             
             if self.show_resolution:
-                if self.allow_res_change:
-                    available_resolutions = monitor["AvailableResolutions"]
-                    sorted_resolutions = sorted(available_resolutions, key=lambda res: res[0] * res[1], reverse=True)
-                    formatted_resolutions = [f"{width}x{height}" for width, height in sorted_resolutions]
-                    
-                    res_combobox = NoScrollComboBox()
-                    absolute_icon_path = os.path.abspath(self.down_arrow_icon_path).replace('\\', '/')
-                    res_combobox.setStyleSheet(f"""
-                                               /* Основний стиль QComboBox */
-                                                QComboBox {{
-                                                    font-size: 14px; font-weight: bold;
-                                                    padding-left: 7px;
-                                                    {"background-color: " + self.rr_fg_color + ";" if not self.enable_fusion_theme else ""}
+                available_resolutions = monitor["AvailableResolutions"]
+                sorted_resolutions = sorted(available_resolutions, key=lambda res: res[0] * res[1], reverse=True)
+                formatted_resolutions = [f"{width}x{height}" for width, height in sorted_resolutions]
+                
+                res_combobox = NoScrollComboBox()
+                absolute_icon_path = os.path.abspath(self.down_arrow_icon_path).replace('\\', '/')
+                res_combobox.setStyleSheet(f"""
+                                            /* Основний стиль QComboBox */
+                                            QComboBox {{
+                                                font-size: 14px; font-weight: bold;
+                                                padding-left: 7px;
+                                                {"background-color: " + self.rr_fg_color + ";" if not self.enable_fusion_theme else ""}
+                                            }}
+                                            /* Стиль випадаючого списку */
+                                            QComboBox QAbstractItemView {{
+                                                padding: 0px;
+                                            }}
+                                            QComboBox::drop-down {{
+                                                border: 0px;
+                                            }}
+                                            QComboBox::down-arrow {{
+                                                image: url('{absolute_icon_path}'); /* Використовуйте прямі слеші */
+                                                width: 11px;
+                                                height: 11px;
+                                                margin-right: 10px;
                                                 }}
-                                                /* Стиль випадаючого списку */
-                                                QComboBox QAbstractItemView {{
-                                                    padding: 0px;
-                                                }}
-                                                QComboBox::drop-down {{
-                                                    border: 0px;
-                                                }}
-                                                QComboBox::down-arrow {{
-                                                    image: url('{absolute_icon_path}'); /* Використовуйте прямі слеші */
-                                                    width: 11px;
-                                                    height: 11px;
-                                                    margin-right: 10px;
-                                                    }}
-                                                """)
-                    res_combobox.setFixedWidth(120)
-                    # res_combobox.setFixedWidth(105)
-                    res_combobox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
-                    res_combobox.addItems(formatted_resolutions)
-                    res_combobox.setCurrentText(monitor["Resolution"])
-                    res_combobox.currentIndexChanged.connect(lambda index, m=monitor, cb=res_combobox: self.on_resolution_select(m, cb.currentText()))
-                    label_hbox.addWidget(res_combobox)
-                else:
-                    res_label = QLabel(monitor['Resolution'])
-                    res_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    # res_label.setMinimumWidth(105)
-                    res_label.setFixedWidth(105)
-                    res_label.setStyleSheet(f"""
-                                            font-size: 14px; font-weight: bold; 
-                                            background-color: {self.rr_fg_color}; 
-                                            border: 1px solid {self.rr_border_color};  
-                                            border-radius: {6 if self.enable_rounded_corners else 0}px; 
-
-                                            padding: 3px;
-                                            padding-bottom: 3px;
                                             """)
-                    label_hbox.addWidget(res_label)
+                res_combobox.setFixedWidth(120)
+                # res_combobox.setFixedWidth(105)
+                res_combobox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+                res_combobox.addItems(formatted_resolutions)
+                res_combobox.setCurrentText(monitor["Resolution"])
+                res_combobox.currentIndexChanged.connect(lambda index, m=monitor, cb=res_combobox: self.on_resolution_select(m, cb.currentText()))
+                label_hbox.addWidget(res_combobox)
+
 
             monitor_vbox.addWidget(label_frame)
             
@@ -1059,5 +1045,9 @@ if __name__ == "__main__":
 
 
     window = MainWindow()
-    window.show()
+
+    if not getattr(sys, 'frozen', False): # if run from source code
+        pass
+        window.show()
+
     app.exec()

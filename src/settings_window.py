@@ -438,13 +438,6 @@ class SettingsWindow(QWidget):
                                                       "Show Resolutions",
                                                       "Show resolution for each monitor"
                                                       ))
-        resolution_layout.addWidget(SettingToggle(self.parent,
-                                                  "allow_res_change",
-                                                  "AllowResolutionChange")
-                                                  .create_toggle(
-                                                      "Allow Resolution Change",
-                                                      "Allow changing the resolution of monitors"
-                                                      ))
 
 
         self.tab_widget.addTab(resolution_tab, "Resolution")

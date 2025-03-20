@@ -6,7 +6,6 @@ from PySide6.QtGui import QWheelEvent, QKeyEvent
 try:
     from custom_labels import BrightnessIcon
 except ImportError:
-    print("Importing from custom_widgets")
     from custom_widgets.custom_labels import BrightnessIcon
 
 import time

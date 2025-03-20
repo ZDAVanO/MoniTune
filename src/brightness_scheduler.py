@@ -5,7 +5,8 @@ import sys
 
 
 class BrightnessScheduler:
-    def __init__(self):
+    def __init__(self, parent=None):
+        self.parent = parent
         self.tasks = {}
         self.timer = QTimer()
         self.timer.timeout.connect(self.check_all_tasks)
@@ -37,11 +38,14 @@ class BrightnessScheduler:
         print("Task checking stopped")
 
     def start_checking(self, interval=60000):
-        if self.tasks:
-            self.timer.start(interval)
-            print("Task checking started")
-        else:
-            print("No tasks to check, timer not started")
+        # if self.tasks:
+        #     self.timer.start(interval)
+        #     print("Task checking started")
+        # else:
+        #     print("No tasks to check, timer not started")
+        print("Task checking started")
+        self.last_check_time = QDateTime.currentDateTime()
+        self.timer.start(interval)
 
 
     def check_all_tasks(self):
@@ -53,7 +57,11 @@ class BrightnessScheduler:
         print(f"Time difference: {time_diff} seconds")
         if time_diff > 120:  # more than 2 minutes
             print("Time difference is more than 2 minutes, waiting for monitors to turn on")
-            QTimer.singleShot(10000, self.execute_recent_task) # wait for monitors to turn on
+            if self.tasks:
+                QTimer.singleShot(10000, self.execute_recent_task) # wait for monitors to turn on
+            else:
+                print("No tasks to execute, restore last change")
+                QTimer.singleShot(10000, self.parent.brightness_sync_onetime) # wait for monitors to turn on
         elif current_time in self.tasks:
             self.tasks[current_time]()  # execute the callback
         else:
@@ -64,7 +72,9 @@ class BrightnessScheduler:
 
     def execute_recent_task(self):
         if not self.tasks:
-            print("No tasks found")
+            print("execute_recent_task: No tasks found")
+            print("Restoring last change")
+            self.parent.brightness_sync_onetime()
             return
 
         current_time = QTime.currentTime().toString("HH:mm")
