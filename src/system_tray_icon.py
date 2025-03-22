@@ -7,6 +7,7 @@ from config import tray_icons
 
 import darkdetect
 
+import os
 
 
 
@@ -33,6 +34,11 @@ class SystemTrayIcon(QSystemTrayIcon):
         
         settings_action = tray_menu.addAction("Settings")
         settings_action.triggered.connect(parent.openSettingsWindow)  # Connect to openSettingsWindow method
+        
+        tray_menu.addSeparator()
+
+        display_settings_action = tray_menu.addAction("Display Settings")  # New menu option
+        display_settings_action.triggered.connect(self.open_display_settings)  # Connect to new method
         
         tray_menu.addSeparator()  # Add separator before Exit action
         
@@ -78,4 +84,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
     def on_message_click(self):
         print("on_message_click")
+
+    def open_display_settings(self):
+        os.system("start ms-settings:display")  # Opens Windows display settings
 
