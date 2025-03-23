@@ -43,7 +43,7 @@ def reg_write_bool(reg_path, dword_name, value):
         print(f"Error writing to registry: {e}")
 
 
-def reg_read_bool(reg_path, dword_name):
+def reg_read_bool(reg_path, dword_name, def_value=True):
     try:
         if not key_exists(reg_path):
             create_reg_key(reg_path)
@@ -53,10 +53,10 @@ def reg_read_bool(reg_path, dword_name):
                 value, _ = winreg.QueryValueEx(key, dword_name)
                 return bool(value)
             except FileNotFoundError:
-                return True
+                return def_value
     except Exception as e:
         print(f"Error reading from registry: {e}")
-        return True
+        return def_value
 
 
 def reg_write_list(reg_path, dword_name, list):

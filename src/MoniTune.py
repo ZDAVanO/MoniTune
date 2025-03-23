@@ -130,7 +130,7 @@ class MainWindow(QMainWindow):
 
 
         self.win_release = platform.release()
-        self.enable_fusion_theme = reg_read_bool(config.REGISTRY_PATH, "EnableFusionTheme")
+        self.enable_fusion_theme = reg_read_bool(config.REGISTRY_PATH, "EnableFusionTheme", False)
         if self.enable_fusion_theme:
             QApplication.instance().setStyle("Fusion")
         self.update_theme_colors(darkdetect.theme())
@@ -830,10 +830,9 @@ class MainWindow(QMainWindow):
                             print(f"brightness_sync set_brightness {monitor_serial} {brightness}")
                             set_brightness(monitor_serial, brightness)
                             self.previous_brightness_values[monitor_serial] = brightness
+                            reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
                     except Exception as e:
                         print(f"Error: {e}")
-            
-            reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
             
             first_iteration = False
             
