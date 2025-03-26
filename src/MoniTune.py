@@ -76,6 +76,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.win_release = platform.release()
+        print(f"Windows release: {self.win_release}")
+
         self.is_laptop = is_laptop()
 
         self.window_width = 358
@@ -84,7 +87,7 @@ class MainWindow(QMainWindow):
         self.setMinimumWidth(self.window_width)
         self.setMaximumWidth(self.window_width)
         
-        self.enable_rounded_corners = reg_read_bool(config.REGISTRY_PATH, "EnableRoundedCorners")
+        self.enable_rounded_corners = reg_read_bool(config.REGISTRY_PATH, "EnableRoundedCorners", False if self.win_release != "11" else True)
         if self.enable_rounded_corners:
             self.window_corner_radius = WIN11_WINDOW_CORNER_RADIUS
             self.window_offset = WIN11_WINDOW_OFFSET
@@ -129,7 +132,6 @@ class MainWindow(QMainWindow):
         self.update_connected_monitors()
 
 
-        self.win_release = platform.release()
         self.enable_fusion_theme = reg_read_bool(config.REGISTRY_PATH, "EnableFusionTheme", False)
         if self.enable_fusion_theme:
             QApplication.instance().setStyle("Fusion")
