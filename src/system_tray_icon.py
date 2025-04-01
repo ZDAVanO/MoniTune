@@ -1,7 +1,7 @@
 from PySide6.QtGui import QIcon, QGuiApplication
 from PySide6.QtWidgets import QSystemTrayIcon, QMenu
 
-from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
+from utils.reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 import config
 from config import tray_icons
 
@@ -39,6 +39,9 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         display_settings_action = tray_menu.addAction("Display Settings")  # New menu option
         display_settings_action.triggered.connect(self.open_display_settings)  # Connect to new method
+
+        night_light_settings_action = tray_menu.addAction("Night Light Settings")  # New menu option
+        night_light_settings_action.triggered.connect(self.open_night_light_settings)  # Connect to new method
         
         tray_menu.addSeparator()  # Add separator before Exit action
         
@@ -87,4 +90,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
     def open_display_settings(self):
         os.system("start ms-settings:display")  # Opens Windows display settings
+
+    def open_night_light_settings(self):
+        os.system("start ms-settings:nightlight")
 

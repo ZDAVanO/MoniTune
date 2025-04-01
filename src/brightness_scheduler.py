@@ -1,16 +1,46 @@
-from PySide6.QtCore import QTimer, QTime, QDateTime, QThread, QCoreApplication
+from PySide6.QtCore import QTimer, QTime, QDateTime, QThread, QCoreApplication, QObject, Signal, Slot, QMetaObject, Qt
 from PySide6.QtWidgets import QApplication
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from MoniTune import MainWindow  # Пізнє визначення типу
+
+from utils.utils import get_idle_time
+from utils.lock_detect import LockDetect
 import sys
 
+import threading
 
-class BrightnessScheduler:
-    def __init__(self, parent=None):
+class BrightnessScheduler(QObject):
+    def __init__(self, parent: 'MainWindow'):
+        super().__init__()
+
         self.parent = parent
         self.tasks = {}
         self.timer = QTimer()
         self.timer.timeout.connect(self.check_all_tasks)
         self.last_check_time = QDateTime.currentDateTime()
+
+        self.time_active = 0  # Час активності комп'ютера
+        self.saved_time = 0
+
+        self.lock_listener = LockDetect(self.on_lock_state_change)
+        threading.Thread(target=self.lock_listener.run, daemon=True).start()
+
+
+    @Slot(str)
+    def on_lock_state_change(self, state):
+        if state == "unlocked":
+            print("Screen unlocked at:", QTime.currentTime().toString("HH:mm"))
+            print("Starting delayed task")
+            threading.Timer(10, self.execute_recent_task).start()  # Виконати через 10 секунд
+            # self.start_checking()
+            QMetaObject.invokeMethod(self, "start_checking", Qt.QueuedConnection)
+
+        elif state == "locked":
+            print("Screen locked at:", QTime.currentTime().toString("HH:mm"))
+            # self.stop_checking()
+            QMetaObject.invokeMethod(self, "stop_checking", Qt.QueuedConnection)
 
 
     def get_tasks(self):
@@ -28,15 +58,16 @@ class BrightnessScheduler:
             print(f"No task found at {time_str}")
         
     def clear_all_tasks(self):
+        self.stop_checking()
         self.tasks.clear()
         print("All tasks cleared")
-        self.stop_timer()
 
-
-    def stop_timer(self):
+    @Slot()
+    def stop_checking(self):
         self.timer.stop()
         print("Task checking stopped")
 
+    @Slot()
     def start_checking(self, interval=60000):
         # if self.tasks:
         #     self.timer.start(interval)
@@ -51,23 +82,47 @@ class BrightnessScheduler:
     def check_all_tasks(self):
         current_time = QTime.currentTime().toString("HH:mm")
         current_datetime = QDateTime.currentDateTime()
-        time_diff = self.last_check_time.secsTo(current_datetime)
 
         print(f"Checking tasks at: {current_time}")
-        print(f"Time difference: {time_diff} seconds")
-        if time_diff > 120:  # more than 2 minutes
-            print("Time difference is more than 2 minutes, waiting for monitors to turn on")
-            if self.tasks:
-                QTimer.singleShot(10000, self.execute_recent_task) # wait for monitors to turn on
-            else:
-                print("No tasks to execute, restore last change")
-                QTimer.singleShot(10000, self.parent.brightness_sync_onetime) # wait for monitors to turn on
-        elif current_time in self.tasks:
+
+        if current_time in self.tasks:
             self.tasks[current_time]()  # execute the callback
         else:
             print("No tasks at this time")
 
         self.last_check_time = current_datetime
+
+
+        # MARK: Check idle time
+        if not self.parent.enable_break_reminders:
+            self.time_active = 0
+            self.saved_time = 0
+        else:
+            idle_time = get_idle_time()
+            if idle_time is not None:
+                print(f"idle_time: {idle_time:.2f}")
+
+                if idle_time > 5 * 60:
+                    print("idle 5min, reset time_active")
+                    self.time_active = 0
+                    self.saved_time = 0
+                elif idle_time < 60 * 1.0:
+                    self.time_active += 60
+                    self.time_active += self.saved_time
+                    self.saved_time = 0
+                    if self.time_active >= 30 * 60:
+                        print("active more 30 min!, show notification")
+                        self.parent.break_notification()
+                        self.time_active = 0
+                else:
+                    self.saved_time += 60
+
+                print(f"time_active: {self.time_active / 60} min, saved_time: {self.saved_time / 60} min")
+            
+
+
+        print()
+
         
 
     def execute_recent_task(self):

@@ -32,8 +32,8 @@ from custom_widgets.custom_labels import BrightnessIcon
 
 from brightness_scheduler import BrightnessScheduler
 
-from monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, get_brightness, set_brightness, set_resolution
-from reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
+from utils.monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, get_brightness, set_brightness, set_resolution
+from utils.reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 import config
 from config import WIN11_WINDOW_CORNER_RADIUS, WIN11_WINDOW_OFFSET
 
@@ -81,11 +81,6 @@ class MainWindow(QMainWindow):
 
         self.is_laptop = is_laptop()
 
-        self.window_width = 358
-        self.window_height = 231
-
-        self.setMinimumWidth(self.window_width)
-        self.setMaximumWidth(self.window_width)
         
         self.enable_rounded_corners = reg_read_bool(config.REGISTRY_PATH, "EnableRoundedCorners", False if self.win_release != "11" else True)
         if self.enable_rounded_corners:
@@ -94,6 +89,15 @@ class MainWindow(QMainWindow):
         else:
             self.window_corner_radius = 0
             self.window_offset = 0
+
+        self.enable_fusion_theme = reg_read_bool(config.REGISTRY_PATH, "EnableFusionTheme", False)
+        if self.enable_fusion_theme:
+            QApplication.instance().setStyle("Fusion")
+        self.update_theme_colors(darkdetect.theme())
+
+        self.enable_break_reminders = reg_read_bool(config.REGISTRY_PATH, "EnableBreakReminders", False)
+
+        self.hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
 
         self.custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
         print(f"custom_monitor_names {self.custom_monitor_names}")
@@ -111,7 +115,9 @@ class MainWindow(QMainWindow):
         
         self.restore_last_brightness = reg_read_bool(config.REGISTRY_PATH, "RestoreLastBrightness")
         
-        self.hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
+        self.brightness_values = reg_read_dict(config.REGISTRY_PATH, "BrightnessValues")
+        print(f"self.brightness_values {self.brightness_values}")
+        self.previous_brightness_values = {}  # Dictionary to store previous brightness values
 
 
 
@@ -122,23 +128,20 @@ class MainWindow(QMainWindow):
         self.window_open = False
         self.brightness_sync_thread = None
 
-        self.brightness_values = reg_read_dict(config.REGISTRY_PATH, "BrightnessValues")
-        print(f"self.brightness_values {self.brightness_values}")
-        self.previous_brightness_values = {}  # Dictionary to store previous brightness values
-
-
         self.update_bottom_frame = True # Flag to update bottom frame
+
         self.connected_monitors = []  # List to store currently connected monitors
         self.update_connected_monitors()
 
 
-        self.enable_fusion_theme = reg_read_bool(config.REGISTRY_PATH, "EnableFusionTheme", False)
-        if self.enable_fusion_theme:
-            QApplication.instance().setStyle("Fusion")
-        self.update_theme_colors(darkdetect.theme())
-
 
         self.setWindowTitle("MoniTune")
+
+        self.window_width = 358
+        self.window_height = 231
+
+        self.setMinimumWidth(self.window_width)
+        self.setMaximumWidth(self.window_width)
         self.resize(self.window_width, self.window_height)
 
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
@@ -225,6 +228,14 @@ class MainWindow(QMainWindow):
         # self.openSettingsWindow() # Open settings window on startup
 
         
+
+    def break_notification(self):
+        self.tray_icon.show_notification(
+            "Take a break from the screen!",
+            "Look at lest 6 meters away from the screen for 20 seconds.",
+            # QIcon(config.app_icon_path) 
+            QIcon(self.eye_icon_path)
+        )
 
 
     # MARK: update_scheduler_tasks()
@@ -320,6 +331,8 @@ class MainWindow(QMainWindow):
             self.sun_icon_path = config.sun_icon_light_path
 
             self.down_arrow_icon_path = config.down_arrow_icon_light_path
+
+            self.eye_icon_path = config.eye_icon_light_path
         else:
             # colors for dark theme
             self.bg_color = config.bg_color_dark
@@ -343,6 +356,8 @@ class MainWindow(QMainWindow):
             self.sun_icon_path = config.sun_icon_dark_path
 
             self.down_arrow_icon_path = config.down_arrow_icon_dark_path
+
+            self.eye_icon_path = config.eye_icon_dark_path
 
         # print("Checking MEIPASS contents:")
         # print(os.listdir(sys._MEIPASS))

@@ -6,7 +6,7 @@ import sys
 
 app_name = "MoniTune"
 
-version = "0.3.0"
+version = "0.3.5"
 
 REGISTRY_PATH = r"Software\MoniTune\Settings"
 
@@ -74,6 +74,9 @@ if getattr(sys, 'frozen', False):
     down_arrow_icon_light_path = os.path.join(sys._MEIPASS, 'down_arrow_light.png')
     down_arrow_icon_dark_path = os.path.join(sys._MEIPASS, 'down_arrow_dark.png')
 
+    eye_icon_light_path = os.path.join(sys._MEIPASS, 'eye_light.png')
+    eye_icon_dark_path = os.path.join(sys._MEIPASS, 'eye_dark.png')
+
 
 else:
     # Якщо програма запущена з Python, використовуємо поточну директорію
@@ -100,6 +103,9 @@ else:
 
     down_arrow_icon_light_path = 'src/assets/icons/down_arrow_light.png'
     down_arrow_icon_dark_path = 'src/assets/icons/down_arrow_dark.png'
+
+    eye_icon_light_path = 'src/assets/icons/eye_light.png'
+    eye_icon_dark_path = 'src/assets/icons/eye_dark.png'
 
 
 # MARK: Tray Icons
