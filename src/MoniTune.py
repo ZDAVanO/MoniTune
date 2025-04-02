@@ -1,12 +1,26 @@
-from PySide6.QtCore import QEvent, QSize, Qt, QPropertyAnimation, QRect, QEasingCurve, QTimer
-from PySide6.QtGui import QIcon, QGuiApplication, QWheelEvent, QKeyEvent, QFont
+from PySide6.QtCore import (
+    Qt, 
+    QTimer, 
+    QPropertyAnimation, 
+    QEasingCurve, 
+    Signal,
+    QEvent, 
+    QSize, 
+    QRect, 
+)
+from PySide6.QtGui import (
+    QIcon, 
+    QGuiApplication, 
+    QWheelEvent, 
+    QKeyEvent, 
+    QFont
+)
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QStyle,
-    QToolButton,
     QVBoxLayout,
     QWidget,
     QMenu,
@@ -32,8 +46,25 @@ from custom_widgets.custom_labels import BrightnessIcon
 
 from brightness_scheduler import BrightnessScheduler
 
-from utils.monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, get_brightness, set_brightness, set_resolution
-from utils.reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
+from utils.monitor_utils import (
+    get_monitors_info, 
+    print_mi, 
+    set_refresh_rate, 
+    set_refresh_rate_br, 
+    get_brightness, 
+    set_brightness, 
+    set_resolution,
+    set_contrast_mc,
+    get_contrast_mc
+)
+from utils.reg_utils import (
+    reg_write_bool, 
+    reg_read_bool, 
+    reg_write_list, 
+    reg_read_list, 
+    reg_write_dict, 
+    reg_read_dict
+)
 import config
 from config import WIN11_WINDOW_CORNER_RADIUS, WIN11_WINDOW_OFFSET
 
@@ -73,8 +104,13 @@ class SeparatorLine(QFrame):
 
 # MARK: MainWindow
 class MainWindow(QMainWindow):
+
+    theme_changed = Signal(str)
+
     def __init__(self):
         super().__init__()
+
+        self.theme_changed.connect(self._apply_theme_change)
 
         self.win_release = platform.release()
         print(f"Windows release: {self.win_release}")
@@ -362,15 +398,18 @@ class MainWindow(QMainWindow):
         # print("Checking MEIPASS contents:")
         # print(os.listdir(sys._MEIPASS))
 
+
+
     # MARK: on_theme_change()
     def on_theme_change(self, theme: str): # "Light" or "Dark"
         print(f"Theme changed to: {theme}")
+        self.theme_changed.emit(theme)  # emit the signal to apply the theme change
+
+    def _apply_theme_change(self, theme: str):
         self.update_theme_colors(theme)
         self.update_central_widget()
         self.update_bottom_frame = True
         self.tray_icon.changeIconTheme(theme)
-
-        
 
 
 
@@ -449,7 +488,6 @@ class MainWindow(QMainWindow):
             placeholder_label.setStyleSheet("""
                                             font-size: 16px;
                                             font-weight: bold;
-                                            color: lightgray;
                                             """)
             placeholder_layout.addWidget(placeholder_label)
 
@@ -458,7 +496,12 @@ class MainWindow(QMainWindow):
             return
 
 
-        print(f"monitors_info {monitors_info}")
+        # print(f"monitors_info {monitors_info}")
+        print_mi(monitors_info)
+        print("monitors order: ", ", ".join(
+            f"{self.custom_monitor_names[monitor_serial] if monitor_serial in self.custom_monitor_names else monitor['display_name']} ({monitor_serial})"
+            for monitor_serial in self.monitors_order
+        ))
         # monitors_info.reverse()  # Invert the order of monitors
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
         # Сортуємо список моніторів відповідно до порядку з реєстру
@@ -478,6 +521,7 @@ class MainWindow(QMainWindow):
 
             monitor = monitors_dict[monitor_serial]
 
+            # print("get_contrast: ", get_contrast_mc(monitor["mc_obj"]))
             
             monitor_frame = QWidget()
             monitor_frame.setObjectName("MonitorsFrame")
@@ -789,7 +833,7 @@ class MainWindow(QMainWindow):
         print(f"Selected refresh rate: {rate} Hz for monitor {monitor["serial"]}")
         # print(monitor)
 
-        set_refresh_rate_br(monitor, rate, refresh=False)
+        set_refresh_rate_br(monitor, rate)
 
         monitors_info = get_monitors_info()
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}

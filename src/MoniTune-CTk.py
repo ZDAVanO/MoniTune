@@ -425,7 +425,7 @@ class MonitorTuneApp:
     def on_refresh_rate_btn(self, monitor_serial, monitor, value, frame):
         print(f"on_refresh_rate_btn {monitor_serial} {value}")
 
-        set_refresh_rate_br(monitor, value, refresh=False)
+        set_refresh_rate_br(monitor, value)
 
         monitors_info = get_monitors_info()
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}

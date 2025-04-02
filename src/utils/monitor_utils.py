@@ -1,4 +1,3 @@
-
 import win32api, win32con
 import ctypes
 from ctypes import wintypes
@@ -6,6 +5,9 @@ import time
 import threading
 
 import screen_brightness_control as sbc
+
+from monitorcontrol import get_monitors, VCPError
+
 
 
 # MARK: get_available_refresh_rates()
@@ -20,6 +22,7 @@ def get_available_refresh_rates(device):
         except Exception:
             break
     return sorted(refresh_rates)
+
 
 
 # MARK: get_available_resolutions()
@@ -73,6 +76,7 @@ def get_monitors_info():
     enum_display_monitors(None, None, MonitorEnumProc(monitor_enum_proc), 0)
 
     sbc_info = sbc.list_monitors_info()
+    monitorcontrol_monitors = get_monitors()
     for index, monitor in enumerate(monitors):
         monitor["name"] = sbc_info[index]["name"]
         monitor["model"] = sbc_info[index]["model"]
@@ -84,14 +88,10 @@ def get_monitors_info():
             monitor["display_name"] = f"DISPLAY{index + 1}"
         else:
             monitor["display_name"] = f"{monitor['manufacturer']} ({index + 1})"
-
-    # for monitor in monitors:
-    #     print(monitor)
-    # print("get_monitors_info()")
+        
+        monitor["mc_obj"] = monitorcontrol_monitors[index]
 
     return monitors
-
-
 
 
 
@@ -115,9 +115,8 @@ def set_refresh_rate(monitor, refresh_rate):
 
 
 
-
 # MARK: set_refresh_rate_br()
-def set_refresh_rate_br(monitor, refresh_rate, refresh=False):
+def set_refresh_rate_br(monitor, refresh_rate):
     # Refresh monitor data
     monitors_info = get_monitors_info()
     monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
@@ -136,11 +135,6 @@ def set_refresh_rate_br(monitor, refresh_rate, refresh=False):
 
     set_refresh_rate(monitor, refresh_rate)
 
-    # Refresh the icon menu
-    if refresh:
-        pass
-        # icon.menu = pystray.Menu(*create_menu(get_monitors_info()))
-
     # Restore brightness in a separate thread
     def restore_brightness():
         time.sleep(5)
@@ -155,10 +149,6 @@ def set_refresh_rate_br(monitor, refresh_rate, refresh=False):
 
 
 
-
-
-
-
 # MARK: set_brightness()
 def set_brightness(monitor_serial, br_value):
         # monitor_serial = get_monitors_info()[monitor_index]['serial']
@@ -168,10 +158,6 @@ def set_brightness(monitor_serial, br_value):
 # MARK: get_brightness()
 def get_brightness(display):
     return sbc.get_brightness(display=display)
-
-
-
-
 
 
 
@@ -188,21 +174,45 @@ def set_resolution(device, width, height):
 
 
 
+def set_contrast_mc(mc_obj, contrast_value):
+    with mc_obj:
+        try:
+            mc_obj.set_contrast(contrast_value)
+        except ValueError as e:
+            print(f"Contrast outside of valid range: {e}")
+        except VCPError as e:
+            print(f"Failed to set contrast in the VCP: {e}")
 
+
+# MARK: get_contrast()
+def get_contrast_mc(mc_obj):
+    with mc_obj:
+        try:
+            return mc_obj.get_contrast()
+        except VCPError as e:
+            print(f"Failed to get contrast: {e}")
+            return None 
+
+
+# MARK: print_mi()
+def print_mi(monitors_info):
+    print("Monitors Info:")
+    for monitor in monitors_info:
+        print(f"    Display: {monitor['display_name']} ({monitor['serial']})")
+        for key, value in monitor.items():
+            print(f"        {key}: {value}")
 
 
 
 # MARK: main
 if __name__ == "__main__":
 
+    start_time = time.time()
+
     monitors_info = get_monitors_info()
+    
+    end_time = time.time()
+    print(f"Execution time for get_monitors_info(): {end_time - start_time:.2f} seconds")
 
-    for monitor in monitors_info:
-        print(monitor)
-        print()
+    print_mi(monitors_info)
 
-
-    # if monitors_info:
-    #     first_monitor = monitors_info[0]
-    #     device = first_monitor["Device"]
-    #     set_resolution(device, 1920, 1080)
