@@ -10,6 +10,11 @@ from monitorcontrol import get_monitors, VCPError
 
 
 
+VCP_CONTRAST_CODE = 0x12
+PHYSICAL_MONITOR_DESCRIPTION_SIZE = 128
+
+
+
 # MARK: get_available_refresh_rates()
 def get_available_refresh_rates(device):
     refresh_rates = set()
@@ -40,6 +45,12 @@ def get_available_resolutions(device):
     return sorted(resolutions)
 
 
+
+class _PHYSICAL_MONITOR(ctypes.Structure):
+    _fields_ = [('hPhysicalMonitor', wintypes.HANDLE), 
+                ('szPhysicalMonitorDescription', 
+                           wintypes.WCHAR * PHYSICAL_MONITOR_DESCRIPTION_SIZE)]
+    
 # MARK: get_monitors_info()
 def get_monitors_info():
 
@@ -56,6 +67,7 @@ def get_monitors_info():
             available_resolutions = get_available_resolutions(device)
             monitors.append({
                 "Device": device,
+                "hMonitor": hMonitor,
                 "RefreshRate": devmode.DisplayFrequency,
                 "AvailableRefreshRates": available_refresh_rates,
                 "Resolution": f"{devmode.PelsWidth}x{devmode.PelsHeight}",
@@ -64,7 +76,11 @@ def get_monitors_info():
         return True
 
     # Define the callback type
-    MonitorEnumProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC, ctypes.POINTER(wintypes.RECT), wintypes.LPARAM)
+    MonitorEnumProc = ctypes.WINFUNCTYPE(wintypes.BOOL, 
+                                         wintypes.HMONITOR, 
+                                         wintypes.HDC, 
+                                         ctypes.POINTER(wintypes.RECT), 
+                                         wintypes.LPARAM)
 
     # Load the function from user32.dll
     user32 = ctypes.WinDLL('user32', use_last_error=True)
@@ -78,17 +94,36 @@ def get_monitors_info():
     sbc_info = sbc.list_monitors_info()
     monitorcontrol_monitors = get_monitors()
     for index, monitor in enumerate(monitors):
+        monitor["index"] = index
         monitor["name"] = sbc_info[index]["name"]
         monitor["model"] = sbc_info[index]["model"]
         monitor["serial"] = sbc_info[index]["serial"]
         monitor["manufacturer"] = sbc_info[index]["manufacturer"]
         monitor["manufacturer_id"] = sbc_info[index]["manufacturer_id"]
 
+        if sbc_info[index]["method"] == sbc.windows.WMI:
+            monitor["method"] = "WMI"
+        elif sbc_info[index]["method"] == sbc.windows.VCP:
+            monitor["method"] = "VCP"
+        else:
+            monitor["method"] = sbc_info[index]["method"]
+        
         if monitor["manufacturer"] is None:
             monitor["display_name"] = f"DISPLAY{index + 1}"
         else:
             monitor["display_name"] = f"{monitor['manufacturer']} ({index + 1})"
         
+        monitor_number = wintypes.DWORD()
+        if not ctypes.windll.dxva2.GetNumberOfPhysicalMonitorsFromHMONITOR(
+                                         monitor["hMonitor"], ctypes.byref(monitor_number)):
+            raise ctypes.WinError()
+        physical_monitor_array = (_PHYSICAL_MONITOR * monitor_number.value)()
+        if not ctypes.windll.dxva2.GetPhysicalMonitorsFromHMONITOR(
+                               monitor["hMonitor"], monitor_number, physical_monitor_array):
+            raise ctypes.WinError()
+        for physical_monitor in physical_monitor_array:
+            monitor["hPhysicalMonitor"] = physical_monitor.hPhysicalMonitor
+
         monitor["mc_obj"] = monitorcontrol_monitors[index]
 
     return monitors
@@ -174,24 +209,55 @@ def set_resolution(device, width, height):
 
 
 
-def set_contrast_mc(mc_obj, contrast_value):
-    with mc_obj:
-        try:
-            mc_obj.set_contrast(contrast_value)
-        except ValueError as e:
-            print(f"Contrast outside of valid range: {e}")
-        except VCPError as e:
-            print(f"Failed to set contrast in the VCP: {e}")
+def get_vcf_feature_and_vcf_feature_reply(handle, code):
+        """Get current and maximun values for continuous VCP codes"""
+        current_value = wintypes.DWORD()
+        maximum_value = wintypes.DWORD()
+        if not ctypes.windll.dxva2.GetVCPFeatureAndVCPFeatureReply(
+                                       handle, wintypes.BYTE(code), None, 
+                                       ctypes.byref(current_value), 
+                                       ctypes.byref(maximum_value)):
+            raise ctypes.WinError()
+        return current_value.value, maximum_value.value
 
+def set_vcp_feature(handle, code, value):
+        """Set 'code' to 'value'"""
+        if not ctypes.windll.dxva2.SetVCPFeature(handle, 
+                                    wintypes.BYTE(code), wintypes.DWORD(value)):
+            raise ctypes.WinError()
+        
 
-# MARK: get_contrast()
-def get_contrast_mc(mc_obj):
-    with mc_obj:
-        try:
-            return mc_obj.get_contrast()
-        except VCPError as e:
-            print(f"Failed to get contrast: {e}")
-            return None 
+def get_contrast_vcp(handle):
+    try:
+        return get_vcf_feature_and_vcf_feature_reply(handle, VCP_CONTRAST_CODE)[0]
+    except Exception as e:
+        print(f"Failed to get contrast: {e}")
+        return None
+
+def set_contrast_vcp(handle, value):
+        # current, max = get_vcf_feature_and_vcf_feature_reply(handle, VCP_CONTRAST_CODE)
+        # if value == current:
+        #     return
+        # if value > max:
+        #     value = max
+        # elif value < 0:
+        #     value = 0
+
+        if value > 100:
+            value = 100
+        elif value < 0:
+            value = 0
+
+        set_vcp_feature(handle, VCP_CONTRAST_CODE, value)
+
+def set_contrast_s(serial, contrast_value):
+    monitors_info = get_monitors_info()
+    for monitor in monitors_info:
+        if monitor["serial"] == serial:
+            set_contrast_vcp(monitor["hPhysicalMonitor"], contrast_value)
+            return
+    print(f"set_contrast_s: Monitor with serial '{serial}' not found")
+
 
 
 # MARK: print_mi()
@@ -209,10 +275,39 @@ if __name__ == "__main__":
 
     start_time = time.time()
 
-    monitors_info = get_monitors_info()
+    # monitors_info = get_monitors_info()
+    # print_mi(monitors_info)
+
+    # sbc_info = sbc.list_monitors_info()
+    # print(f"sbc_info: {sbc_info}")
+
+    # mc_monitors = get_monitors()
+    # print(f"mc_monitors: {mc_monitors}")
+
+
+    # with mc_monitors[1]:
+    #     try:
+    #         print(f"contrast: {mc_monitors[1].get_contrast()}")
+    #     except VCPError as e:
+    #         print(f"Failed to get contrast for monitor: {e}")
     
+    
+    # print(get_contrast_vcp(monitors_info[1]["hPhysicalMonitor"]))
+    # set_contrast_vcp(monitors_info[1]["hPhysicalMonitor"], 100)
+
+    # for monitor in monitors_info:
+    #     if monitor['method'] == sbc.windows.WMI:
+    #         print(f"Monitor {monitor['name']} використовує WMI для управління яскравістю.")
+    #     elif monitor['method'] == sbc.windows.VCP:
+    #         print(f"Monitor {monitor['name']} використовує VCP для управління яскравістю.")
+
+    # set_contrast_s("H4TN602437", 34)
+
+
+
+
     end_time = time.time()
     print(f"Execution time for get_monitors_info(): {end_time - start_time:.2f} seconds")
 
-    print_mi(monitors_info)
+    # print_mi(monitors_info)
 

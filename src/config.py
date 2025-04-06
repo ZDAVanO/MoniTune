@@ -77,6 +77,9 @@ if getattr(sys, 'frozen', False):
     eye_icon_light_path = os.path.join(sys._MEIPASS, 'eye_light.png')
     eye_icon_dark_path = os.path.join(sys._MEIPASS, 'eye_dark.png')
 
+    contrast_icon_light_path = os.path.join(sys._MEIPASS, 'contrast_light.png')
+    contrast_icon_dark_path = os.path.join(sys._MEIPASS, 'contrast_dark.png')
+
 
 else:
     # Якщо програма запущена з Python, використовуємо поточну директорію
@@ -106,6 +109,9 @@ else:
 
     eye_icon_light_path = 'src/assets/icons/eye_light.png'
     eye_icon_dark_path = 'src/assets/icons/eye_dark.png'
+
+    contrast_icon_light_path = 'src/assets/icons/contrast_light.png'
+    contrast_icon_dark_path = 'src/assets/icons/contrast_dark.png'
 
 
 # MARK: Tray Icons

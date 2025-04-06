@@ -1,10 +1,13 @@
 import ctypes
+import psutil
+
 import time
 
 
 
 class LASTINPUTINFO(ctypes.Structure):
     _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
 
 def get_idle_time():
     """Повертає час (у секундах), протягом якого ПК був неактивним"""
@@ -19,8 +22,14 @@ def get_idle_time():
         return None  # Помилка отримання даних
 
 
+def is_laptop():
+    battery = psutil.sensors_battery()
+    return battery is not None
+
+
 
 if __name__ == "__main__":
+    print("is_laptop:", is_laptop())
     while True:
         idle_seconds = get_idle_time()
         print(f"Комп'ютер був неактивним {idle_seconds:.2f} секунд")

@@ -11,6 +11,7 @@ import sys
 
 import threading
 
+# MARK: BrightnessScheduler
 class BrightnessScheduler(QObject):
     def __init__(self, parent: 'MainWindow'):
         super().__init__()
@@ -27,7 +28,7 @@ class BrightnessScheduler(QObject):
         self.lock_listener = LockDetect(self.on_lock_state_change)
         threading.Thread(target=self.lock_listener.run, daemon=True).start()
 
-
+    # MARK: on_lock_state_change()
     @Slot(str)
     def on_lock_state_change(self, state):
         if state == "unlocked":
@@ -42,31 +43,36 @@ class BrightnessScheduler(QObject):
             # self.stop_checking()
             QMetaObject.invokeMethod(self, "stop_checking", Qt.QueuedConnection)
 
-
+    # MARK: get_tasks()
     def get_tasks(self):
         return self.tasks
 
+    # MARK: add_task()
     def add_task(self, time_str, callback):
         self.tasks[time_str] = callback
         print(f"Task added at {time_str}")
     
+    # MARK: remove_task()
     def remove_task(self, time_str):
         if time_str in self.tasks:
             del self.tasks[time_str]
             print(f"Task at {time_str} removed")
         else:
             print(f"No task found at {time_str}")
-        
+    
+    # MARK: clear_all_tasks()
     def clear_all_tasks(self):
         self.stop_checking()
         self.tasks.clear()
         print("All tasks cleared")
 
+    # MARK: stop_checking()
     @Slot()
     def stop_checking(self):
         self.timer.stop()
         print("Task checking stopped")
 
+    # MARK: start_checking()
     @Slot()
     def start_checking(self, interval=60000):
         # if self.tasks:
@@ -78,7 +84,7 @@ class BrightnessScheduler(QObject):
         self.last_check_time = QDateTime.currentDateTime()
         self.timer.start(interval)
 
-
+    # MARK: check_all_tasks()
     def check_all_tasks(self):
         current_time = QTime.currentTime().toString("HH:mm")
         current_datetime = QDateTime.currentDateTime()
@@ -119,12 +125,11 @@ class BrightnessScheduler(QObject):
 
                 print(f"time_active: {self.time_active / 60} min, saved_time: {self.saved_time / 60} min")
             
+        # print()
 
 
-        print()
 
-        
-
+    # MARK: execute_recent_task()
     def execute_recent_task(self):
         if not self.tasks:
             print("execute_recent_task: No tasks found")

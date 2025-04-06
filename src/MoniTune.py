@@ -54,8 +54,8 @@ from utils.monitor_utils import (
     get_brightness, 
     set_brightness, 
     set_resolution,
-    set_contrast_mc,
-    get_contrast_mc
+    get_contrast_vcp,
+    set_contrast_s,
 )
 from utils.reg_utils import (
     reg_write_bool, 
@@ -65,6 +65,8 @@ from utils.reg_utils import (
     reg_write_dict, 
     reg_read_dict
 )
+from utils.utils import is_laptop
+
 import config
 from config import WIN11_WINDOW_CORNER_RADIUS, WIN11_WINDOW_OFFSET
 
@@ -76,14 +78,6 @@ import ctypes
 import threading
 import time
 import platform
-
-import psutil
-
-
-
-def is_laptop():
-    battery = psutil.sensors_battery()
-    return battery is not None
 
 
 
@@ -251,6 +245,17 @@ class MainWindow(QMainWindow):
         self.time_adjustment_startup = reg_read_bool(config.REGISTRY_PATH, "TimeAdjustmentStartup")
         self.time_adjustment_data = reg_read_dict(config.REGISTRY_PATH, "TimeAdjustmentData")
         # self.time_adjustment_data = {}
+
+
+
+        self.show_contrast_sliders = reg_read_bool(config.REGISTRY_PATH, "ShowContrastSliders", False)
+        self.contrast_sliders = {}  # Dictionary to store contrast sliders
+        self.contrast_values = reg_read_dict(config.REGISTRY_PATH, "ContrastValues")
+        print(f"self.contrast_values {self.contrast_values}")
+        self.previous_contrast_values = {}
+
+
+
         self.scheduler = BrightnessScheduler(self)
         self.update_scheduler_tasks()
         if self.time_adjustment_startup:
@@ -297,7 +302,7 @@ class MainWindow(QMainWindow):
                 # update brightness slider
                 if monitor_serial in self.br_sliders:
                     if self.window_open:
-                        QTimer.singleShot(0, self.start_brightness_animation) # play slider animation if window is open
+                        QTimer.singleShot(0, self.start_slider_animation) # play slider animation if window is open
                     # else:
                     #     self.br_sliders[monitor_serial].setValue(brightness_data[monitor_serial])
                 self.brightness_values[monitor_serial] = brightness_data[monitor_serial]
@@ -348,52 +353,40 @@ class MainWindow(QMainWindow):
             # colors for light theme
             self.bg_color = config.bg_color_light
             self.border_color = config.border_color_light
-
             self.fr_color = config.fr_color_light  
             self.fr_border_color = config.fr_border_color_light
-
             self.rr_border_color = config.rr_border_color_light
             self.rr_fg_color = config.rr_fg_color_light
             self.rr_hover_color = config.rr_hover_color_light
-
             self.separator_color = config.separator_color_light
 
             # icons
             self.settings_icon_path = config.settings_icon_light_path
-
             self.monitor_icon_path = config.monitor_icon_light_path
             self.laptop_icon_path = config.laptop_icon_light_path
-
             self.sun_icon_path = config.sun_icon_light_path
-
             self.down_arrow_icon_path = config.down_arrow_icon_light_path
-
             self.eye_icon_path = config.eye_icon_light_path
+            self.contrast_icon_path = config.contrast_icon_light_path
         else:
             # colors for dark theme
             self.bg_color = config.bg_color_dark
             self.border_color = config.border_color_dark
-
             self.fr_color = config.fr_color_dark  
             self.fr_border_color = config.fr_border_color_dark
-
             self.rr_border_color = config.rr_border_color_dark
             self.rr_fg_color = config.rr_fg_color_dark
             self.rr_hover_color = config.rr_hover_color_dark
-
             self.separator_color = config.separator_color_dark
 
             # icons
             self.settings_icon_path = config.settings_icon_dark_path
-
             self.monitor_icon_path = config.monitor_icon_dark_path
             self.laptop_icon_path = config.laptop_icon_dark_path
-
             self.sun_icon_path = config.sun_icon_dark_path
-
             self.down_arrow_icon_path = config.down_arrow_icon_dark_path
-
             self.eye_icon_path = config.eye_icon_dark_path
+            self.contrast_icon_path = config.contrast_icon_dark_path
 
         # print("Checking MEIPASS contents:")
         # print(os.listdir(sys._MEIPASS))
@@ -451,6 +444,7 @@ class MainWindow(QMainWindow):
                 child.widget().deleteLater()
 
         self.br_sliders.clear()  # Clear brightness sliders dictionary
+        self.contrast_sliders.clear()  # Clear contrast sliders dictionary
 
 
 
@@ -459,6 +453,8 @@ class MainWindow(QMainWindow):
 
         # Exclude monitors that are in self.hidden_displays
         monitors_info = [monitor for monitor in monitors_info if monitor['serial'] not in self.hidden_displays]
+        
+        self.connected_monitors = [monitor['serial'] for monitor in monitors_info]  # Update connected monitors list
 
         if not monitors_info:  # Check if no monitors are available
             placeholder_frame = QWidget()
@@ -498,10 +494,7 @@ class MainWindow(QMainWindow):
 
         # print(f"monitors_info {monitors_info}")
         print_mi(monitors_info)
-        print("monitors order: ", ", ".join(
-            f"{self.custom_monitor_names[monitor_serial] if monitor_serial in self.custom_monitor_names else monitor['display_name']} ({monitor_serial})"
-            for monitor_serial in self.monitors_order
-        ))
+        
         # monitors_info.reverse()  # Invert the order of monitors
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
         # Сортуємо список моніторів відповідно до порядку з реєстру
@@ -509,8 +502,16 @@ class MainWindow(QMainWindow):
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
         monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
 
-        self.connected_monitors = [monitor['serial'] for monitor in monitors_info]  # Update connected monitors list
 
+
+
+        # print monitors order for testing
+        print("monitors order:")
+        for monitor_serial in self.monitors_order:
+            if monitor_serial in self.hidden_displays:
+                continue
+            monitor_name = self.custom_monitor_names.get(monitor_serial, monitors_dict[monitor_serial]['display_name'])
+            print(f"  {monitor_name} ({monitor_serial})")
 
 
 
@@ -520,9 +521,8 @@ class MainWindow(QMainWindow):
                 continue
 
             monitor = monitors_dict[monitor_serial]
+            # print(f"monitor {monitor}")
 
-            # print("get_contrast: ", get_contrast_mc(monitor["mc_obj"]))
-            
             monitor_frame = QWidget()
             monitor_frame.setObjectName("MonitorsFrame")
             monitor_frame.setStyleSheet(
@@ -626,8 +626,7 @@ class MainWindow(QMainWindow):
 
 
             # Add separator line
-            separator_line1 = SeparatorLine(color=self.separator_color)
-            monitor_vbox.addWidget(separator_line1)
+            monitor_vbox.addWidget(SeparatorLine(color=self.separator_color))
 
 
             # MARK: Refresh Rates
@@ -669,8 +668,7 @@ class MainWindow(QMainWindow):
                     monitor_vbox.addWidget(rr_frame)
 
                     # Add separator line
-                    separator_line2 = SeparatorLine(color=self.separator_color)
-                    monitor_vbox.addWidget(separator_line2)
+                    monitor_vbox.addWidget(SeparatorLine(color=self.separator_color))
             
 
 
@@ -771,8 +769,76 @@ class MainWindow(QMainWindow):
 
             monitor_vbox.addWidget(br_frame)
             
-            self.monitors_layout.addWidget(monitor_frame)
 
+
+            # MARK: Contrast
+            if self.show_contrast_sliders and monitor["method"] == "VCP":
+                contrast_level = get_contrast_vcp(monitor["hPhysicalMonitor"])
+                print(f"contrast_level {monitor['serial']} {contrast_level}")
+                disable_contrast_frame = False
+                
+                if contrast_level is None:
+                    print(f"Contrast level is None for monitor {monitor['serial']}")
+                    if monitor["serial"] in self.contrast_values:
+                        contrast_level = self.contrast_values[monitor["serial"]]
+                    else:
+                        contrast_level = 50
+                        disable_contrast_frame = True
+
+                # if contrast_level is not None:
+                # self.contrast_values[monitor_serial] = contrast_level # dont change contrast
+                print(f"self.contrast_values {self.contrast_values}")
+
+                # Add separator line
+                monitor_vbox.addWidget(SeparatorLine(color=self.separator_color))
+
+                contrast_frame = QWidget()
+
+                if disable_contrast_frame:
+                    contrast_frame.setDisabled(True)  # Disable the frame to prevent interaction
+
+                contrast_hbox = QHBoxLayout(contrast_frame)
+                contrast_hbox.setContentsMargins(0, 0, 2, 0)
+                contrast_hbox.setSpacing(0)
+
+                contrast_icon = BrightnessIcon(icon_path=self.contrast_icon_path)
+                contrast_icon.set_value(contrast_level)
+                contrast_hbox.addWidget(contrast_icon)
+
+                contrast_slider_spacer = QSpacerItem(6, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
+                contrast_hbox.addItem(contrast_slider_spacer)
+
+                contrast_slider = AnimatedSliderBlockSignals(Qt.Orientation.Horizontal,
+                                                                scrollStep=1,
+                                                                singleStep=1,
+                                                                pageStep=10)
+                contrast_slider.setMaximum(100)  # Set maximum value to 100
+                contrast_slider.setValue(contrast_level)
+
+                self.contrast_sliders[monitor['serial']] = contrast_slider  # Store slider in dictionary
+
+                contrast_label = QLabel()
+                contrast_label.setFixedWidth(39)  # 2-26 3-39px
+                contrast_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                contrast_label.setText(str(contrast_level) if not disable_contrast_frame else "N/A")
+                contrast_label.setStyleSheet(f"""
+                                font-size: {"22px" if not disable_contrast_frame else "16px"}; font-weight: bold; 
+                                padding-bottom: 2px;
+                                """)
+                
+                contrast_slider.add_icon(contrast_icon)  # Connect icon to slider to animate the icon
+                contrast_slider.add_label(contrast_label)  # Connect label to slider to animate the label
+                contrast_slider.valueChanged.connect(lambda value, icon=contrast_icon, label=contrast_label, ms=monitor_serial: self.on_contrast_change(value, icon, label, ms))
+                contrast_hbox.addWidget(contrast_slider)
+
+                slider_label_spacer = QSpacerItem(3, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
+                contrast_hbox.addItem(slider_label_spacer)
+
+                contrast_hbox.addWidget(contrast_label)
+                monitor_vbox.addWidget(contrast_frame)
+
+
+            self.monitors_layout.addWidget(monitor_frame)
 
 
             # QTimer.singleShot(0, lambda: print("br_label width:", br_label.width())) # Print width of br_label after the layout is updated
@@ -870,6 +936,14 @@ class MainWindow(QMainWindow):
         self.brightness_values[monitor_serial] = int(value)
         # print(f"on_brightness_change {monitor_serial}", self.brightness_values[monitor_serial])
 
+    # MARK: on_contrast_change()
+    def on_contrast_change(self, value, icon, label, monitor_serial):
+        # print(f"on_contrast_change {value} {label} {monitor_serial}")
+        icon.set_value(value)
+        label.setText(str(value))
+        self.contrast_values[monitor_serial] = int(value)
+        # print(f"on_contrast_change {monitor_serial}", self.contrast_values[monitor_serial])
+
     # MARK: on_bottom_frame_scroll()
     def on_bottom_frame_scroll(self, delta):
         # print("on_bottom_frame_scroll ", delta)
@@ -880,21 +954,41 @@ class MainWindow(QMainWindow):
     # MARK: brightness_sync()
     def brightness_sync(self):
         first_iteration = True
+        # self.update_connected_monitors()
+
         while self.window_open:
             start_time = time.time()
             
             brightness_values_copy = self.brightness_values.copy()
             for monitor_serial, brightness in brightness_values_copy.items():
-                if monitor_serial in self.connected_monitors:  # Перевірка підключення монітора
+                if (monitor_serial in self.connected_monitors) and ( # check if monitor is connected
+                    first_iteration or self.previous_brightness_values.get(monitor_serial) != brightness # check if brightness changed
+                ):
                     try:
-                        if first_iteration or self.previous_brightness_values.get(monitor_serial) != brightness:
-                            print(f"brightness_sync set_brightness {monitor_serial} {brightness}")
-                            set_brightness(monitor_serial, brightness)
-                            self.previous_brightness_values[monitor_serial] = brightness
-                            reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
+                        print(f"brightness_sync set_brightness {monitor_serial} {brightness}")
+                        set_brightness(monitor_serial, brightness)
+                        self.previous_brightness_values[monitor_serial] = brightness
+                        reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
                     except Exception as e:
                         print(f"Error: {e}")
             
+            if self.show_contrast_sliders:
+                contrast_values_copy = self.contrast_values.copy()
+                for monitor_serial, contrast in contrast_values_copy.items():
+                    if (monitor_serial in self.connected_monitors) and (
+                        first_iteration or self.previous_contrast_values.get(monitor_serial) != contrast
+                    ):
+                        try:
+                            print(f"brightness_sync set_contrast {monitor_serial} {contrast}")
+                            set_contrast_s(monitor_serial, contrast)
+                            # if set_contrast_s raise error, previous_contrast_values dont change
+                            self.previous_contrast_values[monitor_serial] = contrast
+                            reg_write_dict(config.REGISTRY_PATH, "ContrastValues", self.contrast_values)
+                        except Exception as e:
+                            print(f"Error: {e}")
+
+
+
             first_iteration = False
             
             end_time = time.time()
@@ -908,6 +1002,8 @@ class MainWindow(QMainWindow):
     def brightness_sync_onetime(self):
         print("brightness_sync_onetime")
         start_time = time.time()
+        self.update_connected_monitors() # remove this in the future
+
         brightness_values_copy = self.brightness_values.copy()
         # print(f"brightness_values_copy {brightness_values_copy}")
         for monitor_serial, brightness in brightness_values_copy.items():
@@ -918,10 +1014,19 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     print(f"Error: {e}")
         
-        # reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
+        if self.show_contrast_sliders:
+            contrast_values_copy = self.contrast_values.copy()
+            for monitor_serial, contrast in contrast_values_copy.items():
+                if monitor_serial in self.connected_monitors:
+                    try:
+                        set_contrast_s(monitor_serial, contrast)
+                        print(f"brightness_sync_onetime set_contrast {monitor_serial} {contrast}")
+                    except Exception as e:
+                        print(f"Error: {e}")
 
         end_time = time.time()  # End time measurement
         print(f"brightness_sync_onetime sync took {end_time - start_time:.4f} seconds")
+
 
     # MARK: showEvent()
     def showEvent(self, event):
@@ -956,15 +1061,20 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
 
         if self.restore_last_brightness:
-            QTimer.singleShot(150, self.start_brightness_animation)
+            QTimer.singleShot(150, self.start_slider_animation)
 
-    # MARK: start_brightness_animation()
-    def start_brightness_animation(self):
+    # MARK: start_slider_animation()
+    def start_slider_animation(self):
         for index, (serial, slider) in enumerate(self.br_sliders.items()):
             # QTimer.singleShot(index * 100, lambda s=slider: s.animate_to(100))
             # QTimer.singleShot(index * 100, lambda s=slider: s.animate_to(int(self.brightness_values[serial])))
-            print(f"start_brightness_animation {serial} {self.brightness_values[serial]}")
+            print(f"start_slider_animation BRIGHTNESS {serial} {self.brightness_values[serial]}")
             slider.animate_to(int(self.brightness_values[serial]))
+
+        if self.show_contrast_sliders:
+            for index, (serial, slider) in enumerate(self.contrast_sliders.items()):
+                print(f"start_slider_animation CONTRAST {serial} {self.contrast_values[serial]}")
+                slider.animate_to(int(self.contrast_values[serial]))
 
     # MARK: start_brightness_sync_thread()
     def start_brightness_sync_thread(self):

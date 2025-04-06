@@ -580,6 +580,24 @@ class SettingsWindow(QWidget):
 
 
 
+        # MARK: DDC/CI Tab
+        dcc_ci_tab = QWidget()
+        dcc_ci_layout = QVBoxLayout(dcc_ci_tab)
+        dcc_ci_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        dcc_ci_layout.addWidget(SettingToggle(self.parent,
+                                              "show_contrast_sliders",
+                                              "ShowContrastSliders")
+                                              .create_toggle(
+                                                   "Show Contrast Sliders [Experimental]",
+                                                   "Show sliders to change contrast"
+                                                   ))
+
+
+        self.tab_widget.addTab(dcc_ci_tab, "DDC/CI")
+
+
+
         # MARK: About Tab
         about_tab = QWidget()
         about_layout = QVBoxLayout(about_tab)
