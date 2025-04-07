@@ -71,9 +71,7 @@ from utils.reg_utils import (
     reg_read_dict
 )
 from utils.utils import is_laptop
-
-import config
-from config import WIN11_WINDOW_CORNER_RADIUS, WIN11_WINDOW_OFFSET
+import config as cfg
 
 import darkdetect
 
@@ -89,7 +87,7 @@ from packaging.version import Version
 import webbrowser
 
 
-
+# MARK: SeparatorLine
 class SeparatorLine(QFrame):
     def __init__(self, color: str = None, line_width: int = 1, parent=None):
         super().__init__(parent)
@@ -121,40 +119,40 @@ class MainWindow(QMainWindow):
         self.is_laptop = is_laptop()
 
         
-        self.enable_rounded_corners = reg_read_bool(config.REGISTRY_PATH, "EnableRoundedCorners", False if self.win_release != "11" else True)
+        self.enable_rounded_corners = reg_read_bool(cfg.REGISTRY_PATH, "EnableRoundedCorners", False if self.win_release != "11" else True)
         if self.enable_rounded_corners:
-            self.window_corner_radius = WIN11_WINDOW_CORNER_RADIUS
-            self.window_offset = WIN11_WINDOW_OFFSET
+            self.window_corner_radius = cfg.WIN11_WINDOW_CORNER_RADIUS
+            self.window_offset = cfg.WIN11_WINDOW_OFFSET
         else:
             self.window_corner_radius = 0
             self.window_offset = 0
 
-        self.enable_fusion_theme = reg_read_bool(config.REGISTRY_PATH, "EnableFusionTheme", False)
+        self.enable_fusion_theme = reg_read_bool(cfg.REGISTRY_PATH, "EnableFusionTheme", False)
         if self.enable_fusion_theme:
             QApplication.instance().setStyle("Fusion")
         self.update_theme_colors(darkdetect.theme())
 
-        self.enable_break_reminders = reg_read_bool(config.REGISTRY_PATH, "EnableBreakReminders", False)
+        self.enable_break_reminders = reg_read_bool(cfg.REGISTRY_PATH, "EnableBreakReminders", False)
 
-        self.hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
+        self.hidden_displays = reg_read_list(cfg.REGISTRY_PATH, "HiddenDisplays")
 
-        self.custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
+        self.custom_monitor_names = reg_read_dict(cfg.REGISTRY_PATH, "CustomMonitorNames")
         print(f"custom_monitor_names {self.custom_monitor_names}")
 
-        self.monitors_order = reg_read_list(config.REGISTRY_PATH, "MonitorsOrder")
+        self.monitors_order = reg_read_list(cfg.REGISTRY_PATH, "MonitorsOrder")
 
 
-        self.show_resolution = reg_read_bool(config.REGISTRY_PATH, "ShowResolution")
+        self.show_resolution = reg_read_bool(cfg.REGISTRY_PATH, "ShowResolution")
 
 
-        self.show_refresh_rates = reg_read_bool(config.REGISTRY_PATH, "ShowRefreshRates")
-        self.excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
-        # self.excluded_rates = list(map(int, filter(None, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates"))))
+        self.show_refresh_rates = reg_read_bool(cfg.REGISTRY_PATH, "ShowRefreshRates")
+        self.excluded_rates = list(map(int, reg_read_list(cfg.REGISTRY_PATH, "ExcludedHzRates")))
+        # self.excluded_rates = list(map(int, filter(None, reg_read_list(cfg.REGISTRY_PATH, "ExcludedHzRates"))))
 
         
-        self.restore_last_brightness = reg_read_bool(config.REGISTRY_PATH, "RestoreLastBrightness")
+        self.restore_last_brightness = reg_read_bool(cfg.REGISTRY_PATH, "RestoreLastBrightness")
         
-        self.brightness_values = reg_read_dict(config.REGISTRY_PATH, "BrightnessValues")
+        self.brightness_values = reg_read_dict(cfg.REGISTRY_PATH, "BrightnessValues")
         print(f"self.brightness_values {self.brightness_values}")
         self.previous_brightness_values = {}  # Dictionary to store previous brightness values
 
@@ -202,8 +200,6 @@ class MainWindow(QMainWindow):
         
 
 
-
-
         self.monitors_frame = QWidget()
         # self.monitors_frame.setStyleSheet("border-radius: 9px; background-color: red")
         self.monitors_layout = QVBoxLayout(self.monitors_frame)
@@ -241,9 +237,6 @@ class MainWindow(QMainWindow):
 
         # Create the system tray icon
         self.tray_icon = SystemTrayIcon(self)
-        # self.tray_icon.showMessage("MoniTune", "MoniTune is running", QIcon(config.app_icon_path))
-        # self.tray_icon.changeIconTheme(darkdetect.theme())
-        # self.tray_icon.changeIconName("monitune")
 
         # Run the theme listener in a separate thread
         threading.Thread(target=darkdetect.listener, args=(self.on_theme_change,), daemon=True).start()
@@ -251,15 +244,15 @@ class MainWindow(QMainWindow):
 
 
         # Time adjustment
-        self.time_adjustment_startup = reg_read_bool(config.REGISTRY_PATH, "TimeAdjustmentStartup")
-        self.time_adjustment_data = reg_read_dict(config.REGISTRY_PATH, "TimeAdjustmentData")
+        self.time_adjustment_startup = reg_read_bool(cfg.REGISTRY_PATH, "TimeAdjustmentStartup")
+        self.time_adjustment_data = reg_read_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData")
         # self.time_adjustment_data = {}
 
 
 
-        self.show_contrast_sliders = reg_read_bool(config.REGISTRY_PATH, "ShowContrastSliders", False)
+        self.show_contrast_sliders = reg_read_bool(cfg.REGISTRY_PATH, "ShowContrastSliders", False)
         self.contrast_sliders = {}  # Dictionary to store contrast sliders
-        self.contrast_values = reg_read_dict(config.REGISTRY_PATH, "ContrastValues")
+        self.contrast_values = reg_read_dict(cfg.REGISTRY_PATH, "ContrastValues")
         print(f"self.contrast_values {self.contrast_values}")
         self.previous_contrast_values = {}
 
@@ -280,14 +273,14 @@ class MainWindow(QMainWindow):
             self.execute_recent_task()
 
 
-
+        # check for updates on startup
         update_available, latest_version = self.check_for_update()
         if update_available:
             self.tray_icon.show_notification(
                         "New Update Available!",
                         f"A new version of MoniTune (v{latest_version}) is ready! Click here to download.",
-                        QIcon(config.app_icon_path),
-                        on_click_callback=lambda: webbrowser.open(config.LATEST_RELEASE_URL)
+                        QIcon(cfg.app_icon_path),
+                        on_click_callback=lambda: webbrowser.open(cfg.LATEST_RELEASE_URL)
                     )
 
         # self.monitors_frame.setStyleSheet("background-color: red;")
@@ -420,14 +413,14 @@ class MainWindow(QMainWindow):
         # QTimer.singleShot(1000, self.animateWindowClose)
 
 
-
+    # MARK: check_for_update()
     def check_for_update(self):
         try:
-            response = requests.get(config.UPDATE_CHECK_URL)
+            response = requests.get(cfg.UPDATE_CHECK_URL)
             if response.status_code == 200:
                 latest_release = response.json()
                 latest_version = Version(latest_release["tag_name"].lstrip("v"))
-                current_version = Version(config.version)
+                current_version = Version(cfg.version)
 
                 # Compare versions
                 if latest_version > current_version:
@@ -443,7 +436,7 @@ class MainWindow(QMainWindow):
             print(f"Error checking for updates: {e}")
             return False, None
 
-
+    # MARK: break_notification()
     def break_notification(self):
         self.tray_icon.show_notification(
             "Take a break from the screen!",
@@ -467,8 +460,8 @@ class MainWindow(QMainWindow):
 
     # MARK: update_central_widget()
     def update_central_widget(self):
-        self.window_offset = WIN11_WINDOW_OFFSET if self.enable_rounded_corners else 0
-        corner_radius = WIN11_WINDOW_CORNER_RADIUS if self.enable_rounded_corners else 0
+        self.window_offset = cfg.WIN11_WINDOW_OFFSET if self.enable_rounded_corners else 0
+        corner_radius = cfg.WIN11_WINDOW_CORNER_RADIUS if self.enable_rounded_corners else 0
         self.centralWidget().setStyleSheet(
             f"""
             #Container {{
@@ -484,42 +477,42 @@ class MainWindow(QMainWindow):
     def update_theme_colors(self, theme: str):
         if theme == "Light" or (self.win_release != "11" and not self.enable_fusion_theme):
             # colors for light theme
-            self.bg_color = config.bg_color_light
-            self.border_color = config.border_color_light
-            self.fr_color = config.fr_color_light  
-            self.fr_border_color = config.fr_border_color_light
-            self.rr_border_color = config.rr_border_color_light
-            self.rr_fg_color = config.rr_fg_color_light
-            self.rr_hover_color = config.rr_hover_color_light
-            self.separator_color = config.separator_color_light
+            self.bg_color = cfg.bg_color_light
+            self.border_color = cfg.border_color_light
+            self.fr_color = cfg.fr_color_light  
+            self.fr_border_color = cfg.fr_border_color_light
+            self.rr_border_color = cfg.rr_border_color_light
+            self.rr_fg_color = cfg.rr_fg_color_light
+            self.rr_hover_color = cfg.rr_hover_color_light
+            self.separator_color = cfg.separator_color_light
 
             # icons
-            self.settings_icon_path = config.settings_icon_light_path
-            self.monitor_icon_path = config.monitor_icon_light_path
-            self.laptop_icon_path = config.laptop_icon_light_path
-            self.sun_icon_path = config.sun_icon_light_path
-            self.down_arrow_icon_path = config.down_arrow_icon_light_path
-            self.eye_icon_path = config.eye_icon_light_path
-            self.contrast_icon_path = config.contrast_icon_light_path
+            self.settings_icon_path = cfg.settings_icon_light_path
+            self.monitor_icon_path = cfg.monitor_icon_light_path
+            self.laptop_icon_path = cfg.laptop_icon_light_path
+            self.sun_icon_path = cfg.sun_icon_light_path
+            self.down_arrow_icon_path = cfg.down_arrow_icon_light_path
+            self.eye_icon_path = cfg.eye_icon_light_path
+            self.contrast_icon_path = cfg.contrast_icon_light_path
         else:
             # colors for dark theme
-            self.bg_color = config.bg_color_dark
-            self.border_color = config.border_color_dark
-            self.fr_color = config.fr_color_dark  
-            self.fr_border_color = config.fr_border_color_dark
-            self.rr_border_color = config.rr_border_color_dark
-            self.rr_fg_color = config.rr_fg_color_dark
-            self.rr_hover_color = config.rr_hover_color_dark
-            self.separator_color = config.separator_color_dark
+            self.bg_color = cfg.bg_color_dark
+            self.border_color = cfg.border_color_dark
+            self.fr_color = cfg.fr_color_dark  
+            self.fr_border_color = cfg.fr_border_color_dark
+            self.rr_border_color = cfg.rr_border_color_dark
+            self.rr_fg_color = cfg.rr_fg_color_dark
+            self.rr_hover_color = cfg.rr_hover_color_dark
+            self.separator_color = cfg.separator_color_dark
 
             # icons
-            self.settings_icon_path = config.settings_icon_dark_path
-            self.monitor_icon_path = config.monitor_icon_dark_path
-            self.laptop_icon_path = config.laptop_icon_dark_path
-            self.sun_icon_path = config.sun_icon_dark_path
-            self.down_arrow_icon_path = config.down_arrow_icon_dark_path
-            self.eye_icon_path = config.eye_icon_dark_path
-            self.contrast_icon_path = config.contrast_icon_dark_path
+            self.settings_icon_path = cfg.settings_icon_dark_path
+            self.monitor_icon_path = cfg.monitor_icon_dark_path
+            self.laptop_icon_path = cfg.laptop_icon_dark_path
+            self.sun_icon_path = cfg.sun_icon_dark_path
+            self.down_arrow_icon_path = cfg.down_arrow_icon_dark_path
+            self.eye_icon_path = cfg.eye_icon_dark_path
+            self.contrast_icon_path = cfg.contrast_icon_dark_path
 
         # print("Checking MEIPASS contents:")
         # print(os.listdir(sys._MEIPASS))
@@ -712,7 +705,7 @@ class MainWindow(QMainWindow):
                                         
 
                                         
-                                        """) # padding-left: 1px; background-color: blue; padding-bottom: 2px; font-size: 16px; font-weight: bold; font: 16px "{config.font_family}";
+                                        """) # padding-left: 1px; background-color: blue; padding-bottom: 2px; font-size: 16px; font-weight: bold; font: 16px "{cfg.font_family}";
             label_hbox.addWidget(monitor_label)
             
             
@@ -724,13 +717,13 @@ class MainWindow(QMainWindow):
                 res_combobox = NoScrollComboBox()
                 absolute_icon_path = os.path.abspath(self.down_arrow_icon_path).replace('\\', '/')
                 res_combobox.setStyleSheet(f"""
-                                            /* Основний стиль QComboBox */
+                                            /* Basic QComboBox style */
                                             QComboBox {{
                                                 font-size: 14px; font-weight: bold;
                                                 padding-left: 7px;
                                                 {"background-color: " + self.rr_fg_color + ";" if not self.enable_fusion_theme else ""}
                                             }}
-                                            /* Стиль випадаючого списку */
+                                            /* Dropdown list style */
                                             QComboBox QAbstractItemView {{
                                                 padding: 0px;
                                             }}
@@ -738,7 +731,7 @@ class MainWindow(QMainWindow):
                                                 border: 0px;
                                             }}
                                             QComboBox::down-arrow {{
-                                                image: url('{absolute_icon_path}'); /* Використовуйте прямі слеші */
+                                                image: url('{absolute_icon_path}');
                                                 width: 11px;
                                                 height: 11px;
                                                 margin-right: 10px;
@@ -765,7 +758,7 @@ class MainWindow(QMainWindow):
             # MARK: Refresh Rates
             if self.show_refresh_rates:
 
-                monitor_vbox.setSpacing(5)  # Spacing between monitor frames //////////////////////////////////////////////////////////////////
+                monitor_vbox.setSpacing(5)  # Spacing between monitor frames
                 
                 refresh_rates = monitor["AvailableRefreshRates"]
                 refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
@@ -885,7 +878,7 @@ class MainWindow(QMainWindow):
                                    padding-bottom: 2px;
 
                                    
-                                   """) # padding-bottom: 4px; background-color: green; font-size: 22px; font-weight: bold; font: 600 16pt "{config.font_family}";
+                                   """) # padding-bottom: 4px; background-color: green; font-size: 22px; font-weight: bold; font: 600 16pt "{cfg.font_family}";
             
             br_slider.add_icon(sun_icon) # Connect icon to slider to animate the icon
             br_slider.add_label(br_label) # Connect label to slider to animate the label
@@ -1106,7 +1099,7 @@ class MainWindow(QMainWindow):
                         print(f"brightness_sync set_brightness {monitor_serial} {brightness}")
                         set_brightness(monitor_serial, brightness)
                         self.previous_brightness_values[monitor_serial] = brightness
-                        reg_write_dict(config.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
+                        reg_write_dict(cfg.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
                     except Exception as e:
                         print(f"Error: {e}")
             
@@ -1121,7 +1114,7 @@ class MainWindow(QMainWindow):
                             set_contrast_s(monitor_serial, contrast)
                             # if set_contrast_s raise error, previous_contrast_values dont change
                             self.previous_contrast_values[monitor_serial] = contrast
-                            reg_write_dict(config.REGISTRY_PATH, "ContrastValues", self.contrast_values)
+                            reg_write_dict(cfg.REGISTRY_PATH, "ContrastValues", self.contrast_values)
                         except Exception as e:
                             print(f"Error: {e}")
 
@@ -1319,7 +1312,6 @@ class MainWindow(QMainWindow):
         
 
 
-
     # MARK: openSettingsWindow()
     def openSettingsWindow(self):
         if self.settings_window is None:
@@ -1339,10 +1331,10 @@ if __name__ == "__main__":
     if getattr(sys, 'frozen', False):
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         mutex = kernel32.CreateMutexW(None, False, "MoniTune-Qt")
-        if not mutex: # Помилка створення м'ютекса
+        if not mutex: # Error creating mutex
             print(f"Error code: {ctypes.get_last_error()}")
             sys.exit(1)
-        if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS (м'ютекс вже є)
+        if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS (mutex already exists)
             print("Another instance is already running")
             sys.exit(1)
 

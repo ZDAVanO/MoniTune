@@ -6,12 +6,11 @@ from custom_widgets.custom_sliders import NoScrollSlider
 
 from utils.monitor_utils import get_monitors_info, set_refresh_rate, set_refresh_rate_br, set_brightness, set_resolution
 from utils.reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
-import config
+import config as cfg
 from config import tray_icons
 
 import webbrowser
 import time
-
 
 
 
@@ -24,15 +23,16 @@ class SettingToggle:
         self.callback = callback
         self.after_restart = after_restart
 
-
+    # MARK: toggle()
     def toggle(self, state):
         print(f"Setting {self.setting_name} to {state}")
         if not self.after_restart:
             setattr(self.parent, self.setting_name, state)
-        reg_write_bool(config.REGISTRY_PATH, self.reg_setting_name, state)
+        reg_write_bool(cfg.REGISTRY_PATH, self.reg_setting_name, state)
         if callable(self.callback):
             self.callback()
 
+    # MARK: create_toggle()
     def create_toggle(self, label, tool_tip=""):
         checkbox = QCheckBox(label)
         checkbox.setToolTip(tool_tip)
@@ -70,6 +70,7 @@ class ChooseIconWidget(QFrame):
 
         self.setLayout(layout)
 
+    # MARK: on_icon_button_clicked()
     def on_icon_button_clicked(self, button, icon_name):
         for btn in self.icon_buttons:
             btn.setChecked(False)
@@ -77,8 +78,9 @@ class ChooseIconWidget(QFrame):
         print(f"Selected icon: {icon_name}")
 
         self.parent.tray_icon.changeIconName(icon_name)
-        reg_write_list(config.REGISTRY_PATH, "TrayIcon", [icon_name])
+        reg_write_list(cfg.REGISTRY_PATH, "TrayIcon", [icon_name])
 
+    # MARK: select_icon()
     def select_icon(self, icon_name):
         if icon_name in self.tray_icons:
             for button in self.icon_buttons:
@@ -143,22 +145,26 @@ class TimeAdjustmentFrame(QFrame):
 
             self.sliders[monitor_id] = slider
 
+    # MARK: set_brightness()
     def update_brightness(self, monitor_id, value):
         self.brightness_data[monitor_id] = value
         # print(f"Updated brightness data: {self.brightness_data}")
         self.parent.save_adjustment_data()
 
+    # MARK: update_time()
     def update_time(self):
         new_time_str = self.time_edit.time().toString('HH:mm')
         # print(f"Updated time: {new_time_str}")
         self.parent.save_adjustment_data()
 
+    # MARK: delete_frame()
     def delete_frame(self):
         self.parent.time_adjustment_frames.remove(self)
         self.deleteLater()
         # print("Frame deleted")
         self.parent.save_adjustment_data()
 
+    # MARK: get_data()
     def get_data(self):
         return {
             "time": self.time_edit.time().toString('HH:mm'),
@@ -175,8 +181,8 @@ class SettingsWindow(QWidget):
         
         self.parent = parent_window
 
-        self.setWindowTitle(f"{config.app_name} Settings")
-        self.setWindowIcon(QIcon(config.app_icon_path))
+        self.setWindowTitle(f"{cfg.app_name} Settings")
+        self.setWindowIcon(QIcon(cfg.app_icon_path))
         
         self.resize(450, 500)
         self.setMinimumWidth(400)
@@ -193,7 +199,7 @@ class SettingsWindow(QWidget):
         # print("self.time_adjustment_data", self.time_adjustment_data)
 
 
-    # MARK: closeEvent
+    # MARK: closeEvent()
     def closeEvent(self, event):
         print("Settings window closeEvent")
 
@@ -205,7 +211,7 @@ class SettingsWindow(QWidget):
         self.hide()
         # self.close()
 
-    # MARK: showEvent
+    # MARK: showEvent()
     def showEvent(self, event):
         print("Settings window showEvent")
         # self.updateLayout()
@@ -213,7 +219,7 @@ class SettingsWindow(QWidget):
         super().showEvent(event)
 
 
-    # MARK: save_adjustment_data
+    # MARK: save_adjustment_data()
     def save_adjustment_data(self):
         # print("save_adjustment_data")
         # self.time_adjustment_data.clear()
@@ -229,14 +235,13 @@ class SettingsWindow(QWidget):
         sorted_time_adjustment_data = dict(sorted(self.time_adjustment_data.items()))
 
         print(f"Collected time adjustment data: {sorted_time_adjustment_data}")
-        reg_write_dict(config.REGISTRY_PATH, "TimeAdjustmentData", sorted_time_adjustment_data)
+        reg_write_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData", sorted_time_adjustment_data)
 
         self.parent.time_adjustment_data = sorted_time_adjustment_data
 
 
 
-
-    # MARK: updateLayout
+    # MARK: updateLayout()
     def updateLayout(self):
 
         # Clear old widgets
@@ -249,18 +254,18 @@ class SettingsWindow(QWidget):
         # MARK: get monitors info
         monitors_info = get_monitors_info()
 
-        # hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
+        # hidden_displays = reg_read_list(cfg.REGISTRY_PATH, "HiddenDisplays")
         # # Exclude monitors that are in self.hidden_displays
         # monitors_info = [monitor for monitor in monitors_info if monitor['serial'] not in hidden_displays]
 
         # Створюємо словник, де ключ — серійний номер
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
-        reg_order = reg_read_list(config.REGISTRY_PATH, "MonitorsOrder")
+        reg_order = reg_read_list(cfg.REGISTRY_PATH, "MonitorsOrder")
         # Сортуємо список моніторів відповідно до порядку з реєстру
         monitors_order = [serial for serial in reg_order if serial in monitors_dict]
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
         monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
-        custom_monitor_names = reg_read_dict(config.REGISTRY_PATH, "CustomMonitorNames")
+        custom_monitor_names = reg_read_dict(cfg.REGISTRY_PATH, "CustomMonitorNames")
 
 
 
@@ -296,12 +301,10 @@ class SettingsWindow(QWidget):
                                            ))
 
         icon_widget = ChooseIconWidget(self.parent)
-        icon = reg_read_list(config.REGISTRY_PATH, "TrayIcon")
+        icon = reg_read_list(cfg.REGISTRY_PATH, "TrayIcon")
         print("Icon:", icon) # ['fluent']
         icon_widget.select_icon(icon[0] if icon else "monitune")
         general_layout.addWidget(icon_widget)
-
-
 
 
 
@@ -314,9 +317,6 @@ class SettingsWindow(QWidget):
 
 
 
-
-
-
         # MARK: Hide Displays
         hide_displays_widget = QFrame()
         hide_displays_widget.setFrameShape(QFrame.StyledPanel)
@@ -324,8 +324,8 @@ class SettingsWindow(QWidget):
         hide_displays_label = QLabel("Hide Displays")
         hide_displays_layout.addWidget(hide_displays_label)
 
-        hidden_displays = reg_read_list(config.REGISTRY_PATH, "HiddenDisplays")
-        # hidden_displays = list(map(str, filter(None, reg_read_list(config.REGISTRY_PATH, "HiddenDisplays"))))
+        hidden_displays = reg_read_list(cfg.REGISTRY_PATH, "HiddenDisplays")
+        # hidden_displays = list(map(str, filter(None, reg_read_list(cfg.REGISTRY_PATH, "HiddenDisplays"))))
         print("reg Hidden displays:", hidden_displays)
 
         def update_hidden_displays(monitor_id, state):
@@ -336,7 +336,7 @@ class SettingsWindow(QWidget):
             else:
                 if monitor_id in hidden_displays:
                     hidden_displays.remove(monitor_id)
-            reg_write_list(config.REGISTRY_PATH, "HiddenDisplays", hidden_displays)
+            reg_write_list(cfg.REGISTRY_PATH, "HiddenDisplays", hidden_displays)
             self.parent.hidden_displays = hidden_displays
             print(f"Updated hidden displays: {hidden_displays}")
 
@@ -347,15 +347,6 @@ class SettingsWindow(QWidget):
             hide_displays_layout.addWidget(checkbox)
 
         general_layout.addWidget(hide_displays_widget)
-
-
-
-
-
-
-
-
-
 
 
 
@@ -375,7 +366,7 @@ class SettingsWindow(QWidget):
             print(f"Updated names: {custom_monitor_names}")
             self.parent.custom_monitor_names = custom_monitor_names
             # # self.show_parent_window()
-            reg_write_dict(config.REGISTRY_PATH, "CustomMonitorNames", custom_monitor_names)
+            reg_write_dict(cfg.REGISTRY_PATH, "CustomMonitorNames", custom_monitor_names)
 
         for monitor_id in monitors_order:
             row_frame = QWidget()
@@ -408,7 +399,7 @@ class SettingsWindow(QWidget):
         def save_order():
             monitors_order = [self.list_widget.item(i).data(Qt.UserRole) for i in range(self.list_widget.count())]
             print("New order:", monitors_order)
-            reg_write_list(config.REGISTRY_PATH, "MonitorsOrder", monitors_order)
+            reg_write_list(cfg.REGISTRY_PATH, "MonitorsOrder", monitors_order)
             self.parent.monitors_order = monitors_order
             # self.show_parent_window()
 
@@ -476,23 +467,23 @@ class SettingsWindow(QWidget):
             all_rates.update(monitor['AvailableRefreshRates'])
         all_rates = sorted(all_rates)
 
-        # excluded_rates = list(map(int, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates")))
-        excluded_rates = list(map(int, filter(None, reg_read_list(config.REGISTRY_PATH, "ExcludedHzRates"))))
+        # excluded_rates = list(map(int, reg_read_list(cfg.REGISTRY_PATH, "ExcludedHzRates")))
+        excluded_rates = list(map(int, filter(None, reg_read_list(cfg.REGISTRY_PATH, "ExcludedHzRates"))))
 
 
-        # Функція для оновлення списку excluded
+        # Function to update the excluded list
 
         def update_excluded(rate, value):
             print(f"Rate: {rate}, Switch: {value}")
 
-            if value == 2: # Якщо перемикач увімкнений
+            if value == 2: # If the switch is on
                 if rate in excluded_rates:
                     excluded_rates.remove(rate)
-            else:  # Якщо перемикач вимкнений
+            else:  # If the switch is off
                 if rate not in excluded_rates:
                     excluded_rates.append(rate)
 
-            reg_write_list(config.REGISTRY_PATH, "ExcludedHzRates", excluded_rates)
+            reg_write_list(cfg.REGISTRY_PATH, "ExcludedHzRates", excluded_rates)
             self.parent.excluded_rates = excluded_rates
             # self.show_parent_window()
             print(f"Updated excluded list: {excluded_rates}")
@@ -577,7 +568,7 @@ class SettingsWindow(QWidget):
         brightness_layout.addWidget(time_adjustment_frame)
 
         # Restore TimeAdjustmentFrame widgets from registry
-        saved_data = reg_read_dict(config.REGISTRY_PATH, "TimeAdjustmentData")
+        saved_data = reg_read_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData")
         # print("Saved data:", saved_data)
         for time_str, brightness_data in saved_data.items():
             # print(f"Adding frame with time: {time_str}, brightness: {brightness_data}")
@@ -608,7 +599,7 @@ class SettingsWindow(QWidget):
         about_layout = QVBoxLayout(about_tab)
         about_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        about_label = QLabel(f"{config.app_name} v{config.version}")
+        about_label = QLabel(f"{cfg.app_name} v{cfg.version}")
         about_label.setStyleSheet("font-size: 20px; font-weight: bold;")
         
         update_label = QLabel("Checking for updates...")
@@ -616,7 +607,7 @@ class SettingsWindow(QWidget):
         def update_check():
             update_available, latest_version = self.parent.check_for_update()
             if update_available:
-                update_label.setText(f"Update available: <a href='https://github.com/ZDAVanO/MoniTune/releases/latest'>v{latest_version}</a>")
+                update_label.setText(f"Update available: <a href='{cfg.LATEST_RELEASE_URL}'>v{latest_version}</a>")
                 update_label.setOpenExternalLinks(True)
             else:
                 update_label.setText("You are using the latest version.")
@@ -626,8 +617,8 @@ class SettingsWindow(QWidget):
         check_update_button.clicked.connect(update_check)
         update_check()
 
-        learn_more_label = QLabel(f'<a href="{config.LEARN_MORE_URL}" style="text-decoration: none;">Learn More</a>')
-        learn_more_label.setOpenExternalLinks(True)  # Дозволяє відкривати посилання у браузері
+        learn_more_label = QLabel(f'<a href="{cfg.LEARN_MORE_URL}" style="text-decoration: none;">Learn More</a>')
+        learn_more_label.setOpenExternalLinks(True)  # Allows you to open links in the browser
 
         about_layout.addWidget(about_label, alignment=Qt.AlignmentFlag.AlignCenter)
         about_layout.addWidget(update_label, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -636,7 +627,7 @@ class SettingsWindow(QWidget):
         self.tab_widget.addTab(about_tab, "About")
         
         
-    # MARK: show_parent_window
+    # MARK: show_parent_window()
     def show_parent_window(self):
         QTimer.singleShot(400, self.parent.show)
 
