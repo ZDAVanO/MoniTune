@@ -11,8 +11,6 @@ import os
 
 
 
-
-
 class SystemTrayIcon(QSystemTrayIcon):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -50,7 +48,6 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         self.setContextMenu(tray_menu)
         self.activated.connect(self.trayIconClicked)
-        self.messageClicked.connect(self.on_message_click)
         self.show()
         # self.showMessage("MoniTune", "MoniTune is running in the background.", QIcon(config.app_icon_path))
 
@@ -61,7 +58,10 @@ class SystemTrayIcon(QSystemTrayIcon):
         # elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
         #     self.parent().openSettingsWindow()  # Trigger Settings on double-click
 
-    def show_notification(self, title, message, icon):
+    def show_notification(self, title, message, icon, on_click_callback=None):
+        self.messageClicked.disconnect()  # Disconnect any previously connected signal
+        if on_click_callback:
+            self.messageClicked.connect(on_click_callback)  # Connect the new callback
         self.showMessage(title, message, icon)
         
     def changeIcon(self, icon_path):
@@ -84,9 +84,6 @@ class SystemTrayIcon(QSystemTrayIcon):
             print("Invalid theme. Please choose 'Light' or 'Dark'.")
 
     
-
-    def on_message_click(self):
-        print("on_message_click")
 
     def open_display_settings(self):
         os.system("start ms-settings:display")  # Opens Windows display settings

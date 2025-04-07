@@ -107,8 +107,8 @@ class TimeAdjustmentFrame(QFrame):
         if time_str:
             self.time_edit.setTime(QTime.fromString(time_str, 'HH:mm'))
         else:
-            # self.time_edit.setTime(QTime.fromString("12:30", 'HH:mm'))
-            self.time_edit.setTime(self.time_edit.time().currentTime())
+            self.time_edit.setTime(QTime.fromString("12:30", 'HH:mm'))
+            # self.time_edit.setTime(self.time_edit.time().currentTime())
         self.time_edit_layout.addWidget(self.time_edit)
 
         self.delete_button = QPushButton("Remove time")
@@ -146,15 +146,18 @@ class TimeAdjustmentFrame(QFrame):
     def update_brightness(self, monitor_id, value):
         self.brightness_data[monitor_id] = value
         # print(f"Updated brightness data: {self.brightness_data}")
+        self.parent.save_adjustment_data()
 
     def update_time(self):
         new_time_str = self.time_edit.time().toString('HH:mm')
         # print(f"Updated time: {new_time_str}")
+        self.parent.save_adjustment_data()
 
     def delete_frame(self):
         self.parent.time_adjustment_frames.remove(self)
         self.deleteLater()
         # print("Frame deleted")
+        self.parent.save_adjustment_data()
 
     def get_data(self):
         return {
@@ -195,7 +198,8 @@ class SettingsWindow(QWidget):
         print("Settings window closeEvent")
 
         
-        self.save_adjustment_data()
+        # self.save_adjustment_data()
+        self.time_adjustment_frames = []
 
         event.ignore()
         self.hide()
@@ -211,13 +215,15 @@ class SettingsWindow(QWidget):
 
     # MARK: save_adjustment_data
     def save_adjustment_data(self):
+        # print("save_adjustment_data")
         # self.time_adjustment_data.clear()
         
         self.time_adjustment_data = {
             frame.get_data()["time"]: frame.get_data()["brightness"]
             for frame in self.time_adjustment_frames
-        }
-        self.time_adjustment_frames = []
+        } # filter duplicates
+
+        # self.time_adjustment_frames = []
 
         # Sort the time adjustment data by time
         sorted_time_adjustment_data = dict(sorted(self.time_adjustment_data.items()))
@@ -557,7 +563,7 @@ class SettingsWindow(QWidget):
             scroll_layout.addWidget(frame)
 
         add_frame_button = QPushButton("Add a time")
-        add_frame_button.clicked.connect(lambda: add_time_adjustment_frame())
+        add_frame_button.clicked.connect(lambda: (add_time_adjustment_frame(), self.save_adjustment_data()))
         time_adjustment_layout.addWidget(add_frame_button)
 
         scroll_area = QScrollArea()
@@ -606,14 +612,26 @@ class SettingsWindow(QWidget):
         about_label = QLabel(f"{config.app_name} v{config.version}")
         about_label.setStyleSheet("font-size: 20px; font-weight: bold;")
         
+        update_label = QLabel("Checking for updates...")
+        
+        def update_check():
+            update_available, latest_version = self.parent.check_for_update()
+            if update_available:
+                update_label.setText(f"Update available: <a href='https://github.com/ZDAVanO/MoniTune/releases/latest'>v{latest_version}</a>")
+                update_label.setOpenExternalLinks(True)
+            else:
+                update_label.setText("You are using the latest version.")
+
         check_update_button = QPushButton("Check for Updates")
         check_update_button.setMinimumWidth(150)
-        check_update_button.clicked.connect(lambda: webbrowser.open("https://github.com/ZDAVanO/MoniTune/releases/latest"))
-        
+        check_update_button.clicked.connect(update_check)
+        update_check()
+
         learn_more_label = QLabel('<a href="https://github.com/ZDAVanO/MoniTune" style="text-decoration: none;">Learn More</a>')
         learn_more_label.setOpenExternalLinks(True)  # Дозволяє відкривати посилання у браузері
 
         about_layout.addWidget(about_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        about_layout.addWidget(update_label, alignment=Qt.AlignmentFlag.AlignCenter)
         about_layout.addWidget(check_update_button, alignment=Qt.AlignmentFlag.AlignCenter)
         about_layout.addWidget(learn_more_label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.tab_widget.addTab(about_tab, "About")

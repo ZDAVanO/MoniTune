@@ -79,6 +79,10 @@ import threading
 import time
 import platform
 
+import requests
+from packaging.version import Version
+import webbrowser
+
 
 
 class SeparatorLine(QFrame):
@@ -262,7 +266,14 @@ class MainWindow(QMainWindow):
             self.scheduler.execute_recent_task()
 
 
-
+        update_available, latest_version = self.check_for_update()
+        if update_available:
+            self.tray_icon.show_notification(
+                        "New Update Available!",
+                        f"A new version of MoniTune (v{latest_version}) is ready! Click here to download.",
+                        QIcon(config.app_icon_path),
+                        on_click_callback=lambda: webbrowser.open("https://github.com/ZDAVanO/MoniTune/releases/latest")
+                    )
 
         # self.monitors_frame.setStyleSheet("background-color: red;")
         # self.bottom_frame.setStyleSheet("background-color: green;") 
@@ -270,11 +281,33 @@ class MainWindow(QMainWindow):
 
         
 
+    def check_for_update(self):
+        try:
+            response = requests.get("https://api.github.com/repos/ZDAVanO/MoniTune/releases/latest")
+            if response.status_code == 200:
+                latest_release = response.json()
+                latest_version = Version(latest_release["tag_name"].lstrip("v"))
+                current_version = Version(config.version)
+
+                # Compare versions
+                if latest_version > current_version:
+                    print(f"New version available: {latest_version}. Current version: {current_version}.")
+                    return True, latest_version
+                else:
+                    print(f"Current version {current_version} is up to date.")
+                    return False, latest_version
+            else:
+                print(f"Error fetching release data: {response.status_code}")
+                return False, None
+        except Exception as e:
+            print(f"Error checking for updates: {e}")
+            return False, None
+
+
     def break_notification(self):
         self.tray_icon.show_notification(
             "Take a break from the screen!",
             "Look at lest 6 meters away from the screen for 20 seconds.",
-            # QIcon(config.app_icon_path) 
             QIcon(self.eye_icon_path)
         )
 
