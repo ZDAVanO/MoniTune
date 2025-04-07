@@ -232,7 +232,6 @@ class SettingsWindow(QWidget):
         reg_write_dict(config.REGISTRY_PATH, "TimeAdjustmentData", sorted_time_adjustment_data)
 
         self.parent.time_adjustment_data = sorted_time_adjustment_data
-        self.parent.update_scheduler_tasks()
 
 
 
@@ -627,7 +626,7 @@ class SettingsWindow(QWidget):
         check_update_button.clicked.connect(update_check)
         update_check()
 
-        learn_more_label = QLabel('<a href="https://github.com/ZDAVanO/MoniTune" style="text-decoration: none;">Learn More</a>')
+        learn_more_label = QLabel(f'<a href="{config.LEARN_MORE_URL}" style="text-decoration: none;">Learn More</a>')
         learn_more_label.setOpenExternalLinks(True)  # Дозволяє відкривати посилання у браузері
 
         about_layout.addWidget(about_label, alignment=Qt.AlignmentFlag.AlignCenter)

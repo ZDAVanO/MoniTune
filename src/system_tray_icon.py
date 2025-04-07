@@ -86,8 +86,8 @@ class SystemTrayIcon(QSystemTrayIcon):
     
 
     def open_display_settings(self):
-        os.system("start ms-settings:display")  # Opens Windows display settings
+        os.system(f"start {config.DISPLAY_SETTINGS_URL}")  # Opens Windows display settings
 
     def open_night_light_settings(self):
-        os.system("start ms-settings:nightlight")
+        os.system(f"start {config.NIGHT_LIGHT_SETTINGS_URL}")
 

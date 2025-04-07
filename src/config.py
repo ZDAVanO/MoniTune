@@ -13,6 +13,12 @@ REGISTRY_PATH = r"Software\MoniTune\Settings"
 WIN11_WINDOW_CORNER_RADIUS = 9
 WIN11_WINDOW_OFFSET = 11
 
+UPDATE_CHECK_URL = "https://api.github.com/repos/ZDAVanO/MoniTune/releases/latest"
+LATEST_RELEASE_URL = "https://github.com/ZDAVanO/MoniTune/releases/latest"
+LEARN_MORE_URL = "https://github.com/ZDAVanO/MoniTune"
+
+DISPLAY_SETTINGS_URL = "ms-settings:display"
+NIGHT_LIGHT_SETTINGS_URL = "ms-settings:nightlight"
 
 
 # MARK: Colors

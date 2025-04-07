@@ -1,12 +1,16 @@
 from PySide6.QtCore import (
     Qt, 
     QTimer, 
+    QTime, 
+    QDateTime, 
     QPropertyAnimation, 
     QEasingCurve, 
     Signal,
     QEvent, 
     QSize, 
     QRect, 
+    Slot, 
+    QMetaObject, 
 )
 from PySide6.QtGui import (
     QIcon, 
@@ -44,7 +48,8 @@ from custom_widgets.custom_sliders import CustomSlider, AnimatedSlider, Animated
 from custom_widgets.custom_buttons import RRButton
 from custom_widgets.custom_labels import BrightnessIcon
 
-from brightness_scheduler import BrightnessScheduler
+from utils.utils import get_idle_time
+from utils.lock_detect import LockDetect
 
 from utils.monitor_utils import (
     get_monitors_info, 
@@ -258,12 +263,22 @@ class MainWindow(QMainWindow):
         print(f"self.contrast_values {self.contrast_values}")
         self.previous_contrast_values = {}
 
+        
 
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.check_all_tasks)
+        self.last_check_time = QDateTime.currentDateTime()
 
-        self.scheduler = BrightnessScheduler(self)
-        self.update_scheduler_tasks()
+        self.time_active = 0
+        self.saved_time = 0
+
+        self.lock_listener = LockDetect(self.on_lock_state_change)
+        threading.Thread(target=self.lock_listener.run, daemon=True).start()
+
+        self.start_checking()  # Start checking every minute
         if self.time_adjustment_startup:
-            self.scheduler.execute_recent_task()
+            self.execute_recent_task()
+
 
 
         update_available, latest_version = self.check_for_update()
@@ -272,18 +287,143 @@ class MainWindow(QMainWindow):
                         "New Update Available!",
                         f"A new version of MoniTune (v{latest_version}) is ready! Click here to download.",
                         QIcon(config.app_icon_path),
-                        on_click_callback=lambda: webbrowser.open("https://github.com/ZDAVanO/MoniTune/releases/latest")
+                        on_click_callback=lambda: webbrowser.open(config.LATEST_RELEASE_URL)
                     )
 
         # self.monitors_frame.setStyleSheet("background-color: red;")
         # self.bottom_frame.setStyleSheet("background-color: green;") 
         # self.openSettingsWindow() # Open settings window on startup
 
+    
+
+    # MARK: on_lock_state_change()
+    @Slot(str)
+    def on_lock_state_change(self, state):
+        if state == "unlocked":
+            print("Screen unlocked at:", QTime.currentTime().toString("HH:mm"))
+            print("Starting delayed task")
+            threading.Timer(10, self.execute_recent_task).start()  # Execute after 10 seconds
+            # self.start_checking()
+            QMetaObject.invokeMethod(self, "start_checking", Qt.QueuedConnection)
+
+        elif state == "locked":
+            print("Screen locked at:", QTime.currentTime().toString("HH:mm"))
+            # self.stop_checking()
+            QMetaObject.invokeMethod(self, "stop_checking", Qt.QueuedConnection)
+
+    # MARK: stop_checking()
+    @Slot()
+    def stop_checking(self):
+        self.timer.stop()
+        print("Task checking stopped")
+
+    # MARK: start_checking()
+    @Slot()
+    def start_checking(self, interval=60000):
+        self.last_check_time = QDateTime.currentDateTime()
+        self.timer.start(interval)
+        print("Task checking started")
+
+
+    # MARK: check_all_tasks()
+    def check_all_tasks(self):
+        current_time = QTime.currentTime().toString("HH:mm")
+        current_datetime = QDateTime.currentDateTime()
+
+        print(f"Checking tasks at: {current_time}")
+        # print(f"self.time_adjustment_data {self.time_adjustment_data}")
+
+        if current_time in self.time_adjustment_data:
+            # self.tasks[current_time]()  # execute the callback
+            self.bg_br_change(self.time_adjustment_data[current_time])
+        else:
+            print("No tasks at this time")
+
+        self.last_check_time = current_datetime
+
+
+        # MARK: Check idle time
+        if not self.enable_break_reminders:
+            self.time_active = 0
+            self.saved_time = 0
+        else:
+            idle_time = get_idle_time()
+            if idle_time is not None:
+                print(f"idle_time: {idle_time:.2f}")
+
+                if idle_time > 5 * 60:
+                    print("idle 5min, reset time_active")
+                    self.time_active = 0
+                    self.saved_time = 0
+                elif idle_time < 60 * 1.0:
+                    self.time_active += 60
+                    self.time_active += self.saved_time
+                    self.saved_time = 0
+                    if self.time_active >= 30 * 60:
+                        print("active more 30 min!, show notification")
+                        self.break_notification()
+                        self.time_active = 0
+                else:
+                    self.saved_time += 60
+
+                print(f"time_active: {self.time_active / 60} min, saved_time: {self.saved_time / 60} min")
         
+
+
+    # MARK: execute_recent_task()
+    def execute_recent_task(self):
+        if not self.time_adjustment_data:
+            print("execute_recent_task: No tasks found")
+            print("Restoring last change")
+            # self.brightness_sync_onetime()
+            self.bg_br_change(self.brightness_values)
+            return
+
+        current_time = QTime.currentTime().toString("HH:mm")
+        past_tasks = [time for time in self.time_adjustment_data.keys() if time <= current_time]
+        if past_tasks:
+            recent_task_time = max(past_tasks)
+            print(f"Executing recent task at: {recent_task_time}")
+            # self.tasks[recent_task_time]()  # execute the callback
+            self.bg_br_change(self.time_adjustment_data[recent_task_time])
+        else:
+            print("No past tasks to execute for today, checking previous day")
+            if self.time_adjustment_data:
+                recent_task_time = max(self.time_adjustment_data.keys())
+                print(f"Executing last task from previous day at: {recent_task_time}")
+                # self.tasks[recent_task_time]()  # execute the callback
+                self.bg_br_change(self.time_adjustment_data[recent_task_time])
+    
+
+
+    # MARK: bg_br_change()
+    def bg_br_change(self, brightness_data):
+        print("bg_br_change")
+        # print(f"brightness_data {brightness_data}")
+        # self.show()
+        self.update_connected_monitors()
+        # print(f"self.connected_monitors {self.connected_monitors}")
+        for monitor_serial in self.connected_monitors:
+            if monitor_serial in brightness_data:
+                # update brightness slider
+                if monitor_serial in self.br_sliders:
+                    if self.window_open:
+                        QTimer.singleShot(0, self.start_slider_animation) # play slider animation if window is open
+                    # else:
+                    #     self.br_sliders[monitor_serial].setValue(brightness_data[monitor_serial])
+                self.brightness_values[monitor_serial] = brightness_data[monitor_serial]
+            else:
+                print(f"Monitor {monitor_serial} not found in brightness_data")
+
+        self.brightness_sync_onetime()
+
+        # QTimer.singleShot(1000, self.animateWindowClose)
+
+
 
     def check_for_update(self):
         try:
-            response = requests.get("https://api.github.com/repos/ZDAVanO/MoniTune/releases/latest")
+            response = requests.get(config.UPDATE_CHECK_URL)
             if response.status_code == 200:
                 latest_release = response.json()
                 latest_version = Version(latest_release["tag_name"].lstrip("v"))
@@ -312,40 +452,6 @@ class MainWindow(QMainWindow):
         )
 
 
-    # MARK: update_scheduler_tasks()
-    def update_scheduler_tasks(self):
-        print("update_scheduler_tasks")
-        self.scheduler.clear_all_tasks()
-
-        for time_str, brightness_data in self.time_adjustment_data.items():
-            # self.scheduler.add_task(time_str, lambda: self.test_br_change_to(brightness_data))
-            self.scheduler.add_task(time_str, lambda bd=brightness_data: self.bg_br_change(bd))
-
-        self.scheduler.start_checking()
-
-
-    # MARK: bg_br_change()
-    def bg_br_change(self, brightness_data):
-        print("bg_br_change")
-        # self.show()
-        self.update_connected_monitors()
-        # print(f"self.connected_monitors {self.connected_monitors}")
-        for monitor_serial in self.connected_monitors:
-            if monitor_serial in brightness_data:
-                # update brightness slider
-                if monitor_serial in self.br_sliders:
-                    if self.window_open:
-                        QTimer.singleShot(0, self.start_slider_animation) # play slider animation if window is open
-                    # else:
-                    #     self.br_sliders[monitor_serial].setValue(brightness_data[monitor_serial])
-                self.brightness_values[monitor_serial] = brightness_data[monitor_serial]
-            else:
-                print(f"Monitor {monitor_serial} not found in brightness_data ----------------------------------------------------------------")
-
-        self.brightness_sync_onetime()
-
-        # QTimer.singleShot(1000, self.animateWindowClose)
-
 
     # MARK: update_connected_monitors()
     def update_connected_monitors(self):
@@ -356,12 +462,6 @@ class MainWindow(QMainWindow):
         # print(f" -------- update_connected_monitors monitors_info {monitors_info}")
 
         self.connected_monitors = [monitor['serial'] for monitor in monitors_info]
-
-
-
-
-
-
 
 
 
@@ -1040,7 +1140,7 @@ class MainWindow(QMainWindow):
     def brightness_sync_onetime(self):
         print("brightness_sync_onetime")
         start_time = time.time()
-        self.update_connected_monitors() # remove this in the future
+        # self.update_connected_monitors() # remove this in the future
 
         brightness_values_copy = self.brightness_values.copy()
         # print(f"brightness_values_copy {brightness_values_copy}")
