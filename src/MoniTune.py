@@ -899,7 +899,12 @@ class MainWindow(QMainWindow):
         print(f"Selected refresh rate: {rate} Hz for monitor {monitor["serial"]}")
         # print(monitor)
 
-        set_refresh_rate_br(monitor, rate)
+        contrast = self.contrast_values.get(monitor["serial"])
+        if contrast is not None:
+            print(f"set_refresh_rate_br restore contrast")
+            set_refresh_rate_br(monitor, rate, contrast_before=contrast)
+        else:
+            set_refresh_rate_br(monitor, rate)
 
         monitors_info = get_monitors_info()
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
@@ -1073,8 +1078,9 @@ class MainWindow(QMainWindow):
 
         if self.show_contrast_sliders:
             for index, (serial, slider) in enumerate(self.contrast_sliders.items()):
-                print(f"start_slider_animation CONTRAST {serial} {self.contrast_values[serial]}")
-                slider.animate_to(int(self.contrast_values[serial]))
+                if serial in self.contrast_values:
+                    print(f"start_slider_animation CONTRAST {serial} {self.contrast_values[serial]}")
+                    slider.animate_to(int(self.contrast_values[serial]))
 
     # MARK: start_brightness_sync_thread()
     def start_brightness_sync_thread(self):

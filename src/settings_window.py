@@ -278,7 +278,7 @@ class SettingsWindow(QWidget):
                                                None,
                                                True)
                                                .create_toggle(
-                                                   "Fusion Theme", 
+                                                   "Fusion Theme (requires restart)", 
                                                    "Enables Fusion theme. Requires app restart"
                                                    ))
 

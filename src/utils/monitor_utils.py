@@ -151,7 +151,7 @@ def set_refresh_rate(monitor, refresh_rate):
 
 
 # MARK: set_refresh_rate_br()
-def set_refresh_rate_br(monitor, refresh_rate):
+def set_refresh_rate_br(monitor, refresh_rate, contrast_before=None):
     # Refresh monitor data
     monitors_info = get_monitors_info()
     monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
@@ -179,6 +179,21 @@ def set_refresh_rate_br(monitor, refresh_rate):
             print(f"Restored brightness of {monitor['name']} from {brightness_after} to {brightness_before}")
         else:
             print(f"Did not need to restore brightness of {monitor['name']}")
+
+        # restore contrast
+        if contrast_before is not None:
+                contrast_changed = False
+                while contrast_changed == False:
+                    try:
+                        print(f"set_refresh_rate_br set_contrast {monitor['serial']}")
+                        set_contrast_s(monitor['serial'], contrast_before)
+                        # if set_contrast_s raise error, contrast_changed dont change
+                        contrast_changed = True
+                    except Exception as e:
+                        print(f"Error: {e}")
+                    time.sleep(0.10)
+                print(f"Restored contrast of {monitor['name']} to {contrast_before}")
+
 
     threading.Thread(target=restore_brightness).start()
 
