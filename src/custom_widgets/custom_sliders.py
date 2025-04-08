@@ -72,7 +72,7 @@ class AnimatedSlider(QSlider):
 
 
 
-class AnimatedSliderBlockSignals(QSlider):
+class AnimatedSliderBS(QSlider):
     def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, icon=None, label=None, *args, **kwargs):
         super().__init__(orientation, *args, **kwargs)
 
@@ -139,9 +139,11 @@ class AnimatedSliderBlockSignals(QSlider):
 
     def add_icon(self, icon):
         self.icon = icon
+        self.valueChanged.connect(lambda value, ico=self.icon: ico.set_value(value))
 
     def add_label(self, label):
         self.label = label
+        self.valueChanged.connect(lambda value, lbl=self.label: lbl.setText(str(value)))
 
 
 
@@ -188,9 +190,9 @@ class SliderAnimationDemo(QMainWindow):
         self.continuous_slider.setValue(0)
         self.animate_continuous_slider()
 
-        # Demonstration of AnimatedSliderBlockSignals with QLabel
+        # Demonstration of AnimatedSliderBS with QLabel
         self.label_slider_label = QLabel("0")
-        self.label_slider = AnimatedSliderBlockSignals(label=self.label_slider_label)
+        self.label_slider = AnimatedSliderBS(label=self.label_slider_label)
         self.label_slider.setValue(50)
         self.label_slider_button = QPushButton("Animate to 100")
         self.label_slider_button.clicked.connect(lambda: self.label_slider.animate_to(100))
@@ -200,14 +202,13 @@ class SliderAnimationDemo(QMainWindow):
         # Demonstration with BrightnessIcon
         self.br_icon = BrightnessIcon(icon_path="src/assets/icons/sun_dark.png")
         self.br_icon.set_value(50)
-        self.label_slider.valueChanged.connect(lambda value, ico=self.br_icon: ico.set_value(value))
         self.label_slider.add_icon(self.br_icon)
         layout.addWidget(self.br_icon)
 
         layout.addWidget(self.label_slider_button)
 
         # Connect QLabel to slider's valueChanged signal
-        self.label_slider.valueChanged.connect(lambda value: self.label_slider_label.setText(str(value)))
+        self.label_slider.add_label(self.label_slider_label)
 
         container = QWidget()
         container.setLayout(layout)

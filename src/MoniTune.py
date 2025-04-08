@@ -44,7 +44,7 @@ from system_tray_icon import SystemTrayIcon
 from settings_window import SettingsWindow 
 
 from custom_widgets.custom_comboboxes import NoScrollComboBox
-from custom_widgets.custom_sliders import CustomSlider, AnimatedSlider, AnimatedSliderBlockSignals
+from custom_widgets.custom_sliders import AnimatedSliderBS
 from custom_widgets.custom_buttons import RRButton
 from custom_widgets.custom_labels import BrightnessIcon
 
@@ -101,6 +101,47 @@ class SeparatorLine(QFrame):
             self.setStyleSheet(f"color: {color};")
         self.setLineWidth(line_width)
 
+
+class SliderFrame(QWidget):
+    def __init__(self, parent, icon_path, slider_value, slider_callback, label_text, disabled=False):
+        super().__init__(parent)
+
+        self.hbox = QHBoxLayout(self)
+        self.hbox.setContentsMargins(0, 0, 2, 0)
+        self.hbox.setSpacing(0)
+
+        self.icon = BrightnessIcon(icon_path=icon_path)
+        self.icon.set_value(slider_value)
+        self.hbox.addWidget(self.icon)
+
+        spacer = QSpacerItem(6, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        self.hbox.addItem(spacer)
+
+        self.slider = AnimatedSliderBS(Qt.Orientation.Horizontal, scrollStep=1, singleStep=1, pageStep=10)
+        self.slider.setMaximum(100)
+        self.slider.setValue(slider_value)
+        self.slider.valueChanged.connect(slider_callback)
+        self.hbox.addWidget(self.slider)
+
+        spacer = QSpacerItem(3, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        self.hbox.addItem(spacer)
+
+        self.label = QLabel()
+        self.label.setFixedWidth(39)
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setText(str(label_text) if not disabled else "N/A")
+        self.label.setStyleSheet(f"""
+                                 font-size: {"22px" if not disabled else "16px"}; 
+                                 font-weight: bold; 
+                                 padding-bottom: 2px; 
+                                 """) # padding-bottom: 4px; background-color: green; font-size: 22px; font-weight: bold; font: 600 16pt "{cfg.font_family}";
+        self.hbox.addWidget(self.label)
+
+        self.slider.add_icon(self.icon) # Connect icon to slider to animate the icon
+        self.slider.add_label(self.label) # Connect label to slider to animate the label
+
+        if disabled:
+            self.setDisabled(True)  # Disable the frame to prevent interaction
 
 
 # MARK: MainWindow
@@ -440,7 +481,7 @@ class MainWindow(QMainWindow):
     def break_notification(self):
         self.tray_icon.show_notification(
             "Take a break from the screen!",
-            "Look at lest 6 meters away from the screen for 20 seconds.",
+            "Look at least 6 meters away from the screen for 20 seconds.",
             QIcon(self.eye_icon_path)
         )
 
@@ -634,10 +675,11 @@ class MainWindow(QMainWindow):
         # print monitors order for testing
         print("monitors order:")
         for monitor_serial in self.monitors_order:
-            if monitor_serial in self.hidden_displays:
-                continue
-            monitor_name = self.custom_monitor_names.get(monitor_serial, monitors_dict[monitor_serial]['display_name'])
-            print(f"  {monitor_name} ({monitor_serial})")
+            if monitor_serial in self.connected_monitors:
+                if monitor_serial in self.hidden_displays:
+                    continue
+                monitor_name = self.custom_monitor_names.get(monitor_serial, monitors_dict[monitor_serial]['display_name'])
+                print(f"  {monitor_name} ({monitor_serial})")
 
 
 
@@ -798,103 +840,25 @@ class MainWindow(QMainWindow):
             
 
 
-
             # MARK: Brightness
-
-            br_frame = QWidget()
-            br_hbox = QHBoxLayout(br_frame)
-            # br_hbox.setContentsMargins(7, 0, 7, 7)
-            # br_hbox.setContentsMargins(16, 0, 7, 7)
-
-            # br_hbox.setContentsMargins(12, 0, 7, 7)
-            # br_hbox.setSpacing(1)
-
-            # br_hbox.setContentsMargins(12, 0, 9, 7)
-            # br_hbox.setContentsMargins(5, 0, 2, 0)
-            br_hbox.setContentsMargins(0, 0, 2, 0)
-            # br_hbox.setContentsMargins(0, 0, 0, 0)
-            
-            # br_hbox.setSpacing(3)
-            br_hbox.setSpacing(0)
-
-
-
             br_level = get_brightness(display=monitor['serial'])[0]
 
-            # print(f"-------------- br_level {monitor['serial']} {self.brightness_values[monitor['serial']]}")
             if self.restore_last_brightness and monitor['serial'] in self.brightness_values:
-                # br_level = int(self.brightness_values[monitor['serial']])
                 pass
             else:
-                # br_level = get_brightness(display=monitor['serial'])[0]
-                # self.brightness_values[monitor['serial']] = get_brightness(display=monitor['serial'])[0]
                 self.brightness_values[monitor['serial']] = br_level
-            # print(f"xxxxxxxxxxxxxxxxxxxx br_level {monitor['serial']} {self.brightness_values[monitor['serial']]}")
 
+            br_frame = SliderFrame(
+                parent=self,
+                icon_path=self.sun_icon_path,
+                slider_value=br_level,
+                slider_callback=lambda value, ms=monitor_serial: self.on_brightness_change(value, ms),
+                label_text=br_level
+            )
 
-
-            
-
-
-            
-            sun_icon = BrightnessIcon(icon_path=self.sun_icon_path)
-            # sun_icon.setStyleSheet("""
-            #                        background-color: green;
-
-            #                        """) # background-color: green;
-            sun_icon.set_value(br_level)
-            br_hbox.addWidget(sun_icon)
-
-
-
-            # Add spacer between sun icon and slider
-            sun_slider_spacer = QSpacerItem(6, 0, QSizePolicy.Minimum, QSizePolicy.Expanding) # 3
-            br_hbox.addItem(sun_slider_spacer)
-
-
-
-
-
-
-            br_slider = AnimatedSliderBlockSignals(Qt.Orientation.Horizontal, 
-                                     scrollStep=1, 
-                                     singleStep=1,
-                                     pageStep=10) # keyboard step
-            br_slider.setMaximum(100)  # Set maximum value to 100
-            br_slider.setValue(br_level)
-            
-            self.br_sliders[monitor['serial']] = br_slider  # Store slider in dictionary
-            
-            br_label = QLabel()
-            # br_label.setFixedWidth(26) 
-            br_label.setFixedWidth(39) # 2-26 3-39px
-            # br_label.setFixedWidth(32) # 2-23 3-32px
-            # br_label.setFixedHeight(100)
-            br_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            # br_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-            br_label.setText(str(br_level))
-            br_label.setStyleSheet(f"""
-                                   font-size: 22px; font-weight: bold; 
-                                   padding-bottom: 2px;
-
-                                   
-                                   """) # padding-bottom: 4px; background-color: green; font-size: 22px; font-weight: bold; font: 600 16pt "{cfg.font_family}";
-            
-            br_slider.add_icon(sun_icon) # Connect icon to slider to animate the icon
-            br_slider.add_label(br_label) # Connect label to slider to animate the label
-            br_slider.valueChanged.connect(lambda value, icon=sun_icon, label=br_label, ms=monitor_serial: self.on_brightness_change(value, icon, label, ms))
-            br_hbox.addWidget(br_slider)
-
-
-            # Add spacer between slider and label
-            slider_label_spacer = QSpacerItem(3, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
-            br_hbox.addItem(slider_label_spacer)
-
-
-            br_hbox.addWidget(br_label)
+            self.br_sliders[monitor['serial']] = br_frame.slider  # Store slider in dictionary
 
             monitor_vbox.addWidget(br_frame)
-            
 
 
             # MARK: Contrast
@@ -911,56 +875,22 @@ class MainWindow(QMainWindow):
                         contrast_level = 50
                         disable_contrast_frame = True
 
-                # if contrast_level is not None:
                 # self.contrast_values[monitor_serial] = contrast_level # dont change contrast
-                print(f"self.contrast_values {self.contrast_values}")
-
+                
                 # Add separator line
                 monitor_vbox.addWidget(SeparatorLine(color=self.separator_color))
 
-                contrast_frame = QWidget()
+                contrast_frame = SliderFrame(
+                    parent=self,
+                    icon_path=self.contrast_icon_path,
+                    slider_value=contrast_level,
+                    slider_callback=lambda value, ms=monitor_serial: self.on_contrast_change(value, ms),
+                    label_text=contrast_level,
+                    disabled=True if disable_contrast_frame else False
+                )
 
-                if disable_contrast_frame:
-                    contrast_frame.setDisabled(True)  # Disable the frame to prevent interaction
+                self.contrast_sliders[monitor['serial']] = contrast_frame.slider  # Store slider in dictionary
 
-                contrast_hbox = QHBoxLayout(contrast_frame)
-                contrast_hbox.setContentsMargins(0, 0, 2, 0)
-                contrast_hbox.setSpacing(0)
-
-                contrast_icon = BrightnessIcon(icon_path=self.contrast_icon_path)
-                contrast_icon.set_value(contrast_level)
-                contrast_hbox.addWidget(contrast_icon)
-
-                contrast_slider_spacer = QSpacerItem(6, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
-                contrast_hbox.addItem(contrast_slider_spacer)
-
-                contrast_slider = AnimatedSliderBlockSignals(Qt.Orientation.Horizontal,
-                                                                scrollStep=1,
-                                                                singleStep=1,
-                                                                pageStep=10)
-                contrast_slider.setMaximum(100)  # Set maximum value to 100
-                contrast_slider.setValue(contrast_level)
-
-                self.contrast_sliders[monitor['serial']] = contrast_slider  # Store slider in dictionary
-
-                contrast_label = QLabel()
-                contrast_label.setFixedWidth(39)  # 2-26 3-39px
-                contrast_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                contrast_label.setText(str(contrast_level) if not disable_contrast_frame else "N/A")
-                contrast_label.setStyleSheet(f"""
-                                font-size: {"22px" if not disable_contrast_frame else "16px"}; font-weight: bold; 
-                                padding-bottom: 2px;
-                                """)
-                
-                contrast_slider.add_icon(contrast_icon)  # Connect icon to slider to animate the icon
-                contrast_slider.add_label(contrast_label)  # Connect label to slider to animate the label
-                contrast_slider.valueChanged.connect(lambda value, icon=contrast_icon, label=contrast_label, ms=monitor_serial: self.on_contrast_change(value, icon, label, ms))
-                contrast_hbox.addWidget(contrast_slider)
-
-                slider_label_spacer = QSpacerItem(3, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
-                contrast_hbox.addItem(slider_label_spacer)
-
-                contrast_hbox.addWidget(contrast_label)
                 monitor_vbox.addWidget(contrast_frame)
 
 
@@ -976,6 +906,7 @@ class MainWindow(QMainWindow):
 
 
         print(f"self.brightness_values {self.brightness_values}")
+        print(f"self.contrast_values {self.contrast_values}")
 
         end_time = time.time()
         print(f"updateMonitorsFrame took {end_time - start_time:.4f} seconds")
@@ -1060,18 +991,14 @@ class MainWindow(QMainWindow):
 
 
     # MARK: on_brightness_change()
-    def on_brightness_change(self, value, icon, label, monitor_serial):
+    def on_brightness_change(self, value, monitor_serial):
         # print(f"on_brightness_change {value} {label} {monitor_serial}")
-        icon.set_value(value)
-        label.setText(str(value))
         self.brightness_values[monitor_serial] = int(value)
         # print(f"on_brightness_change {monitor_serial}", self.brightness_values[monitor_serial])
 
     # MARK: on_contrast_change()
-    def on_contrast_change(self, value, icon, label, monitor_serial):
+    def on_contrast_change(self, value, monitor_serial):
         # print(f"on_contrast_change {value} {label} {monitor_serial}")
-        icon.set_value(value)
-        label.setText(str(value))
         self.contrast_values[monitor_serial] = int(value)
         # print(f"on_contrast_change {monitor_serial}", self.contrast_values[monitor_serial])
 
