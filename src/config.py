@@ -8,6 +8,9 @@ app_name = "MoniTune"
 
 version = "0.3.5"
 
+timer_interval = 30  # seconds
+break_notification_interval = 30  # minutes
+
 REGISTRY_PATH = r"Software\MoniTune\Settings"
 
 WIN11_WINDOW_CORNER_RADIUS = 9
