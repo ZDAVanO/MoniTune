@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem, 
     QTimeEdit, 
     QSizePolicy,
+    QSpacerItem,
 )
 from PySide6.QtCore import (
     Qt, 
@@ -41,6 +42,8 @@ from utils.reg_utils import (
     )
 import config as cfg
 from config import tray_icons
+
+import darkdetect
 
 import webbrowser
 import time
@@ -76,14 +79,15 @@ class SettingToggle:
 
 
 
-# MARK: ChooseIconWidget
-class ChooseIconWidget(QFrame):
+# MARK: TrayIconSelector
+class TrayIconSelector(QFrame):
     def __init__(self, parent):
         super().__init__()
         self.setFrameShape(QFrame.StyledPanel)
         self.parent = parent
 
-        layout = QHBoxLayout()
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(15, 9, 9, 9)
         
         label = QLabel("Tray icon")
         layout.addWidget(label)
@@ -93,15 +97,18 @@ class ChooseIconWidget(QFrame):
 
         for icon_name, icon_variants in self.tray_icons.items():
             button = QPushButton()
-            button.setFixedHeight(32)
-            button.setIcon(QIcon(icon_variants["Dark"]))  # Assuming dark theme for now
+            button.setStyleSheet("""
+                                 padding: 10px 10px;
+                                 """)
+            button.setIcon(QIcon(icon_variants[darkdetect.theme()]))
             button.setCheckable(True)
-            button.setStyleSheet("background-color: #515151;")
-            button.clicked.connect(lambda checked, btn=button, name=icon_name: self.on_icon_button_clicked(btn, name))
+            button.clicked.connect(lambda checked, 
+                                   btn=button, 
+                                   name=icon_name: 
+                                   self.on_icon_button_clicked(btn, name))
             layout.addWidget(button)
             self.icon_buttons.append(button)
 
-        self.setLayout(layout)
 
     # MARK: on_icon_button_clicked()
     def on_icon_button_clicked(self, button, icon_name):
@@ -115,7 +122,7 @@ class ChooseIconWidget(QFrame):
 
     # MARK: select_icon()
     def select_icon(self, icon_name):
-        if icon_name in self.tray_icons:
+        if (icon_name in self.tray_icons):
             for button in self.icon_buttons:
                 button.setChecked(False)
             selected_button = next(btn for btn, name in zip(self.icon_buttons, self.tray_icons.keys()) if name == icon_name)
@@ -131,12 +138,17 @@ class TimeAdjustmentFrame(QFrame):
         self.parent = parent
         self.monitors_order = monitors_order
         self.monitors_dict = monitors_dict
-        self.setMaximumWidth(400)
+
         self.setFrameShape(QFrame.StyledPanel)
+        self.setMaximumWidth(500)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)  # Prevent frame from expanding
+        
         self.frame_layout = QVBoxLayout(self)
+        # self.frame_layout.setContentsMargins(0, 0, 0, 0)
+        # self.frame_layout.setSpacing(0)
 
         self.time_edit_layout = QHBoxLayout()
+
         self.time_edit = QTimeEdit()
         self.time_edit.setDisplayFormat("HH:mm")
         if time_str:
@@ -147,10 +159,19 @@ class TimeAdjustmentFrame(QFrame):
         self.time_edit_layout.addWidget(self.time_edit)
 
         self.delete_button = QPushButton("Remove time")
+        self.delete_button.setStyleSheet("padding: 4px 10px;")
         self.delete_button.clicked.connect(self.delete_frame)
         self.time_edit_layout.addWidget(self.delete_button)
 
+        self.time_edit_layout.addStretch()  # Add stretch to push widgets to the left
+
         self.frame_layout.addLayout(self.time_edit_layout)
+
+        # add separator
+        separator = QFrame(frameShape=QFrame.Shape.HLine,
+                           frameShadow=QFrame.Shadow.Sunken,
+                           lineWidth=1)
+        self.frame_layout.addWidget(separator)
 
 
         self.time_edit.timeChanged.connect(self.update_time)
@@ -158,25 +179,44 @@ class TimeAdjustmentFrame(QFrame):
         self.sliders = {}
         self.brightness_data = brightness_data if brightness_data else {monitor_id: 50 for monitor_id in self.monitors_order}  # Initialize brightness data
 
-        for monitor_id in self.monitors_order:
-            slider_label = QLabel(f"{self.monitors_dict[monitor_id]['display_name']}")
-
+        for serial in self.monitors_order:
             slider_layout = QHBoxLayout()
+            slider_layout.setContentsMargins(3, 0, 0, 0)
+            slider_layout.setSpacing(0)
+
+            slider_label = QLabel(f"{self.monitors_dict[serial]['display_name']}")
+            slider_label.setFixedWidth(100)
+
             slider = NoScrollSlider(Qt.Horizontal)
             slider.setMinimum(0)
             slider.setMaximum(100)
-            slider.setValue(self.brightness_data.get(monitor_id, 50))
-            slider.valueChanged.connect(lambda value, monitor_id=monitor_id: self.update_brightness(monitor_id, value))
-            slider_layout.addWidget(slider)
+            slider.setValue(self.brightness_data.get(serial, 50))
+            self.sliders[serial] = slider
+
+            spacer = QSpacerItem(3, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
 
             value_label = QLabel(f"{slider.value()}")
-            slider.valueChanged.connect(lambda value, label=value_label: label.setText(f"{value}"))
+            value_label.setFixedWidth(19)
+            value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            # value_label.setStyleSheet(f""" 
+            #                           background-color: green;
+            #                           """)
+
+            slider.valueChanged.connect(lambda value, 
+                                        label=value_label: 
+                                        label.setText(f"{value}"))
+            slider.valueChanged.connect(lambda value, 
+                                        s=serial: 
+                                        self.update_brightness(s, value))
+            
+            slider_layout.addWidget(slider_label)
+            slider_layout.addWidget(slider)
+            slider_layout.addItem(spacer)
             slider_layout.addWidget(value_label)
 
-            self.frame_layout.addWidget(slider_label)
             self.frame_layout.addLayout(slider_layout)
 
-            self.sliders[monitor_id] = slider
+            
 
     # MARK: set_brightness()
     def update_brightness(self, monitor_id, value):
@@ -217,14 +257,18 @@ class SettingsWindow(QWidget):
         self.setWindowTitle(f"{cfg.app_name} Settings")
         self.setWindowIcon(QIcon(cfg.app_icon_path))
         
-        self.resize(450, 500)
+        self.resize(475, 600)
         self.setMinimumWidth(400)
         self.setMinimumHeight(500)
 
         settings_layout = QVBoxLayout(self)
         settings_layout.setContentsMargins(0, 0, 0, 0)
+
         self.tab_widget = QTabWidget()
         # self.tab_widget.setDocumentMode(True)
+        self.selected_tab = 0  # Variable to store the selected tab index
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
+
         settings_layout.addWidget(self.tab_widget)
 
         self.time_adjustment_data = {}  # Dictionary to store time and brightness data
@@ -252,6 +296,7 @@ class SettingsWindow(QWidget):
         super().showEvent(event)
 
 
+
     # MARK: save_adjustment_data()
     def save_adjustment_data(self):
         # print("save_adjustment_data")
@@ -276,12 +321,14 @@ class SettingsWindow(QWidget):
 
     # MARK: updateLayout()
     def updateLayout(self):
-
+        
+        self.tab_widget.blockSignals(True)
         # Clear old widgets
         # print("Clearing tabs : ", self.tab_widget.count())
         while self.tab_widget.count(): # num of tabs
             self.tab_widget.removeTab(0) # remove the first tab
 
+        
 
 
         # MARK: get monitors info
@@ -333,7 +380,7 @@ class SettingsWindow(QWidget):
                                            "Get reminders every 30 minutes to rest your eyes"
                                            ))
 
-        icon_widget = ChooseIconWidget(self.parent)
+        icon_widget = TrayIconSelector(self.parent)
         icon = reg_read_list(cfg.REGISTRY_PATH, "TrayIcon")
         print("Icon:", icon) # ['fluent']
         icon_widget.select_icon(icon[0] if icon else "monitune")
@@ -408,10 +455,12 @@ class SettingsWindow(QWidget):
             row_layout.setContentsMargins(0, 0, 0, 0)
 
             label = QLabel(f"{monitors_dict[monitor_id]['display_name']}")
-            label.setAlignment(Qt.AlignLeft)
+            # label.setAlignment(Qt.AlignLeft)
+            label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             row_layout.addWidget(label)
 
             entry = QLineEdit()
+            entry.setStyleSheet("padding: 4px 4px;")
             entry.setPlaceholderText("Enter new name")
             entry.setMaxLength(25)
             placeholder = custom_monitor_names.get(monitor_id, "")
@@ -444,15 +493,33 @@ class SettingsWindow(QWidget):
 
         # print("monitors_order", monitors_order)
         self.list_widget = QListWidget()
+        self.list_widget.setStyleSheet("""
+                                        QListWidget::item {
+                                            padding: 5px;
+                                        }
+                                        """)
+
         self.list_widget.setDragDropMode(QListWidget.InternalMove)  # Дозволяє перетягування
         self.list_widget.model().rowsMoved.connect(save_order)
         
         for monitor_id in monitors_order:
-            # item = QListWidgetItem(monitors_dict[monitor_id]['display_name'])
-            item = QListWidgetItem(f"{custom_monitor_names[monitor_id]} ({monitors_dict[monitor_id]['display_name']})"
-            if monitor_id in custom_monitor_names else monitors_dict[monitor_id]['display_name'])
+            if monitor_id in custom_monitor_names:
+                item_text = f"{custom_monitor_names[monitor_id]} ({monitors_dict[monitor_id]['display_name']})"
+            else:
+                item_text = monitors_dict[monitor_id]['display_name']
+            # item = QListWidgetItem(item_text)
+            
+            item = QListWidgetItem()
             item.setData(Qt.UserRole, monitor_id)
+
+            widget = QWidget()
+            layout = QHBoxLayout(widget)
+            layout.setContentsMargins(5, 0, 5, 0)
+            label = QLabel(item_text)
+            layout.addWidget(label)
+
             self.list_widget.addItem(item)
+            self.list_widget.setItemWidget(item, widget)
 
         reorder_monitors_layout.addWidget(self.list_widget)
         general_layout.addWidget(reorder_monitors_widget)
@@ -586,6 +653,7 @@ class SettingsWindow(QWidget):
             scroll_layout.addWidget(frame)
 
         add_frame_button = QPushButton("Add a time")
+        add_frame_button.setStyleSheet("padding: 4px 10px;")
         add_frame_button.clicked.connect(lambda: (add_time_adjustment_frame(), self.save_adjustment_data()))
         time_adjustment_layout.addWidget(add_frame_button)
 
@@ -594,7 +662,9 @@ class SettingsWindow(QWidget):
         scroll_area.setWidgetResizable(True)
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        # scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+
 
         scroll_area.setWidget(scroll_content)
         time_adjustment_layout.addWidget(scroll_area)
@@ -646,7 +716,7 @@ class SettingsWindow(QWidget):
                 update_label.setText("You are using the latest version.")
 
         check_update_button = QPushButton("Check for Updates")
-        check_update_button.setMinimumWidth(150)
+        check_update_button.setStyleSheet("padding: 5px 15px;")
         check_update_button.clicked.connect(update_check)
         update_check()
 
@@ -658,11 +728,20 @@ class SettingsWindow(QWidget):
         about_layout.addWidget(check_update_button, alignment=Qt.AlignmentFlag.AlignCenter)
         about_layout.addWidget(learn_more_label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.tab_widget.addTab(about_tab, "About")
-        
+
+        # restore the selected tab
+        self.tab_widget.blockSignals(False)
+        self.tab_widget.setCurrentIndex(self.selected_tab)
+
         
     # MARK: show_parent_window()
     def show_parent_window(self):
         QTimer.singleShot(400, self.parent.show)
+
+    # Define the on_tab_changed method
+    def on_tab_changed(self, index):
+        print(f"Tab changed to index: {index}")
+        self.selected_tab = index
 
 
 

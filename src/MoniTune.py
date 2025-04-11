@@ -591,6 +591,8 @@ class MainWindow(QMainWindow):
         self.update_central_widget()
         self.update_bottom_frame = True
         self.tray_icon.changeIconTheme(theme)
+        if self.settings_window:
+            self.settings_window.updateLayout()
 
 
 
