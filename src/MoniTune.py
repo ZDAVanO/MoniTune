@@ -122,7 +122,10 @@ class SliderFrame(QWidget):
         spacer = QSpacerItem(6, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
         self.hbox.addItem(spacer)
 
-        self.slider = AnimatedSliderBS(Qt.Orientation.Horizontal, scrollStep=1, singleStep=1, pageStep=10)
+        self.slider = AnimatedSliderBS(Qt.Orientation.Horizontal, 
+                                       scrollStep=1, 
+                                       singleStep=1, 
+                                       pageStep=10)
         self.slider.setMaximum(100)
         self.slider.setValue(slider_value)
         self.slider.valueChanged.connect(slider_callback)
@@ -661,7 +664,8 @@ class MainWindow(QMainWindow):
             )
             placeholder_label.setWordWrap(True)
             placeholder_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-            placeholder_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.MinimumExpanding)
+            placeholder_label.setSizePolicy(QSizePolicy.Policy.Preferred, 
+                                            QSizePolicy.Policy.MinimumExpanding)
             placeholder_label.setStyleSheet("""
                                             font-size: 16px;
                                             font-weight: bold;
@@ -713,11 +717,8 @@ class MainWindow(QMainWindow):
                 """
             )
             monitor_vbox = QVBoxLayout(monitor_frame)
-            monitor_vbox.setContentsMargins(0, 0, 0, 0)
-            # monitor_vbox.setSpacing(5)  # Spacing between monitor frames
-            monitor_vbox.setSpacing(0)  # Spacing between monitor frames
+            monitor_vbox.setSpacing(5)  # Spacing between monitor frames
             monitor_vbox.setContentsMargins(7, 7, 7, 7)
-            # monitor_vbox.setContentsMargins(0, 5, 0, 5)
             
 
             # MARK: Monitor Label
@@ -725,13 +726,8 @@ class MainWindow(QMainWindow):
             # label_frame.setMinimumHeight(34)
             # label_frame.setFixedHeight(34)
             label_hbox = QHBoxLayout(label_frame)
-            # label_hbox.setContentsMargins(12, 7, 7, 0)
-            label_hbox.setContentsMargins(7, 7, 7, 0)
             label_hbox.setContentsMargins(0, 0, 0, 0)
-            # label_hbox.setSpacing(5)
-            label_hbox.setSpacing(7)
             label_hbox.setSpacing(6)
-            # label_hbox.setSpacing(2)
 
             # Add monitor icon
             monitor_icon = QLabel()
@@ -789,18 +785,23 @@ class MainWindow(QMainWindow):
                                                 margin-right: 10px;
                                                 }}
                                             """)
-                res_combobox.setFixedWidth(120)
-                # res_combobox.setFixedWidth(105)
-                res_combobox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+                
+                max_res_length = max(len(res) for res in formatted_resolutions)
+                res_combobox_width = 105 if max_res_length <= 9 else 112 if max_res_length == 10 else 120
+                res_combobox.setFixedWidth(res_combobox_width)
+                res_combobox.setSizePolicy(QSizePolicy.Policy.Fixed, 
+                                           QSizePolicy.Policy.Expanding)
                 res_combobox.addItems(formatted_resolutions)
                 res_combobox.setCurrentText(monitor["Resolution"])
-                res_combobox.currentIndexChanged.connect(lambda index, m=monitor, cb=res_combobox: self.on_resolution_select(m, cb.currentText()))
+                res_combobox.currentIndexChanged.connect(lambda index, 
+                                                         m=monitor, 
+                                                         cb=res_combobox: 
+                                                         self.on_resolution_select(m, cb.currentText()))
                 label_hbox.addWidget(res_combobox)
 
 
             monitor_vbox.addWidget(label_frame)
             
-            monitor_vbox.setSpacing(5)
 
 
 
@@ -809,8 +810,6 @@ class MainWindow(QMainWindow):
 
                 # Add separator line
                 monitor_vbox.addWidget(SeparatorLine(color=self.separator_color))
-
-                monitor_vbox.setSpacing(5)  # Spacing between monitor frames
                 
                 refresh_rates = monitor["AvailableRefreshRates"]
                 refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
@@ -818,12 +817,7 @@ class MainWindow(QMainWindow):
                 if len(refresh_rates) >= 2:
                     rr_frame = QWidget()
                     rr_grid = QGridLayout(rr_frame)
-                    # rr_grid.setContentsMargins(5, 0, 5, 0)
-                    rr_grid.setContentsMargins(6, 0, 6, 0)
                     rr_grid.setContentsMargins(0, 0, 0, 0)
-
-                    # rr_grid.setContentsMargins(11, 0, 11, 0)
-                    # rr_grid.setContentsMargins(10, 0, 10, 0)
                     rr_grid.setSpacing(0)
 
                     self.rr_buttons[monitor_serial] = []  # Initialize list for this monitor
@@ -833,7 +827,11 @@ class MainWindow(QMainWindow):
                         rr_button = RRButton(f"{rate} Hz")
                         if rate == monitor["RefreshRate"]:
                             rr_button.setChecked(True)
-                        rr_button.clicked.connect(lambda checked, r=rate, m=monitor, btn=rr_button: self.on_rr_button_clicked(r, m, btn))
+                        rr_button.clicked.connect(lambda checked, 
+                                                  r=rate, 
+                                                  m=monitor, 
+                                                  btn=rr_button: 
+                                                  self.on_rr_button_clicked(r, m, btn))
                         
 
                         row = idx // num_columns
@@ -924,8 +922,7 @@ class MainWindow(QMainWindow):
         print(f"self.brightness_values {self.brightness_values}")
         print(f"self.contrast_values {self.contrast_values}")
 
-        end_time = time.time()
-        print(f"updateMonitorsFrame took {end_time - start_time:.4f} seconds")
+        print(f"updateMonitorsFrame took {time.time() - start_time:.4f} seconds")
 
     
     
@@ -952,13 +949,10 @@ class MainWindow(QMainWindow):
         # self.settings_button.setStyleSheet("""
                                  
         #                          """)
-        self.settings_button.setFixedWidth(41)
-        # self.settings_button.setFixedWidth(39)
+        self.settings_button.setFixedWidth(41) # 39
         self.settings_button.setFixedHeight(39)
         self.settings_button.setIcon(QIcon(self.settings_icon_path))
         self.settings_button.setIconSize(QSize(21, 21))
-        # self.settings_button.setStyleSheet("border: none;")
-        # self.settings_button.setStyleSheet("QPushButton { border: none; }")
         self.settings_button.clicked.connect(self.openSettingsWindow)
 
         self.bottom_hbox.addWidget(name_title)
@@ -1161,8 +1155,7 @@ class MainWindow(QMainWindow):
                     except Exception as e:
                         print(f"Error: {e}")
 
-        end_time = time.time()  # End time measurement
-        print(f"brightness_sync_onetime sync took {end_time - start_time:.4f} seconds")
+        print(f"brightness_sync_onetime sync took {time.time() - start_time:.4f} seconds")
 
 
     # MARK: showEvent()
@@ -1192,6 +1185,10 @@ class MainWindow(QMainWindow):
             # self.brightness_sync_thread.start()
             QTimer.singleShot(250, self.start_brightness_sync_thread) 
 
+            # self.brightness_sync_thread = threading.Timer(0.25, self.brightness_sync)
+            # self.brightness_sync_thread.daemon = True
+            # self.brightness_sync_thread.start()
+            # print("brightness_sync_thread started")
         else:
             print("brightness_sync_thread is already running")
 
@@ -1226,11 +1223,9 @@ class MainWindow(QMainWindow):
         self.window_open = False
         self.stop_brightness_sync_thread()
         # QTimer.singleShot(2000, self.stop_brightness_sync_thread)  # Add 2-second delay
-
         # QTimer.singleShot(1000, self.brightness_sync_onetime)
-        
-
         super().hideEvent(event)
+
 
     # MARK: stop_brightness_sync_thread()
     def stop_brightness_sync_thread(self):
@@ -1361,7 +1356,7 @@ if __name__ == "__main__":
     window = MainWindow()
 
     if not getattr(sys, 'frozen', False): # if run from source code
-        pass
+        # window.openSettingsWindow()
         window.show()
 
     app.exec()
