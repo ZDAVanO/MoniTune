@@ -141,8 +141,10 @@ def set_refresh_rate(monitor, refresh_rate):
 
     if result == win32con.DISP_CHANGE_SUCCESSFUL:
         print(f"Successfully changed the refresh rate of {device} to {refresh_rate} Hz.")
+        return True
     else:
         print(f"Failed to change the refresh rate of {device}.")
+        return False
 
 
 

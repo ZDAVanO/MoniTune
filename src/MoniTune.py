@@ -980,7 +980,6 @@ class MainWindow(QMainWindow):
             print(f"Monitor {monitor['Device']} already has refresh rate {rate} Hz")
             return
 
-
         # save brightness and contrast before changing refresh rate
         brightness_before = None
         contrast_before = None
@@ -1002,8 +1001,6 @@ class MainWindow(QMainWindow):
             else:
                 contrast_before = get_contrast_vcp(monitor["hPhysicalMonitor"], retries=7)
 
-        set_refresh_rate(monitor, rate)
-
         #restore brightness and contrast after 6 seconds
         def restore_parameters():
             print(f"restore_parameters {monitor['serial']}: {brightness_before}, {contrast_before}")
@@ -1013,21 +1010,16 @@ class MainWindow(QMainWindow):
                 self.contrast_values[monitor['serial']] = contrast_before
             self.brightness_sync_onetime()
             
-        threading.Timer(6, restore_parameters).start()
-        # QTimer.singleShot(6000, restore_parameters)
+        if not set_refresh_rate(monitor, rate): # set refresh rate
+            button.setChecked(False)
+        else:
+            threading.Timer(6, restore_parameters).start()
+            # QTimer.singleShot(6000, restore_parameters)
 
-        # check if refresh rate was set successfully and update buttons state
-        self.update_monitors_info()
-        current_rr = self.monitors_dict[monitor["serial"]]["RefreshRate"]
-
-        if monitor["serial"] in self.monitors_dict:
-            if current_rr != rate:
-                button.setChecked(False)
-            else:
-                for btn in self.rr_buttons[monitor["serial"]]:
-                    if btn != button:
-                        btn.setChecked(False)
-                button.setChecked(True)
+            # disable all other buttons for this monitor
+            for btn in self.rr_buttons[serial]:
+                if btn != button:
+                    btn.setChecked(False)
 
 
 
