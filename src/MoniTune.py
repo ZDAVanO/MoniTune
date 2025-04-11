@@ -211,6 +211,7 @@ class MainWindow(QMainWindow):
         self.contrast_values = reg_read_dict(cfg.REGISTRY_PATH, "ContrastValues")
         print(f"self.contrast_values {self.contrast_values}")
 
+        self.link_brightness = reg_read_bool(cfg.REGISTRY_PATH, "LinkBrightness", False)
 
 
         self.settings_window = None  # No settings window yet
@@ -556,6 +557,7 @@ class MainWindow(QMainWindow):
             self.down_arrow_icon_path = cfg.down_arrow_icon_light_path
             self.eye_icon_path = cfg.eye_icon_light_path
             self.contrast_icon_path = cfg.contrast_icon_light_path
+            self.link_icon_path = cfg.link_icon_light_path
         else:
             # colors for dark theme
             self.bg_color = cfg.bg_color_dark
@@ -575,6 +577,7 @@ class MainWindow(QMainWindow):
             self.down_arrow_icon_path = cfg.down_arrow_icon_dark_path
             self.eye_icon_path = cfg.eye_icon_dark_path
             self.contrast_icon_path = cfg.contrast_icon_dark_path
+            self.link_icon_path = cfg.link_icon_dark_path
 
         # print("Checking MEIPASS contents:")
         # print(os.listdir(sys._MEIPASS))
@@ -611,7 +614,12 @@ class MainWindow(QMainWindow):
             delta = event.angleDelta().y()
             self.on_bottom_frame_scroll(delta)
             return True
-            
+        
+        # Handle right mouse button click on bottom_frame
+        if source == self.bottom_frame and event.type() == QEvent.Type.MouseButtonPress:
+            if event.button() == Qt.RightButton:
+                print("Right mouse button clicked on bottom frame")
+                return True
         
         return super().eventFilter(source, event)
 
@@ -946,21 +954,31 @@ class MainWindow(QMainWindow):
 
                                  """) # padding-left: 5px; background-color: blue;
         
-        self.settings_button = QPushButton()
-        # self.settings_button.setFlat(True)
-        # self.settings_button.setStyleSheet("""
-                                 
-        #                          """)
-        self.settings_button.setFixedWidth(41) # 39
-        self.settings_button.setFixedHeight(39)
-        self.settings_button.setIcon(QIcon(self.settings_icon_path))
-        self.settings_button.setIconSize(QSize(21, 21))
-        self.settings_button.clicked.connect(self.openSettingsWindow)
+        link_br_btn = QPushButton()
+        link_br_btn.setCheckable(True)
+        link_br_btn.setChecked(self.link_brightness)
+        link_br_btn.setFixedWidth(41) # 39
+        link_br_btn.setFixedHeight(39)
+        link_br_btn.setIcon(QIcon(self.link_icon_path))
+        link_br_btn.setIconSize(QSize(21, 21))
+        link_br_btn.toggled.connect(self.toggle_link_brightness)
+
+        settings_button = QPushButton()
+        settings_button.setFixedWidth(41) # 39
+        settings_button.setFixedHeight(39)
+        settings_button.setIcon(QIcon(self.settings_icon_path))
+        settings_button.setIconSize(QSize(21, 21))
+        settings_button.clicked.connect(self.openSettingsWindow)
 
         self.bottom_hbox.addWidget(name_title)
-        self.bottom_hbox.addWidget(self.settings_button)
+        self.bottom_hbox.addWidget(link_br_btn)
+        self.bottom_hbox.addWidget(settings_button)
 
 
+    def toggle_link_brightness(self, checked):
+        self.link_brightness = checked
+        reg_write_bool(cfg.REGISTRY_PATH, "LinkBrightness", checked)
+        print(f"Link brightness is now {'on' if checked else 'off'}")
 
 
     # MARK: on_rr_button_clicked()
@@ -1036,6 +1054,18 @@ class MainWindow(QMainWindow):
     # MARK: on_brightness_change()
     def on_brightness_change(self, value, monitor_serial):
         # print(f"on_brightness_change: {value}, {monitor_serial}")
+
+        if self.link_brightness:
+            previous_value = self.brightness_values.get(monitor_serial, 0)
+            change = value - previous_value
+            print(f"Brightness change for {monitor_serial}: {change}")
+
+            for serial, slider in self.br_sliders.items():
+                if (serial != monitor_serial) and slider.isEnabled():
+                    new_value = max(0, min(100, int(slider.value() + change)))
+                    slider.setValueBS(int(new_value))
+                    self.brightness_values[serial] = int(new_value)
+
         self.brightness_values[monitor_serial] = int(value)
 
     # MARK: on_contrast_change()
@@ -1046,9 +1076,15 @@ class MainWindow(QMainWindow):
     # MARK: on_bottom_frame_scroll()
     def on_bottom_frame_scroll(self, delta):
         # print("on_bottom_frame_scroll ", delta)
+
+        link_brightness_save = self.link_brightness
+        self.link_brightness = False  # Disable linking temporarily
+
         for slider in self.br_sliders.values():
             new_value = max(0, min(100, slider.value() + (1 if delta > 0 else -1)))
             slider.setValue(new_value)
+        
+        self.link_brightness = link_brightness_save  # Restore linking state
 
     # MARK: brightness_sync()
     def brightness_sync(self):

@@ -89,6 +89,9 @@ if getattr(sys, 'frozen', False):
     contrast_icon_light_path = os.path.join(sys._MEIPASS, 'contrast_light.png')
     contrast_icon_dark_path = os.path.join(sys._MEIPASS, 'contrast_dark.png')
 
+    link_icon_light_path = os.path.join(sys._MEIPASS, 'link_light.png')
+    link_icon_dark_path = os.path.join(sys._MEIPASS, 'link_dark.png')
+
 
 else:
     # Якщо програма запущена з Python, використовуємо поточну директорію
@@ -121,6 +124,9 @@ else:
 
     contrast_icon_light_path = 'src/assets/icons/contrast_light.png'
     contrast_icon_dark_path = 'src/assets/icons/contrast_dark.png'
+
+    link_icon_light_path = 'src/assets/icons/link_light.png'
+    link_icon_dark_path = 'src/assets/icons/link_dark.png'
 
 
 # MARK: Tray Icons

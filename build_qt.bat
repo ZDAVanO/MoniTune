@@ -15,6 +15,8 @@ pyinstaller ^
     --add-data "src/assets/icons/eye_dark.png;." ^
     --add-data "src/assets/icons/contrast_light.png;." ^
     --add-data "src/assets/icons/contrast_dark.png;." ^
+    --add-data "src/assets/icons/link_light.png;." ^
+    --add-data "src/assets/icons/link_dark.png;." ^
     --add-data "src/assets/tray-icons/light/mdl2.ico;./tray-icons/light" ^
     --add-data "src/assets/tray-icons/dark/mdl2.ico;./tray-icons/dark" ^
     --add-data "src/assets/tray-icons/light/fluent.ico;./tray-icons/light" ^

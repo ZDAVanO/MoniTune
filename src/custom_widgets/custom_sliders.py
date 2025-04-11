@@ -145,6 +145,13 @@ class AnimatedSliderBS(QSlider):
         self.label = label
         self.valueChanged.connect(lambda value, lbl=self.label: lbl.setText(str(value)))
 
+    def setValueBS(self, value):
+        self.blockSignals(True)
+        self.setValue(value)
+        self.blockSignals(False)
+        
+        self.update_ui_elements(value)
+
 
 
 class SliderAnimationDemo(QMainWindow):
