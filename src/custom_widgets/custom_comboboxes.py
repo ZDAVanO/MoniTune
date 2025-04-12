@@ -1,4 +1,10 @@
-from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget, QComboBox, QStyleFactory
+from PySide6.QtWidgets import (
+    QApplication, 
+    QVBoxLayout, 
+    QWidget, 
+    QComboBox, 
+    QStyleFactory
+)
 from PySide6.QtGui import QWheelEvent
 
 
@@ -8,10 +14,10 @@ class NoScrollComboBox(QComboBox):
         super().__init__(parent)
 
         # fusion_style = QStyleFactory.create("Fusion")
-        # self.setStyle(fusion_style)  # Встановлюємо стиль Fusion
+        # self.setStyle(fusion_style)
 
     def wheelEvent(self, event: QWheelEvent):
-        event.ignore()  # Ігноруємо прокрутку
+        event.ignore()  # ignore the wheel event to prevent scrolling
 
 
 

@@ -1,5 +1,15 @@
-from PySide6.QtWidgets import QLabel, QApplication, QVBoxLayout, QWidget, QSlider
-from PySide6.QtGui import QPixmap, QIcon, QTransform
+from PySide6.QtWidgets import (
+    QLabel, 
+    QApplication, 
+    QVBoxLayout, 
+    QWidget, 
+    QSlider
+)
+from PySide6.QtGui import (
+    QPixmap, 
+    QIcon, 
+    QTransform
+)
 from PySide6.QtCore import Qt
 
 class BrightnessIcon(QLabel):
@@ -18,37 +28,28 @@ class BrightnessIcon(QLabel):
 
         self.rotation_range = 270  # Control the range of rotation
 
-    
         self.setFixedSize(self.icon_size, self.icon_size)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setPixmap(self.sun_icon.pixmap(self.icon_size, self.icon_size))
-        # sun_icon = QPixmap("src/assets/icons/sun_dark.png").scaled(26, 26, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-
-
 
     def set_value(self, value):
-        if 0 <= value <= 100:
+        value = max(0, min(100, value))  # Ensure value is between 0 and 100
+        self.value = value
 
-            self.value = value
-
-            # Calculate the new icon size based on the slider value
-            icon_size = self.min_size + (value / 100) * (self.icon_size - self.min_size)
-            # print("icon_size:", icon_size)
-            pixmap = self.sun_icon.pixmap(icon_size, icon_size)
-            
-            # Rotate the pixmap
-            angle = (value - 50) * (self.rotation_range / 100)
-            transform = QTransform().rotate(angle)
-            rotated_pixmap = pixmap.transformed(transform, Qt.SmoothTransformation)
-            
-            self.setPixmap(rotated_pixmap)
-
-        else:
-            raise ValueError("Value must be between 0 and 100")
+        # Calculate the new icon size based on the slider value
+        icon_size = self.min_size + (value / 100) * (self.icon_size - self.min_size)
+        # print("icon_size:", icon_size)
+        pixmap = self.sun_icon.pixmap(icon_size, icon_size)
+        
+        # Rotate the pixmap
+        angle = (value - 50) * (self.rotation_range / 100)
+        transform = QTransform().rotate(angle)
+        rotated_pixmap = pixmap.transformed(transform, Qt.SmoothTransformation)
+        
+        self.setPixmap(rotated_pixmap)
 
 
 
-    
 if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)

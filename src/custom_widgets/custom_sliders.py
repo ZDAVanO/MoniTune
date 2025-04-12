@@ -1,6 +1,22 @@
-from PySide6.QtWidgets import QApplication, QMainWindow, QSlider, QPushButton, QVBoxLayout, QWidget, QLabel
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer
-from PySide6.QtGui import QWheelEvent, QKeyEvent
+from PySide6.QtWidgets import (
+    QApplication, 
+    QMainWindow, 
+    QSlider, 
+    QPushButton, 
+    QVBoxLayout, 
+    QWidget, 
+    QLabel,
+)
+from PySide6.QtCore import (
+    Qt, 
+    QPropertyAnimation, 
+    QEasingCurve, 
+    QTimer,
+)
+from PySide6.QtGui import (
+    QWheelEvent, 
+    QKeyEvent,
+)
 
 # from custom_widgets.custom_labels import BrightnessIcon
 try:
@@ -73,7 +89,7 @@ class AnimatedSlider(QSlider):
 
 
 class AnimatedSliderBS(QSlider):
-    def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, icon=None, label=None, *args, **kwargs):
+    def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, icon : BrightnessIcon = None, label=None, *args, **kwargs):
         super().__init__(orientation, *args, **kwargs)
 
         self.animation = None

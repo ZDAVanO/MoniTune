@@ -165,6 +165,8 @@ class MainWindow(QMainWindow):
 
         self.is_laptop = is_laptop()
 
+        self.theme = darkdetect.theme()
+
         # General settings
         self.enable_rounded_corners = reg_read_bool(cfg.REGISTRY_PATH, "EnableRoundedCorners", False if self.win_release != "11" else True)
         if self.enable_rounded_corners:
@@ -177,7 +179,7 @@ class MainWindow(QMainWindow):
         self.enable_fusion_theme = reg_read_bool(cfg.REGISTRY_PATH, "EnableFusionTheme", False)
         if self.enable_fusion_theme:
             QApplication.instance().setStyle("Fusion")
-        self.update_theme_colors(darkdetect.theme())
+        self.update_theme_colors(self.theme)
 
         self.enable_break_reminders = reg_read_bool(cfg.REGISTRY_PATH, "EnableBreakReminders", False)
 
@@ -222,7 +224,7 @@ class MainWindow(QMainWindow):
         self.window_open = False
         self.brightness_sync_thread = None
 
-        self.update_bottom_frame = True # Flag to update bottom frame
+        # self.update_bottom_frame = True # Flag to update bottom frame
 
         self.monitors_dict = {}
         self.update_monitors_info()
@@ -590,9 +592,10 @@ class MainWindow(QMainWindow):
         self.theme_changed.emit(theme)  # emit the signal to apply the theme change
 
     def _apply_theme_change(self, theme: str):
+        self.theme = theme
         self.update_theme_colors(theme)
         self.update_central_widget()
-        self.update_bottom_frame = True
+        # self.update_bottom_frame = True
         self.tray_icon.changeIconTheme(theme)
         if self.settings_window:
             self.settings_window.updateLayout()
@@ -939,6 +942,9 @@ class MainWindow(QMainWindow):
     # MARK: updateBottomFrame()
     def updateBottomFrame(self):
         print("updateBottomFrame count ", self.bottom_hbox.count())
+
+        start_time = time.time()
+
         # Clear old widgets
         while self.bottom_hbox.count():
             child = self.bottom_hbox.takeAt(0)
@@ -954,14 +960,15 @@ class MainWindow(QMainWindow):
 
                                  """) # padding-left: 5px; background-color: blue;
         
-        link_br_btn = QPushButton()
-        link_br_btn.setCheckable(True)
-        link_br_btn.setChecked(self.link_brightness)
-        link_br_btn.setFixedWidth(41) # 39
-        link_br_btn.setFixedHeight(39)
-        link_br_btn.setIcon(QIcon(self.link_icon_path))
-        link_br_btn.setIconSize(QSize(21, 21))
-        link_br_btn.toggled.connect(self.toggle_link_brightness)
+        self.link_br_btn = QPushButton()
+        self.link_br_btn.setCheckable(True)
+        self.link_br_btn.setChecked(self.link_brightness)
+        self.link_br_btn.setFixedWidth(41) # 39
+        self.link_br_btn.setFixedHeight(39)
+        # self.link_br_btn.setIcon(QIcon(self.link_icon_path))
+        self.link_br_btn.setIcon(self.get_link_icon())
+        self.link_br_btn.setIconSize(QSize(21, 21))
+        self.link_br_btn.toggled.connect(self.toggle_link_brightness)
 
         settings_button = QPushButton()
         settings_button.setFixedWidth(41) # 39
@@ -971,14 +978,23 @@ class MainWindow(QMainWindow):
         settings_button.clicked.connect(self.openSettingsWindow)
 
         self.bottom_hbox.addWidget(name_title)
-        self.bottom_hbox.addWidget(link_br_btn)
+        self.bottom_hbox.addWidget(self.link_br_btn)
         self.bottom_hbox.addWidget(settings_button)
+
+        print(f"updateBottomFrame took {time.time() - start_time:.4f} seconds")
 
 
     def toggle_link_brightness(self, checked):
         self.link_brightness = checked
+        self.link_br_btn.setIcon(self.get_link_icon())
         reg_write_bool(cfg.REGISTRY_PATH, "LinkBrightness", checked)
         print(f"Link brightness is now {'on' if checked else 'off'}")
+
+    def get_link_icon(self):
+        if self.theme == "Light":
+            return QIcon(cfg.link_icon_dark_path if self.link_brightness else cfg.link_icon_light_path)
+        else:  # Dark theme
+            return QIcon(cfg.link_icon_light_path if self.link_brightness else cfg.link_icon_dark_path)
 
 
     # MARK: on_rr_button_clicked()
@@ -1062,7 +1078,7 @@ class MainWindow(QMainWindow):
 
             for serial, slider in self.br_sliders.items():
                 if (serial != monitor_serial) and slider.isEnabled():
-                    new_value = max(0, min(100, int(slider.value() + change)))
+                    new_value = max(0, min(100, (slider.value() + change)))
                     slider.setValueBS(int(new_value))
                     self.brightness_values[serial] = int(new_value)
 
@@ -1192,10 +1208,11 @@ class MainWindow(QMainWindow):
     def showEvent(self, event):
         print("showEvent")
 
-        if self.update_bottom_frame:
-            self.updateBottomFrame()
-            self.update_bottom_frame = False
+        # if self.update_bottom_frame:
+        #     self.updateBottomFrame()
+        #     self.update_bottom_frame = False
 
+        self.updateBottomFrame() # Update bottom frame contents each time the window is shown
         self.updateMonitorsFrame()  # Update frame contents each time the window is shown
         
         # hide window to avoid flickering before opening animation (when close animation disabled)
