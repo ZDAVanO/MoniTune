@@ -9,8 +9,6 @@ from PySide6.QtCore import (
     QEvent, 
     QSize, 
     QRect, 
-    Slot, 
-    QMetaObject, 
 )
 from PySide6.QtGui import (
     QIcon, 
@@ -40,10 +38,13 @@ from PySide6.QtWidgets import (
 from system_tray_icon import SystemTrayIcon
 from settings_window import SettingsWindow 
 
-from custom_widgets.custom_comboboxes import NoScrollComboBox
-from custom_widgets.custom_sliders import AnimatedSliderBS
-from custom_widgets.custom_buttons import RRButton
-from custom_widgets.custom_labels import BrightnessIcon
+from custom_widgets import (
+    RRButton,
+    NoScrollComboBox,
+    BrightnessIcon,
+    AnimatedSliderBS,
+    SeparatorLine,
+)
 
 from utils.monitor_utils import (
     get_monitors_info, 
@@ -84,21 +85,6 @@ import platform
 import requests
 from packaging.version import Version
 import webbrowser
-
-
-# MARK: SeparatorLine
-class SeparatorLine(QFrame):
-    def __init__(self, color: str = None, line_width: int = 1, parent=None):
-        super().__init__(parent)
-
-        fusion_style = QStyleFactory.create("Fusion")
-
-        self.setFrameShape(QFrame.Shape.HLine)
-        self.setFrameShadow(QFrame.Shadow.Plain)
-        self.setStyle(fusion_style)
-        if color:
-            self.setStyleSheet(f"color: {color};")
-        self.setLineWidth(line_width)
 
 
 
@@ -154,11 +140,13 @@ class SliderFrame(QWidget):
 class MainWindow(QMainWindow):
 
     theme_changed = Signal(str)
+    lock_state_changed = Signal(str)
 
     def __init__(self):
         super().__init__()
 
-        self.theme_changed.connect(self._apply_theme_change)
+        self.theme_changed.connect(self._apply_theme)
+        self.lock_state_changed.connect(self._on_lock_state_change)
 
         self.win_release = platform.release()
         print(f"Windows release: {self.win_release}")
@@ -224,14 +212,12 @@ class MainWindow(QMainWindow):
         self.window_open = False
         self.brightness_sync_thread = None
 
-        # self.update_bottom_frame = True # Flag to update bottom frame
-
         self.monitors_dict = {}
         self.update_monitors_info()
 
 
 
-        self.setWindowTitle("MoniTune")
+        self.setWindowTitle(cfg.app_name)
 
         self.window_width = 358
         self.window_height = 231
@@ -240,7 +226,9 @@ class MainWindow(QMainWindow):
         self.setMaximumWidth(self.window_width)
         self.resize(self.window_width, self.window_height)
 
-        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | 
+                            Qt.WindowType.FramelessWindowHint | 
+                            Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.installEventFilter(self)
 
@@ -265,21 +253,22 @@ class MainWindow(QMainWindow):
         self.monitors_layout.setContentsMargins(7, 7, 7, 0)
         self.monitors_layout.setSpacing(6) # Set spacing between monitor frames
 
-
         self.bottom_frame = QWidget()
         # self.bottom_frame.setStyleSheet("""
         #     background-color: green;
         #     border-bottom-left-radius: 9px;
         #     border-bottom-right-radius: 9px;
         # """)
-        self.bottom_frame.setFixedHeight(60)
+        
         self.bottom_frame.installEventFilter(self)
         self.bottom_hbox = QHBoxLayout(self.bottom_frame)
-        self.bottom_hbox.setContentsMargins(7, 0, 11, 0)
-        # self.bottom_hbox.setContentsMargins(7, 0, 7, 0)
-        self.bottom_hbox.setSpacing(5)
 
-        # self.updateBottomFrame()
+        # self.bottom_frame.setFixedHeight(60)
+        # self.bottom_hbox.setContentsMargins(7, 0, 11, 0)
+
+        self.bottom_hbox.setContentsMargins(7, 5, 7, 7)
+
+        self.bottom_hbox.setSpacing(4)
 
         
 
@@ -299,7 +288,9 @@ class MainWindow(QMainWindow):
         self.tray_icon = SystemTrayIcon(self)
 
         # Run the theme listener in a separate thread
-        threading.Thread(target=darkdetect.listener, args=(self.on_theme_change,), daemon=True).start()
+        threading.Thread(target=darkdetect.listener, 
+                         args=(lambda theme: self.theme_changed.emit(theme),), # _apply_theme
+                         daemon=True).start()
 
 
         # Timer setup
@@ -310,7 +301,8 @@ class MainWindow(QMainWindow):
         self.time_active = 0
         self.saved_time = 0
 
-        self.lock_listener = LockDetect(self.on_lock_state_change)
+        # Run the lock state listener in a separate thread
+        self.lock_listener = LockDetect(lambda state: self.lock_state_changed.emit(state)) # _on_lock_state_change
         threading.Thread(target=self.lock_listener.run, daemon=True).start()
 
         self.previous_screeninfo = screeninfo.get_monitors()
@@ -333,31 +325,27 @@ class MainWindow(QMainWindow):
         # self.bottom_frame.setStyleSheet("background-color: green;") 
         # self.openSettingsWindow() # Open settings window on startup
 
-    
 
-    # MARK: on_lock_state_change()
-    @Slot(str)
-    def on_lock_state_change(self, state):
+
+    # MARK: _on_lock_state_change()
+    def _on_lock_state_change(self, state: str):
+        print(f"State changed to: {state}")
         if state == "unlocked":
             print("Screen unlocked at:", QTime.currentTime().toString("HH:mm"))
-            print("Starting delayed task")
-            threading.Timer(10, self.execute_recent_task).start()  # Execute after 10 seconds
-            # self.start_checking()
-            QMetaObject.invokeMethod(self, "start_checking", Qt.QueuedConnection)
+            self.execute_recent_task(delay=10 * 1000) # Execute after 10 seconds  
+            self.start_checking()
 
         elif state == "locked":
             print("Screen locked at:", QTime.currentTime().toString("HH:mm"))
-            # self.stop_checking()
-            QMetaObject.invokeMethod(self, "stop_checking", Qt.QueuedConnection)
+            self.stop_checking()
+
 
     # MARK: stop_checking()
-    @Slot()
     def stop_checking(self):
         self.timer.stop()
         print("Task checking stopped")
 
     # MARK: start_checking()
-    @Slot()
     def start_checking(self, interval=60000):
         self.last_check_time = QDateTime.currentDateTime()
         self.timer.start(interval)
@@ -383,7 +371,8 @@ class MainWindow(QMainWindow):
 
         if added_monitors:
             print(f"New monitors added: {added_monitors}")
-            threading.Timer(10, self.execute_recent_task).start()  # Execute after 10 seconds
+            # QTimer.singleShot(10000, lambda: self.execute_recent_task(delay=10000))
+            QTimer.singleShot(10 * 1000, self.execute_recent_task)
         if removed_monitors:
             print(f"Monitors removed: {removed_monitors}")
         # if not added_monitors and not removed_monitors:
@@ -395,7 +384,7 @@ class MainWindow(QMainWindow):
         # MARK: Check time adjustment tasks
         if not added_monitors:
             if current_time in self.time_adjustment_data:
-                self.bg_br_change(self.time_adjustment_data[current_time])
+                self.apply_brightness(self.time_adjustment_data[current_time])
             else:
                 print("No tasks at this time")
         else:
@@ -434,12 +423,11 @@ class MainWindow(QMainWindow):
 
 
     # MARK: execute_recent_task()
-    def execute_recent_task(self):
+    def execute_recent_task(self, delay=0):
         if not self.time_adjustment_data:
             print("execute_recent_task: No tasks found")
             print("Restoring last change")
-            # self.brightness_sync_onetime()
-            self.bg_br_change(self.brightness_values)
+            self.apply_brightness(self.brightness_values, delay=delay)
             return
 
         current_time = QTime.currentTime().toString("HH:mm")
@@ -447,34 +435,31 @@ class MainWindow(QMainWindow):
         if past_tasks:
             recent_task_time = max(past_tasks)
             print(f"Executing recent task at: {recent_task_time}")
-            self.bg_br_change(self.time_adjustment_data[recent_task_time])
+            self.apply_brightness(self.time_adjustment_data[recent_task_time], delay=delay)
         else:
             print("No past tasks to execute for today, checking previous day")
             if self.time_adjustment_data:
                 recent_task_time = max(self.time_adjustment_data.keys())
                 print(f"Executing last task from previous day at: {recent_task_time}")
-                self.bg_br_change(self.time_adjustment_data[recent_task_time])
+                self.apply_brightness(self.time_adjustment_data[recent_task_time], delay=delay)
     
 
 
-    # MARK: bg_br_change()
-    def bg_br_change(self, brightness_data):
-        print(f"bg_br_change: {brightness_data}")
+    # MARK: apply_brightness()
+    def apply_brightness(self, brightness_data, delay=0):
+        print(f"apply_brightness: {brightness_data}, delay: {delay / 1000} sec")
         
         self.update_monitors_info()
         for serial in self.monitors_dict:
             if serial in brightness_data:
                 self.brightness_values[serial] = brightness_data[serial]
 
-        # self.show()
-
         # play slider animation if window is open
-        if self.window_open:
+        if self.window_open and (delay == 0):
             QTimer.singleShot(0, lambda: self.animate_sliders(self.br_sliders, self.brightness_values))
+        else:
+            threading.Timer((delay / 1000), self.brightness_sync_onetime).start() # change brightness after delay
 
-        self.brightness_sync_onetime()
-
-        # QTimer.singleShot(1000, self.animateWindowClose)
 
 
     # MARK: check_for_update()
@@ -586,18 +571,15 @@ class MainWindow(QMainWindow):
 
 
 
-    # MARK: on_theme_change()
-    def on_theme_change(self, theme: str): # "Light" or "Dark"
+    # MARK: _apply_theme()
+    def _apply_theme(self, theme: str):
         print(f"Theme changed to: {theme}")
-        self.theme_changed.emit(theme)  # emit the signal to apply the theme change
-
-    def _apply_theme_change(self, theme: str):
         self.theme = theme
         self.update_theme_colors(theme)
         self.update_central_widget()
-        # self.update_bottom_frame = True
         self.tray_icon.changeIconTheme(theme)
         if self.settings_window:
+            self.settings_window.theme = theme
             self.settings_window.updateLayout()
 
 
@@ -625,10 +607,6 @@ class MainWindow(QMainWindow):
                 return True
         
         return super().eventFilter(source, event)
-
-
-    
-
 
 
 
@@ -669,7 +647,6 @@ class MainWindow(QMainWindow):
             placeholder_layout.setContentsMargins(14, 12, 14, 14)
             # placeholder_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-            # placeholder_label = QLabel("No monitors found")
             placeholder_label = QLabel(
                 'No compatible displays found. '
                 'Please check that "DDC/CI" is enabled for your displays, '
@@ -711,9 +688,6 @@ class MainWindow(QMainWindow):
 
 
         for index, monitor_serial in enumerate(monitors_order):
-            # if monitor_serial in self.hidden_displays:
-            #     print(f"Monitor {monitor_serial} is hidden, skipping...")
-            #     continue
 
             monitor = self.monitors_dict[monitor_serial]
             # print(f"monitor {monitor}")
@@ -956,7 +930,7 @@ class MainWindow(QMainWindow):
         name_title.setStyleSheet("""
                                  font-size: 14px; 
                                  padding-left: 5px;
-                                 padding-bottom: 3px;
+                                 padding-bottom: 2px;
 
                                  """) # padding-left: 5px; background-color: blue;
         
@@ -984,17 +958,25 @@ class MainWindow(QMainWindow):
         print(f"updateBottomFrame took {time.time() - start_time:.4f} seconds")
 
 
+    # MARK: toggle_link_brightness()
     def toggle_link_brightness(self, checked):
         self.link_brightness = checked
         self.link_br_btn.setIcon(self.get_link_icon())
         reg_write_bool(cfg.REGISTRY_PATH, "LinkBrightness", checked)
         print(f"Link brightness is now {'on' if checked else 'off'}")
 
+
+    # MARK: get_link_icon()
     def get_link_icon(self):
-        if self.theme == "Light":
-            return QIcon(cfg.link_icon_dark_path if self.link_brightness else cfg.link_icon_light_path)
-        else:  # Dark theme
-            return QIcon(cfg.link_icon_light_path if self.link_brightness else cfg.link_icon_dark_path)
+        if self.enable_fusion_theme:
+            icon_path = cfg.link_icon_light_path if self.theme == "Light" else cfg.link_icon_dark_path
+        else:
+            if self.theme == "Light":
+                icon_path = cfg.link_icon_dark_path if self.link_brightness else cfg.link_icon_light_path
+            else:
+                icon_path = cfg.link_icon_light_path if self.link_brightness else cfg.link_icon_dark_path
+        return QIcon(icon_path)
+
 
 
     # MARK: on_rr_button_clicked()
@@ -1201,16 +1183,12 @@ class MainWindow(QMainWindow):
                     except Exception as e:
                         print(f"Error: {e}")
 
-        print(f"brightness_sync_onetime sync took {time.time() - start_time:.4f} seconds")
+        print(f"brightness_sync_onetime took {time.time() - start_time:.4f} seconds")
 
 
     # MARK: showEvent()
     def showEvent(self, event):
         print("showEvent")
-
-        # if self.update_bottom_frame:
-        #     self.updateBottomFrame()
-        #     self.update_bottom_frame = False
 
         self.updateBottomFrame() # Update bottom frame contents each time the window is shown
         self.updateMonitorsFrame()  # Update frame contents each time the window is shown

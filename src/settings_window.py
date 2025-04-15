@@ -25,6 +25,9 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QIcon
 
 from custom_widgets.custom_sliders import NoScrollSlider
+from custom_widgets import (
+    SeparatorLine,
+)
 
 from utils.monitor_utils import (
     get_monitors_info, 
@@ -100,7 +103,7 @@ class TrayIconSelector(QFrame):
             button.setStyleSheet("""
                                  padding: 10px 10px;
                                  """)
-            button.setIcon(QIcon(icon_variants[darkdetect.theme()]))
+            button.setIcon(QIcon(icon_variants[self.parent.theme]))
             button.setCheckable(True)
             button.clicked.connect(lambda checked, 
                                    btn=button, 
@@ -144,10 +147,12 @@ class TimeAdjustmentFrame(QFrame):
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)  # Prevent frame from expanding
         
         self.frame_layout = QVBoxLayout(self)
-        # self.frame_layout.setContentsMargins(0, 0, 0, 0)
-        # self.frame_layout.setSpacing(0)
+        self.frame_layout.setContentsMargins(0, 4, 0, 4)
+        self.frame_layout.setSpacing(3)
 
         self.time_edit_layout = QHBoxLayout()
+        self.time_edit_layout.setContentsMargins(5, 0, 5, 0)
+        self.time_edit_layout.setSpacing(3)
 
         self.time_edit = QTimeEdit()
         self.time_edit.setDisplayFormat("HH:mm")
@@ -168,10 +173,7 @@ class TimeAdjustmentFrame(QFrame):
         self.frame_layout.addLayout(self.time_edit_layout)
 
         # add separator
-        separator = QFrame(frameShape=QFrame.Shape.HLine,
-                           frameShadow=QFrame.Shadow.Sunken,
-                           lineWidth=1)
-        self.frame_layout.addWidget(separator)
+        self.frame_layout.addWidget(SeparatorLine(color="#f0f0f0" if self.parent.theme == "Light" else "#3c3c3c",))
 
 
         self.time_edit.timeChanged.connect(self.update_time)
@@ -181,11 +183,11 @@ class TimeAdjustmentFrame(QFrame):
 
         for serial in self.monitors_order:
             slider_layout = QHBoxLayout()
-            slider_layout.setContentsMargins(3, 0, 0, 0)
+            slider_layout.setContentsMargins(9, 0, 9, 0)
             slider_layout.setSpacing(0)
 
             slider_label = QLabel(f"{self.monitors_dict[serial]['display_name']}")
-            slider_label.setFixedWidth(100)
+            slider_label.setFixedWidth(110)
 
             slider = NoScrollSlider(Qt.Horizontal)
             slider.setMinimum(0)
@@ -253,6 +255,8 @@ class SettingsWindow(QWidget):
         super().__init__()
         
         self.parent = parent_window
+
+        self.theme = darkdetect.theme()
 
         self.setWindowTitle(f"{cfg.app_name} Settings")
         self.setWindowIcon(QIcon(cfg.app_icon_path))
@@ -368,7 +372,7 @@ class SettingsWindow(QWidget):
                                                None,
                                                True)
                                                .create_toggle(
-                                                   "Fusion Theme (requires restart)", 
+                                                   "Fusion Theme [Experimental] (requires restart)", 
                                                    "Enables Fusion theme. Requires app restart"
                                                    ))
 
@@ -653,15 +657,17 @@ class SettingsWindow(QWidget):
             scroll_layout.addWidget(frame)
 
         add_frame_button = QPushButton("Add a time")
-        add_frame_button.setStyleSheet("padding: 4px 10px;")
+        add_frame_button.setStyleSheet("padding: 5px 15px;")
         add_frame_button.clicked.connect(lambda: (add_time_adjustment_frame(), self.save_adjustment_data()))
         time_adjustment_layout.addWidget(add_frame_button)
 
         scroll_area = QScrollArea()
-        # scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setFrameShape(QFrame.NoFrame)
         scroll_area.setWidgetResizable(True)
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(0, 0, 3, 0)
+        # scroll_layout.setSpacing(0)
         # scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
@@ -709,11 +715,22 @@ class SettingsWindow(QWidget):
         
         def update_check():
             update_available, latest_version = self.parent.check_for_update()
-            if update_available:
+            if update_available and latest_version:
                 update_label.setText(f"Update available: <a href='{cfg.LATEST_RELEASE_URL}'>v{latest_version}</a>")
                 update_label.setOpenExternalLinks(True)
-            else:
+            elif latest_version:
                 update_label.setText("You are using the latest version.")
+            else:
+                update_label.setText(
+                    f"""
+                    <div style='text-align: center;'>
+                        Failed to check for updates. Please try again later.
+                        <br>
+                        Or check manually <a href='{cfg.LATEST_RELEASE_URL}'>here</a>.
+                    </div>
+                    """
+                )
+                update_label.setOpenExternalLinks(True)
 
         check_update_button = QPushButton("Check for Updates")
         check_update_button.setStyleSheet("padding: 5px 15px;")
