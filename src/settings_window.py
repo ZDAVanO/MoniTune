@@ -24,8 +24,8 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QIcon
 
-from custom_widgets.custom_sliders import NoScrollSlider
 from custom_widgets import (
+    NoScrollSlider,
     SeparatorLine,
 )
 
@@ -247,6 +247,27 @@ class TimeAdjustmentFrame(QFrame):
 
 
 
+# MARK: ScrollableTab
+class ScrollableTab(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        scroll_area = QScrollArea()
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setWidgetResizable(True)
+
+        self.content_widget = QWidget()
+        # self.content_widget.setStyleSheet("background-color: blue;")
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        scroll_area.setWidget(self.content_widget)
+        layout.addWidget(scroll_area)
+
+
 
 # MARK: SettingsWindow
 class SettingsWindow(QWidget):
@@ -261,8 +282,8 @@ class SettingsWindow(QWidget):
         self.setWindowIcon(QIcon(cfg.app_icon_path))
         
         self.resize(475, 600)
-        self.setMinimumWidth(400)
-        self.setMinimumHeight(500)
+        self.setMinimumWidth(450)
+        self.setMinimumHeight(400)
 
         settings_layout = QVBoxLayout(self)
         settings_layout.setContentsMargins(0, 0, 0, 0)
@@ -283,7 +304,6 @@ class SettingsWindow(QWidget):
     def closeEvent(self, event):
         print("Settings window closeEvent")
 
-        
         # self.save_adjustment_data()
         self.time_adjustment_frames = []
 
@@ -321,6 +341,16 @@ class SettingsWindow(QWidget):
         self.parent.time_adjustment_data = sorted_time_adjustment_data
 
 
+    # MARK: show_parent_window()
+    def show_parent_window(self):
+        QTimer.singleShot(400, self.parent.show)
+
+
+    # Mark: on_tab_changed()
+    def on_tab_changed(self, index):
+        print(f"Tab changed to index: {index}")
+        self.selected_tab = index
+
 
     # MARK: updateLayout()
     def updateLayout(self):
@@ -332,7 +362,6 @@ class SettingsWindow(QWidget):
             self.tab_widget.removeTab(0) # remove the first tab
 
         
-
 
         # MARK: get monitors info
         monitors_info = get_monitors_info()
@@ -353,11 +382,9 @@ class SettingsWindow(QWidget):
 
 
         # MARK: General Tab
-        general_tab = QWidget()
-        # general_tab.setStyleSheet("background-color: blue")
-        general_layout = QVBoxLayout(general_tab)
-        general_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        general_layout.addWidget(SettingToggle(self.parent, 
+        general_tab = ScrollableTab()
+        
+        general_tab.content_layout.addWidget(SettingToggle(self.parent, 
                                                "enable_rounded_corners", 
                                                "EnableRoundedCorners",
                                                self.parent.update_central_widget)
@@ -365,7 +392,7 @@ class SettingsWindow(QWidget):
                                                    "Rounded Corners", 
                                                    "Enable rounded corners for the main window"
                                                    ))
-        general_layout.addWidget(SettingToggle(self.parent, 
+        general_tab.content_layout.addWidget(SettingToggle(self.parent, 
                                                "enable_fusion_theme", 
                                                "EnableFusionTheme",
                                                None,
@@ -375,7 +402,7 @@ class SettingsWindow(QWidget):
                                                    "Enables Fusion theme. Requires app restart"
                                                    ))
 
-        general_layout.addWidget(SettingToggle(self.parent, 
+        general_tab.content_layout.addWidget(SettingToggle(self.parent, 
                                        "enable_break_reminders", 
                                        "EnableBreakReminders")
                                        .create_toggle(
@@ -387,7 +414,7 @@ class SettingsWindow(QWidget):
         icon = reg_read_list(cfg.REGISTRY_PATH, "TrayIcon")
         print("Icon:", icon) # ['fluent']
         icon_widget.select_icon(icon[0] if icon else "monitune")
-        general_layout.addWidget(icon_widget)
+        general_tab.content_layout.addWidget(icon_widget)
 
 
 
@@ -429,7 +456,7 @@ class SettingsWindow(QWidget):
             checkbox.stateChanged.connect(lambda state, mid=monitor_id: update_hidden_displays(mid, state))
             hide_displays_layout.addWidget(checkbox)
 
-        general_layout.addWidget(hide_displays_widget)
+        general_tab.content_layout.addWidget(hide_displays_widget)
 
 
 
@@ -476,7 +503,7 @@ class SettingsWindow(QWidget):
 
             rename_monitors_layout.addWidget(row_frame)
 
-        general_layout.addWidget(rename_monitors_widget)
+        general_tab.content_layout.addWidget(rename_monitors_widget)
 
 
 
@@ -489,6 +516,7 @@ class SettingsWindow(QWidget):
             # self.show_parent_window()
 
         reorder_monitors_widget = QFrame()
+        reorder_monitors_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         reorder_monitors_widget.setFrameShape(QFrame.StyledPanel)
         reorder_monitors_layout = QVBoxLayout(reorder_monitors_widget)
         reorder_monitors_label = QLabel("Reorder Monitors")
@@ -510,7 +538,6 @@ class SettingsWindow(QWidget):
                 item_text = f"{custom_monitor_names[monitor_id]} ({monitors_dict[monitor_id]['display_name']})"
             else:
                 item_text = monitors_dict[monitor_id]['display_name']
-            # item = QListWidgetItem(item_text)
             
             item = QListWidgetItem()
             item.setData(Qt.UserRole, monitor_id)
@@ -525,7 +552,7 @@ class SettingsWindow(QWidget):
             self.list_widget.setItemWidget(item, widget)
 
         reorder_monitors_layout.addWidget(self.list_widget)
-        general_layout.addWidget(reorder_monitors_widget)
+        general_tab.content_layout.addWidget(reorder_monitors_widget)
 
 
         self.tab_widget.addTab(general_tab, "General")
@@ -533,12 +560,9 @@ class SettingsWindow(QWidget):
 
 
         # MARK: Resolution Tab
-        resolution_tab = QWidget()
-        resolution_layout = QVBoxLayout(resolution_tab)
-        resolution_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        # show_resolution_checkbox = QCheckBox("Show Resolutions")
-        # allow_res_change_checkbox = QCheckBox("Allow Resolution Change")
-        resolution_layout.addWidget(SettingToggle(self.parent,
+        resolution_tab = ScrollableTab()
+
+        resolution_tab.content_layout.addWidget(SettingToggle(self.parent,
                                                   "show_resolution",
                                                   "ShowResolution")
                                                   .create_toggle(
@@ -552,10 +576,9 @@ class SettingsWindow(QWidget):
 
 
         # MARK: Refresh Rates Tab
-        refresh_rate_tab = QWidget()
-        refresh_rate_layout = QVBoxLayout(refresh_rate_tab)
-        refresh_rate_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        refresh_rate_layout.addWidget(SettingToggle(self.parent,
+        refresh_rate_tab = ScrollableTab()
+
+        refresh_rate_tab.content_layout.addWidget(SettingToggle(self.parent,
                                                     "show_refresh_rates",
                                                     "ShowRefreshRates")
                                                     .create_toggle(
@@ -600,31 +623,30 @@ class SettingsWindow(QWidget):
         exclude_rr_layout.addWidget(exclude_rr_label)
 
 
-        scroll_area = QScrollArea()
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout(scroll_content)
+        # scroll_area = QScrollArea()
+        # scroll_content = QWidget()
+        # scroll_layout = QVBoxLayout(scroll_content)
         for rate in all_rates:
             rate_checkbox = QCheckBox(f"{rate} Hz")
-            scroll_layout.addWidget(rate_checkbox)
+            exclude_rr_layout.addWidget(rate_checkbox)
 
             if rate not in excluded_rates:
                 rate_checkbox.setChecked(True)
             
             rate_checkbox.stateChanged.connect(lambda state, rate=rate: update_excluded(rate, state))
 
-        scroll_area.setWidget(scroll_content)
-        exclude_rr_layout.addWidget(scroll_area)
+        # scroll_area.setWidget(scroll_content)
+        # exclude_rr_layout.addWidget(scroll_area)
         
-        refresh_rate_layout.addWidget(exclude_rr_frame)
+        refresh_rate_tab.content_layout.addWidget(exclude_rr_frame)
         self.tab_widget.addTab(refresh_rate_tab, "Refresh Rate")
 
 
 
         # MARK: Brightness Tab
-        brightness_tab = QWidget()
-        brightness_layout = QVBoxLayout(brightness_tab)
-        brightness_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        brightness_layout.addWidget(SettingToggle(self.parent,
+        brightness_tab = ScrollableTab()
+
+        brightness_tab.content_layout.addWidget(SettingToggle(self.parent,
                                                   "restore_last_brightness",
                                                   "RestoreLastBrightness")
                                                   .create_toggle(
@@ -661,9 +683,6 @@ class SettingsWindow(QWidget):
         add_frame_button.clicked.connect(lambda: (add_time_adjustment_frame(), self.save_adjustment_data()))
         time_adjustment_layout.addWidget(add_frame_button)
 
-        scroll_area = QScrollArea()
-        scroll_area.setFrameShape(QFrame.NoFrame)
-        scroll_area.setWidgetResizable(True)
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
         scroll_layout.setContentsMargins(0, 0, 0, 0)
@@ -672,9 +691,8 @@ class SettingsWindow(QWidget):
         scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
 
-        scroll_area.setWidget(scroll_content)
-        time_adjustment_layout.addWidget(scroll_area)
-        brightness_layout.addWidget(time_adjustment_frame)
+        time_adjustment_layout.addWidget(scroll_content)
+        brightness_tab.content_layout.addWidget(time_adjustment_frame)
 
         # Restore TimeAdjustmentFrame widgets from registry
         saved_data = reg_read_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData")
@@ -686,11 +704,9 @@ class SettingsWindow(QWidget):
 
 
         # MARK: DDC/CI Tab
-        dcc_ci_tab = QWidget()
-        dcc_ci_layout = QVBoxLayout(dcc_ci_tab)
-        dcc_ci_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        dcc_ci_tab = ScrollableTab()
 
-        dcc_ci_layout.addWidget(SettingToggle(self.parent,
+        dcc_ci_tab.content_layout.addWidget(SettingToggle(self.parent,
                                               "show_contrast_sliders",
                                               "ShowContrastSliders")
                                               .create_toggle(
@@ -704,15 +720,13 @@ class SettingsWindow(QWidget):
 
 
         # MARK: About Tab
-        about_tab = QWidget()
-        about_layout = QVBoxLayout(about_tab)
-        about_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        about_tab = ScrollableTab()
 
         about_label = QLabel(f"{cfg.app_name} v{cfg.version}")
         about_label.setStyleSheet("font-size: 20px; font-weight: bold;")
-        
+
         update_label = QLabel("Checking for updates...")
-        
+
         def update_check():
             update_available, latest_version = self.parent.check_for_update()
             if update_available and latest_version:
@@ -740,25 +754,18 @@ class SettingsWindow(QWidget):
         learn_more_label = QLabel(f'<a href="{cfg.LEARN_MORE_URL}" style="text-decoration: none;">Learn More</a>')
         learn_more_label.setOpenExternalLinks(True)  # Allows you to open links in the browser
 
-        about_layout.addWidget(about_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        about_layout.addWidget(update_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        about_layout.addWidget(check_update_button, alignment=Qt.AlignmentFlag.AlignCenter)
-        about_layout.addWidget(learn_more_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        about_tab.content_layout.addWidget(about_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        about_tab.content_layout.addWidget(update_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        about_tab.content_layout.addWidget(check_update_button, alignment=Qt.AlignmentFlag.AlignCenter)
+        about_tab.content_layout.addWidget(learn_more_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
         self.tab_widget.addTab(about_tab, "About")
+
 
         # restore the selected tab
         self.tab_widget.blockSignals(False)
         self.tab_widget.setCurrentIndex(self.selected_tab)
 
-        
-    # MARK: show_parent_window()
-    def show_parent_window(self):
-        QTimer.singleShot(400, self.parent.show)
-
-    # Define the on_tab_changed method
-    def on_tab_changed(self, index):
-        print(f"Tab changed to index: {index}")
-        self.selected_tab = index
 
 
 
