@@ -49,8 +49,7 @@ class AnimatedSlider(QSlider):
         self.animation = None
         self.scrollStep = scrollStep
 
-        self.setMinimum(0)
-        self.setMaximum(100)
+        self.setRange(0, 100)
 
 
     def animate_to(self, target_value, duration=1000, easing_curve=QEasingCurve.Type.OutCubic):
@@ -89,7 +88,7 @@ class AnimatedSlider(QSlider):
 
 
 class AnimatedSliderBS(QSlider):
-    def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, icon : BrightnessIcon = None, label=None, *args, **kwargs):
+    def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, icon : BrightnessIcon = None, label=None, callback=None, *args, **kwargs):
         super().__init__(orientation, *args, **kwargs)
 
         self.animation = None
@@ -97,15 +96,15 @@ class AnimatedSliderBS(QSlider):
 
         self.icon = icon  # BrightnessIcon to update
         self.label = label  # QLabel to update
+        self.callback = callback if callback else self.update_ui_elements  # Default to update_ui_elements
 
-        self.setMinimum(0)
-        self.setMaximum(100)
+        self.setRange(0, 100)
 
 
     def animate_to(self, target_value, duration=1000, easing_curve=QEasingCurve.Type.OutCubic):
         distance = abs(target_value - self.value())
         if distance == 0:
-            print("Animation distance is 0, skipping animation")
+            # print("Animation distance is 0, skipping animation")
             return
         duration = max(250, (duration * distance / 100)) # Scale duration based on distance
         # print(f"Animating to {target_value} in {duration} ms")
@@ -117,8 +116,14 @@ class AnimatedSliderBS(QSlider):
         self.animation.setEasingCurve(easing_curve)
 
         self.blockSignals(True)  # Block signals during animation
-        self.animation.finished.connect(lambda: self.blockSignals(False))  
-        self.animation.valueChanged.connect(self.update_ui_elements)  # Connect to update label
+        self.animation.finished.connect(lambda: self.blockSignals(False))
+
+        self.animation.valueChanged.connect(self.update_ui_elements)
+        # if self.callback:
+        #     self.animation.valueChanged.connect(self.callback)  # Connect to custom callback
+
+        if self.icon:
+            self.icon.stop_animation()  # Stop any ongoing animation in the icon
 
         self.animation.start()
     
@@ -126,12 +131,16 @@ class AnimatedSliderBS(QSlider):
         if self.animation:
             self.animation.stop()
             self.blockSignals(False)  # Ensure signals are unblocked
+            self.animation.deleteLater()
+            self.animation = None
+            print("AnimatedSliderBS Animation stopped")
 
     def update_ui_elements(self, value):
         if self.label:
             self.label.setText(str(value))
 
         if self.icon:
+            # self.icon.set_value(value, stop_animation=True)
             self.icon.set_value(value)
 
     # Stop animation when user interacts with the slider
@@ -142,31 +151,48 @@ class AnimatedSliderBS(QSlider):
             self.setValue(self.value() - self.scrollStep)
         self.stop_animation()
         # self.update_ui_elements(self.value())
+        self.valueChanged.emit(self.value())
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
-        self.stop_animation()
-        self.update_ui_elements(self.value())
+        if event.button() == Qt.MouseButton.LeftButton:
+            print("Mouse pressed")
+            if self.animation and (self.animation.state() == QPropertyAnimation.State.Running):
+                self.stop_animation()
+                # self.update_ui_elements(self.value())
+                self.valueChanged.emit(self.value())
 
     def keyPressEvent(self, event: QKeyEvent):
         super().keyPressEvent(event)
-        self.stop_animation()
-        # self.update_ui_elements(self.value())
+        if self.animation and (self.animation.state() == QPropertyAnimation.State.Running):
+            self.stop_animation()
+            # self.update_ui_elements(self.value())
+            self.valueChanged.emit(self.value())
 
     def add_icon(self, icon):
         self.icon = icon
-        self.valueChanged.connect(lambda value, ico=self.icon: ico.set_value(value))
+        # self.valueChanged.connect(lambda value, ico=self.icon: ico.set_value(value))
+        self.valueChanged.connect(lambda value, ico=self.icon: ico.animate_to(value))
 
     def add_label(self, label):
         self.label = label
         self.valueChanged.connect(lambda value, lbl=self.label: lbl.setText(str(value)))
 
     def setValueBS(self, value):
+
+        if self.animation and (self.animation.state() == QPropertyAnimation.State.Running):
+            self.stop_animation()
+
         self.blockSignals(True)
         self.setValue(value)
         self.blockSignals(False)
         
-        self.update_ui_elements(value)
+        # self.update_ui_elements(value)
+        # self.update_ui_elements_a(value)
+        if self.label:
+            self.label.setText(str(value))
+        if self.icon:
+            self.icon.animate_to(value)
 
 
 

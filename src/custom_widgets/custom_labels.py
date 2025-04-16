@@ -3,14 +3,18 @@ from PySide6.QtWidgets import (
     QApplication, 
     QVBoxLayout, 
     QWidget, 
-    QSlider
+    QSlider,
+    QPushButton
 )
 from PySide6.QtGui import (
     QPixmap, 
     QIcon, 
     QTransform
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import (
+    Qt,
+    QVariantAnimation
+)
 
 class BrightnessIcon(QLabel):
     def __init__(self, icon_path, parent=None):
@@ -32,7 +36,12 @@ class BrightnessIcon(QLabel):
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setPixmap(self.sun_icon.pixmap(self.icon_size, self.icon_size))
 
+        self._current_animation = None
+
+
     def set_value(self, value):
+        # print(f"Setting value: {value}")
+
         value = max(0, min(100, value))  # Ensure value is between 0 and 100
         self.value = value
 
@@ -48,6 +57,37 @@ class BrightnessIcon(QLabel):
         
         self.setPixmap(rotated_pixmap)
 
+    
+    def animate_to(self, target_value, step_duration=8, easing_curve=None):
+        print(f"Animating to {target_value}")
+
+        self.stop_animation()  # Stop any ongoing animation before starting a new one
+
+        target_value = max(0, min(100, target_value))  # Ensure target value is between 0 and 100
+        distance = abs(target_value - self.value)
+        duration = int(distance * step_duration)
+
+        animation = QVariantAnimation()
+        animation.setDuration(duration)
+        animation.setStartValue(self.value)
+        animation.setEndValue(target_value)
+        if easing_curve:
+            animation.setEasingCurve(easing_curve)
+
+        animation.valueChanged.connect(self.set_value)
+        animation.start()
+
+        self._current_animation = animation
+
+
+    def stop_animation(self):
+        """Stops the current animation if it is running."""
+        if self._current_animation and (self._current_animation.state() == QVariantAnimation.State.Running):
+            self._current_animation.stop()
+            self._current_animation.deleteLater()
+            self._current_animation = None
+            print("BrightnessIcon Animation stopped")
+
 
 
 if __name__ == "__main__":
@@ -61,15 +101,24 @@ if __name__ == "__main__":
     icon = BrightnessIcon(icon_path="src/assets/icons/sun_dark.png")
     # icon.set_value(100)
     icon.setStyleSheet("""
-                            background-color: blue;
-                           
-                            """) # background-color: yellow;
+                       background-color: blue;
+                       """)
     slider = QSlider(Qt.Horizontal)
     slider.setRange(0, 100)
     slider.valueChanged.connect(lambda value: icon.set_value(value))
 
     layout.addWidget(icon)
     layout.addWidget(slider)
+
+    # Demonstration of animation
+    animate_button = QPushButton("Animate to 100")
+    animate_button.clicked.connect(lambda: icon.animate_to(100))
+    layout.addWidget(animate_button)
+
+    animate_button_0 = QPushButton("Animate to 0")
+    animate_button_0.clicked.connect(lambda: icon.animate_to(0))
+    layout.addWidget(animate_button_0)
+
     window.setLayout(layout)
     window.show()
 

@@ -190,8 +190,7 @@ class TimeAdjustmentFrame(QFrame):
             slider_label.setFixedWidth(110)
 
             slider = NoScrollSlider(Qt.Horizontal)
-            slider.setMinimum(0)
-            slider.setMaximum(100)
+            slider.setRange(0, 100)
             slider.setValue(self.brightness_data.get(serial, 50))
             self.sliders[serial] = slider
 
@@ -654,7 +653,8 @@ class SettingsWindow(QWidget):
             # print("Adding time adjustment frame")
             frame = TimeAdjustmentFrame(self, monitors_order, monitors_dict, time_str, brightness_data)
             self.time_adjustment_frames.append(frame)
-            scroll_layout.addWidget(frame)
+            # scroll_layout.addWidget(frame)
+            scroll_layout.insertWidget(0, frame) # Add to the top of the scroll area
 
         add_frame_button = QPushButton("Add a time")
         add_frame_button.setStyleSheet("padding: 5px 15px;")
@@ -666,7 +666,7 @@ class SettingsWindow(QWidget):
         scroll_area.setWidgetResizable(True)
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
-        scroll_layout.setContentsMargins(0, 0, 3, 0)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
         # scroll_layout.setSpacing(0)
         # scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
@@ -679,7 +679,7 @@ class SettingsWindow(QWidget):
         # Restore TimeAdjustmentFrame widgets from registry
         saved_data = reg_read_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData")
         # print("Saved data:", saved_data)
-        for time_str, brightness_data in saved_data.items():
+        for time_str, brightness_data in reversed(saved_data.items()):
             # print(f"Adding frame with time: {time_str}, brightness: {brightness_data}")
             add_time_adjustment_frame(time_str, brightness_data)
 

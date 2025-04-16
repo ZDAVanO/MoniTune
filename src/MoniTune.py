@@ -90,7 +90,7 @@ import webbrowser
 
 # MARK: SliderFrame
 class SliderFrame(QWidget):
-    def __init__(self, parent, icon_path, slider_value, slider_callback, label_text):
+    def __init__(self, parent, icon_path, value, slider_callback):
         super().__init__(parent)
 
         self.font_size = "22px"
@@ -102,18 +102,18 @@ class SliderFrame(QWidget):
         self.hbox.setSpacing(0)
 
         self.icon = BrightnessIcon(icon_path=icon_path)
-        self.icon.set_value(slider_value)
+        self.icon.set_value(value)
         self.hbox.addWidget(self.icon)
 
         spacer = QSpacerItem(6, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
         self.hbox.addItem(spacer)
 
         self.slider = AnimatedSliderBS(Qt.Orientation.Horizontal, 
-                                       scrollStep=1, 
-                                       singleStep=1, 
-                                       pageStep=10)
+                                       scrollStep=1, # step when scrolling with mouse wheel
+                                       singleStep=1, # step when pressing arrow keys
+                                       pageStep=10) # step when pressing page up/down keys
         self.slider.setMaximum(100)
-        self.slider.setValue(slider_value)
+        self.slider.setValue(value)
         self.slider.valueChanged.connect(slider_callback)
         self.hbox.addWidget(self.slider)
 
@@ -122,17 +122,22 @@ class SliderFrame(QWidget):
 
         self.label = QLabel()
         self.label.setFixedWidth(39)
+        self.label.setFixedHeight(30)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label.setText(str(label_text))
+        self.label.setText(str(value))
         self.label.setStyleSheet(f"""
                                  font-size: {self.font_size}; 
                                  font-weight: {self.font_weight}; 
                                  padding-bottom: {self.padding_bottom}; 
+
                                  """) # padding-bottom: 4px; background-color: green; font-size: 22px; font-weight: bold; font: 600 16pt "{cfg.font_family}";
         self.hbox.addWidget(self.label)
 
         self.slider.add_icon(self.icon) # Connect icon to slider to animate the icon
         self.slider.add_label(self.label) # Connect label to slider to animate the label
+
+        # self.slider.setStyleSheet("background-color: red")
+        # self.setStyleSheet("background-color: blue")
 
 
 
@@ -261,14 +266,14 @@ class MainWindow(QMainWindow):
         # """)
         
         self.bottom_frame.installEventFilter(self)
-        self.bottom_hbox = QHBoxLayout(self.bottom_frame)
+        self.bottom_frame_hbox = QHBoxLayout(self.bottom_frame)
 
         # self.bottom_frame.setFixedHeight(60)
-        # self.bottom_hbox.setContentsMargins(7, 0, 11, 0)
+        # self.bottom_frame_hbox.setContentsMargins(7, 0, 11, 0)
 
-        self.bottom_hbox.setContentsMargins(7, 5, 7, 7)
+        self.bottom_frame_hbox.setContentsMargins(7, 5, 7, 7)
 
-        self.bottom_hbox.setSpacing(4)
+        self.bottom_frame_hbox.setSpacing(4)
 
         
 
@@ -602,8 +607,12 @@ class MainWindow(QMainWindow):
         
         # Handle right mouse button click on bottom_frame
         if source == self.bottom_frame and event.type() == QEvent.Type.MouseButtonPress:
+            if event.button() == Qt.LeftButton:
+                print("bottom frame LMB click")
+                return True
             if event.button() == Qt.RightButton:
-                print("Right mouse button clicked on bottom frame")
+                print("bottom frame RMB click")
+                self.execute_recent_task()
                 return True
         
         return super().eventFilter(source, event)
@@ -673,17 +682,10 @@ class MainWindow(QMainWindow):
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
         monitors_order += [serial for serial in self.monitors_dict if serial not in monitors_order]
         print(f"monitors_order: {monitors_order}")
-
-
-
-
-        # print monitors order for testing
-        print("monitors order:")
         for monitor_serial in self.monitors_order:
             if monitor_serial in self.monitors_dict:
                 monitor_name = self.custom_monitor_names.get(monitor_serial, self.monitors_dict[monitor_serial]['display_name'])
                 print(f"  {monitor_name} ({monitor_serial})")
-
 
 
 
@@ -737,10 +739,7 @@ class MainWindow(QMainWindow):
             monitor_label.setStyleSheet(f"""
                                         font-size: 16px; font-weight: bold;
 
-                                        
-
-                                        
-                                        """) # padding-left: 1px; background-color: blue; padding-bottom: 2px; font-size: 16px; font-weight: bold; font: 16px "{cfg.font_family}";
+                                        """) # background-color: blue;
             label_hbox.addWidget(monitor_label)
             
             
@@ -818,7 +817,7 @@ class MainWindow(QMainWindow):
                                                   r=rate, 
                                                   m=monitor, 
                                                   btn=rr_button: 
-                                                  self.on_rr_button_clicked(r, m, btn))
+                                                  self.on_rr_button_click(r, m, btn))
                         
 
                         row = idx // num_columns
@@ -854,9 +853,8 @@ class MainWindow(QMainWindow):
             br_frame = SliderFrame(
                 parent=self,
                 icon_path=self.sun_icon_path,
-                slider_value=br_level,
-                slider_callback=lambda value, ms=monitor_serial: self.on_brightness_change(value, ms),
-                label_text=br_level
+                value=br_level,
+                slider_callback=lambda value, ms=monitor_serial: self.on_brightness_change(value, ms)
             )
 
             self.br_sliders[monitor['serial']] = br_frame.slider  # Store slider in dictionary
@@ -870,7 +868,6 @@ class MainWindow(QMainWindow):
                 if monitor_frame.isEnabled(): # check contrast only if monitor is enabled
                     contrast_level = get_contrast_vcp(monitor["hPhysicalMonitor"], 
                                                     retries=5)
-                print(f"contrast_level {monitor['serial']} {contrast_level}")
                 
                 if contrast_level is None:
                     print(f"Contrast level is None for monitor {monitor['serial']}")
@@ -885,9 +882,8 @@ class MainWindow(QMainWindow):
                 contrast_frame = SliderFrame(
                     parent=self,
                     icon_path=self.contrast_icon_path,
-                    slider_value=contrast_level,
-                    slider_callback=lambda value, ms=monitor_serial: self.on_contrast_change(value, ms),
-                    label_text=contrast_level
+                    value=contrast_level,
+                    slider_callback=lambda value, ms=monitor_serial: self.on_contrast_change(value, ms)
                 )
 
                 self.contrast_sliders[monitor['serial']] = contrast_frame.slider  # Store slider in dictionary
@@ -902,8 +898,6 @@ class MainWindow(QMainWindow):
 
             # label_frame.setStyleSheet("background-color: red")
             # if self.show_refresh_rates: rr_frame.setStyleSheet("background-color: green")
-            # br_frame.setStyleSheet("background-color: blue")
-            # br_slider.setStyleSheet("background-color: red")
 
 
         print(f"self.brightness_values {self.brightness_values}")
@@ -915,19 +909,19 @@ class MainWindow(QMainWindow):
     
     # MARK: updateBottomFrame()
     def updateBottomFrame(self):
-        print("updateBottomFrame count ", self.bottom_hbox.count())
-
+        
         start_time = time.time()
 
         # Clear old widgets
-        while self.bottom_hbox.count():
-            child = self.bottom_hbox.takeAt(0)
+        # print("updateBottomFrame count ", self.bottom_frame_hbox.count())
+        while self.bottom_frame_hbox.count():
+            child = self.bottom_frame_hbox.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
 
 
-        name_title = QLabel("Scroll to adjust brightness")
-        name_title.setStyleSheet("""
+        bf_label = QLabel("Scroll to adjust brightness")
+        bf_label.setStyleSheet("""
                                  font-size: 14px; 
                                  padding-left: 5px;
                                  padding-bottom: 2px;
@@ -942,18 +936,20 @@ class MainWindow(QMainWindow):
         # self.link_br_btn.setIcon(QIcon(self.link_icon_path))
         self.link_br_btn.setIcon(self.get_link_icon())
         self.link_br_btn.setIconSize(QSize(21, 21))
+        self.link_br_btn.setToolTip("Link brightness levels")
         self.link_br_btn.toggled.connect(self.toggle_link_brightness)
 
-        settings_button = QPushButton()
-        settings_button.setFixedWidth(41) # 39
-        settings_button.setFixedHeight(39)
-        settings_button.setIcon(QIcon(self.settings_icon_path))
-        settings_button.setIconSize(QSize(21, 21))
-        settings_button.clicked.connect(self.openSettingsWindow)
+        settings_btn = QPushButton()
+        settings_btn.setFixedWidth(41) # 39
+        settings_btn.setFixedHeight(39)
+        settings_btn.setIcon(QIcon(self.settings_icon_path))
+        settings_btn.setIconSize(QSize(21, 21))
+        settings_btn.setToolTip("Settings")
+        settings_btn.clicked.connect(self.openSettingsWindow)
 
-        self.bottom_hbox.addWidget(name_title)
-        self.bottom_hbox.addWidget(self.link_br_btn)
-        self.bottom_hbox.addWidget(settings_button)
+        self.bottom_frame_hbox.addWidget(bf_label)
+        self.bottom_frame_hbox.addWidget(self.link_br_btn)
+        self.bottom_frame_hbox.addWidget(settings_btn)
 
         print(f"updateBottomFrame took {time.time() - start_time:.4f} seconds")
 
@@ -979,8 +975,8 @@ class MainWindow(QMainWindow):
 
 
 
-    # MARK: on_rr_button_clicked()
-    def on_rr_button_clicked(self, rate, monitor, button: RRButton):
+    # MARK: on_rr_button_click()
+    def on_rr_button_click(self, rate, monitor, button: RRButton):
         print(f"Selected refresh rate: {rate} Hz for monitor {monitor["serial"]}")
         # print(monitor)
 
@@ -1051,7 +1047,7 @@ class MainWindow(QMainWindow):
 
     # MARK: on_brightness_change()
     def on_brightness_change(self, value, monitor_serial):
-        # print(f"on_brightness_change: {value}, {monitor_serial}")
+        print(f"on_brightness_change: {value}, {monitor_serial}")
 
         if self.link_brightness:
             previous_value = self.brightness_values.get(monitor_serial, 0)
@@ -1157,7 +1153,7 @@ class MainWindow(QMainWindow):
                     if self.monitors_dict[monitor_serial]["method"] == "VCP":
                         if not set_brightness_vcp(self.monitors_dict[monitor_serial]["hPhysicalMonitor"], 
                                            brightness, 
-                                           retries=5):
+                                           retries=7):
                             raise Exception(f"Failed to set brightness for monitor {monitor_serial}")
 
                         print(f"brightness_sync_onetime set_brightness_vcp {monitor_serial} {brightness}")
@@ -1175,7 +1171,7 @@ class MainWindow(QMainWindow):
                     try:
                         if not set_contrast_vcp(self.monitors_dict[monitor_serial]["hPhysicalMonitor"], 
                                          contrast, 
-                                         retries=5):
+                                         retries=7):
                             raise Exception(f"Failed to set contrast for monitor {monitor_serial}")
                         
                         print(f"brightness_sync_onetime set_contrast_vcp {monitor_serial} {contrast}")
@@ -1227,9 +1223,9 @@ class MainWindow(QMainWindow):
 
     # MARK: animate_sliders()
     def animate_sliders(self, sliders, values):
+        print(f"animate_sliders: {list(sliders.keys())}, {values}")
         for index, (serial, slider) in enumerate(sliders.items()):
             if serial in values:
-                print(f"animate_sliders {serial} {values[serial]}")
                 # QTimer.singleShot(index * 100, lambda s=slider: s.animate_to(int(values[serial])))
                 slider.animate_to(int(values[serial]))
 
