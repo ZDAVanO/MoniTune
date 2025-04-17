@@ -313,10 +313,6 @@ class SettingsWindow(QWidget):
     # MARK: closeEvent()
     def closeEvent(self, event):
         print("Settings window closeEvent")
-
-        # self.save_adjustment_data()
-        self.time_adjustment_frames = []
-
         event.ignore()
         self.hide()
         # self.close()
@@ -371,7 +367,7 @@ class SettingsWindow(QWidget):
         while self.tab_widget.count(): # num of tabs
             self.tab_widget.removeTab(0) # remove the first tab
 
-        
+        self.time_adjustment_frames = [] # clear the list of frames
 
         # MARK: get monitors info
         monitors_info = get_monitors_info()

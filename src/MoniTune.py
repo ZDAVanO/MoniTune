@@ -90,8 +90,10 @@ import webbrowser
 
 # MARK: SliderFrame
 class SliderFrame(QWidget):
-    def __init__(self, parent, icon_path, value, slider_callback):
+    def __init__(self, parent, icon_path, value, slider_callback=None):
         super().__init__(parent)
+
+        self.slider_callback = slider_callback
 
         self.font_size = "22px"
         self.font_weight = "bold"
@@ -103,23 +105,14 @@ class SliderFrame(QWidget):
 
         self.icon = BrightnessIcon(icon_path=icon_path)
         self.icon.set_value(value)
-        self.hbox.addWidget(self.icon)
-
-        spacer = QSpacerItem(6, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
-        self.hbox.addItem(spacer)
-
+        
         self.slider = AnimatedSliderBS(Qt.Orientation.Horizontal, 
                                        scrollStep=1, # step when scrolling with mouse wheel
                                        singleStep=1, # step when pressing arrow keys
                                        pageStep=10) # step when pressing page up/down keys
-        self.slider.setMaximum(100)
+        self.slider.setRange(0, 100)
         self.slider.setValue(value)
-        self.slider.valueChanged.connect(slider_callback)
-        self.hbox.addWidget(self.slider)
-
-        spacer = QSpacerItem(3, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
-        self.hbox.addItem(spacer)
-
+        
         self.label = QLabel()
         self.label.setFixedWidth(39)
         self.label.setFixedHeight(30)
@@ -131,14 +124,42 @@ class SliderFrame(QWidget):
                                  padding-bottom: {self.padding_bottom}; 
 
                                  """) # padding-bottom: 4px; background-color: green; font-size: 22px; font-weight: bold; font: 600 16pt "{cfg.font_family}";
+        
+        # add widgets to layout
+        self.hbox.addWidget(self.icon)
+        self.hbox.addItem(QSpacerItem(6, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        self.hbox.addWidget(self.slider)
+        self.hbox.addItem(QSpacerItem(3, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
         self.hbox.addWidget(self.label)
 
-        self.slider.add_icon(self.icon) # Connect icon to slider to animate the icon
-        self.slider.add_label(self.label) # Connect label to slider to animate the label
+        if self.slider_callback:
+            self.slider.valueChanged.connect(self.slider_callback)
+        self.slider.valueChanged.connect(lambda value, lbl=self.label: lbl.setText(str(value)))
+        self.slider.valueChanged.connect(lambda value, ico=self.icon: ico.animate_to(value))
+        self.slider.animation.valueChanged.connect(self.update_ui_elements)
 
         # self.slider.setStyleSheet("background-color: red")
         # self.setStyleSheet("background-color: blue")
 
+    def update_ui_elements(self, value):
+        self.label.setText(str(value))
+        self.icon.set_value(value)
+
+    def animate_to(self, target_value, duration=1000, easing_curve=QEasingCurve.Type.OutCubic):
+        print(f"SliderFrame animate_to {self.slider.value()}-{target_value}")
+        self.icon.stop_animation()  # Stop any ongoing animation in the icon
+        self.slider.animate_to(target_value, duration, easing_curve)
+
+    def setValueBS(self, value):
+        if (self.slider.animation.state() == QPropertyAnimation.State.Running):
+            self.slider.stop_animation()  # Stop any ongoing animation in the slider
+
+        self.slider.blockSignals(True)  # Block signals during animation
+        self.slider.setValue(value)
+        self.slider.blockSignals(False)  # Unblock signals after setting value
+
+        self.label.setText(str(value))
+        self.icon.animate_to(value)
 
 
 # MARK: MainWindow
@@ -209,13 +230,16 @@ class MainWindow(QMainWindow):
         self.link_brightness = reg_read_bool(cfg.REGISTRY_PATH, "LinkBrightness", False)
 
 
-        self.settings_window = None  # No settings window yet
-        self.rr_buttons = {}  # Dictionary to store refresh rate buttons for each monitor
-        self.br_sliders = {}  # Dictionary to store brightness sliders
-        self.contrast_sliders = {}  # Dictionary to store contrast sliders
-
         self.window_open = False
         self.brightness_sync_thread = None
+        self.settings_window = None  # No settings window yet
+
+        self.rr_buttons = {}  # Dictionary to store refresh rate buttons for each monitor
+
+        self.br_frames = {}  # Dictionary to store brightness frames
+        self.contrast_frames = {}  # Dictionary to store contrast frames
+
+
 
         self.monitors_dict = {}
         self.update_monitors_info()
@@ -461,7 +485,7 @@ class MainWindow(QMainWindow):
 
         # play slider animation if window is open
         if self.window_open and (delay == 0):
-            QTimer.singleShot(0, lambda: self.animate_sliders(self.br_sliders, self.brightness_values))
+            QTimer.singleShot(0, lambda: self.animate_sliders(self.br_frames, self.brightness_values))
         else:
             threading.Timer((delay / 1000), self.brightness_sync_onetime).start() # change brightness after delay
 
@@ -631,8 +655,8 @@ class MainWindow(QMainWindow):
             if child.widget():
                 child.widget().deleteLater()
 
-        self.br_sliders.clear()  # Clear brightness sliders dictionary
-        self.contrast_sliders.clear()  # Clear contrast sliders dictionary
+        self.br_frames.clear()  # Clear brightness frames dictionary
+        self.contrast_frames.clear()  # Clear contrast frames dictionary
 
 
 
@@ -857,7 +881,7 @@ class MainWindow(QMainWindow):
                 slider_callback=lambda value, ms=monitor_serial: self.on_brightness_change(value, ms)
             )
 
-            self.br_sliders[monitor['serial']] = br_frame.slider  # Store slider in dictionary
+            self.br_frames[monitor['serial']] = br_frame  # Store frame in dictionary
 
             monitor_vbox.addWidget(br_frame)
 
@@ -886,7 +910,7 @@ class MainWindow(QMainWindow):
                     slider_callback=lambda value, ms=monitor_serial: self.on_contrast_change(value, ms)
                 )
 
-                self.contrast_sliders[monitor['serial']] = contrast_frame.slider  # Store slider in dictionary
+                self.contrast_frames[monitor['serial']] = contrast_frame
 
                 monitor_vbox.addWidget(contrast_frame)
 
@@ -1047,17 +1071,20 @@ class MainWindow(QMainWindow):
 
     # MARK: on_brightness_change()
     def on_brightness_change(self, value, monitor_serial):
-        print(f"on_brightness_change: {value}, {monitor_serial}")
+        # print(f"on_brightness_change: {value}, {monitor_serial}")
 
         if self.link_brightness:
             previous_value = self.brightness_values.get(monitor_serial, 0)
             change = value - previous_value
             print(f"Brightness change for {monitor_serial}: {change}")
 
-            for serial, slider in self.br_sliders.items():
+            for serial, frame in self.br_frames.items():
+                slider = frame.slider
+                
                 if (serial != monitor_serial) and slider.isEnabled():
                     new_value = max(0, min(100, (slider.value() + change)))
-                    slider.setValueBS(int(new_value))
+                    frame.setValueBS(int(new_value))
+
                     self.brightness_values[serial] = int(new_value)
 
         self.brightness_values[monitor_serial] = int(value)
@@ -1074,7 +1101,8 @@ class MainWindow(QMainWindow):
         link_brightness_save = self.link_brightness
         self.link_brightness = False  # Disable linking temporarily
 
-        for slider in self.br_sliders.values():
+        for frame in self.br_frames.values():
+            slider = frame.slider
             new_value = max(0, min(100, slider.value() + (1 if delta > 0 else -1)))
             slider.setValue(new_value)
         
@@ -1216,18 +1244,19 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
 
         if self.restore_last_brightness:
-            QTimer.singleShot(150, lambda: self.animate_sliders(self.br_sliders, self.brightness_values))
+            QTimer.singleShot(150, lambda: self.animate_sliders(self.br_frames, self.brightness_values))
         if self.show_contrast_sliders:
-            QTimer.singleShot(150, lambda: self.animate_sliders(self.contrast_sliders, self.contrast_values))
+            QTimer.singleShot(150, lambda: self.animate_sliders(self.contrast_frames, self.contrast_values))
 
 
     # MARK: animate_sliders()
-    def animate_sliders(self, sliders, values):
-        print(f"animate_sliders: {list(sliders.keys())}, {values}")
-        for index, (serial, slider) in enumerate(sliders.items()):
+    def animate_sliders(self, frames, values):
+        print(f"animate_sliders: {list(frames.keys())}, {values}")
+        for index, (serial, frame) in enumerate(frames.items()):
             if serial in values:
                 # QTimer.singleShot(index * 100, lambda s=slider: s.animate_to(int(values[serial])))
-                slider.animate_to(int(values[serial]))
+                frame.animate_to(int(values[serial]))
+
 
 
     # MARK: start_brightness_sync_thread()
