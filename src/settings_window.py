@@ -146,6 +146,8 @@ class TimeAdjustmentFrame(QFrame):
         self.setMaximumWidth(500)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)  # Prevent frame from expanding
         
+        self.setObjectName("TimeAdjustmentFrame")
+        
         self.frame_layout = QVBoxLayout(self)
         self.frame_layout.setContentsMargins(0, 4, 0, 4)
         self.frame_layout.setSpacing(3)
@@ -217,7 +219,15 @@ class TimeAdjustmentFrame(QFrame):
 
             self.frame_layout.addLayout(slider_layout)
 
-            
+    def highlight_frame(self):
+        self.setStyleSheet("""
+            QFrame#TimeAdjustmentFrame {
+                border: 2px solid #4cd964;
+                border-radius: 6px;
+            }
+            """)
+        # QTimer.singleShot(5000, lambda: self.setStyleSheet(""))
+
 
     # MARK: set_brightness()
     def update_brightness(self, monitor_id, value):
@@ -671,16 +681,21 @@ class SettingsWindow(QWidget):
                                                               "Adjust the brightness to match the most relecant time when the app starts"
                                                               ))
 
-        def add_time_adjustment_frame(time_str=None, brightness_data=None):
+        def add_time_adjustment_frame(time_str=None, brightness_data=None, highlight=False):
             # print("Adding time adjustment frame")
             frame = TimeAdjustmentFrame(self, monitors_order, monitors_dict, time_str, brightness_data)
             self.time_adjustment_frames.append(frame)
             # scroll_layout.addWidget(frame)
             scroll_layout.insertWidget(0, frame) # Add to the top of the scroll area
 
+            # Highlight the newly added frame
+            if highlight:
+                frame.highlight_frame()
+
         add_frame_button = QPushButton("Add a time")
         add_frame_button.setStyleSheet("padding: 5px 15px;")
-        add_frame_button.clicked.connect(lambda: (add_time_adjustment_frame(), self.save_adjustment_data()))
+        add_frame_button.clicked.connect(lambda: (add_time_adjustment_frame(highlight=True), 
+                                                  self.save_adjustment_data()))
         time_adjustment_layout.addWidget(add_frame_button)
 
         scroll_content = QWidget()
