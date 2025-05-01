@@ -9,6 +9,10 @@ import darkdetect
 
 import os
 
+import logging
+logger = logging.getLogger(__name__)
+
+
 
 # MARK: SystemTrayIcon
 class SystemTrayIcon(QSystemTrayIcon):
@@ -17,6 +21,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         icon = reg_read_list(cfg.REGISTRY_PATH, "TrayIcon")
         self.icon_name = icon[0] if icon else "monitune"
+        logger.debug(f"icon_name: {self.icon_name}")
         
         self.icon_theme = darkdetect.theme()
 
@@ -41,7 +46,8 @@ class SystemTrayIcon(QSystemTrayIcon):
         tray_menu.addSeparator()  # Add separator before Exit action
         
         exit_action = tray_menu.addAction("Exit")
-        exit_action.triggered.connect(QGuiApplication.quit)
+        # exit_action.triggered.connect(QGuiApplication.quit)
+        exit_action.triggered.connect(parent.on_exit)  # Connect to close method of parent window
 
         self.setContextMenu(tray_menu)
         self.activated.connect(self.trayIconClicked)
@@ -73,7 +79,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             icon_path = tray_icons[icon_name][self.icon_theme]
             self.changeIcon(icon_path)
         else:
-            print("Invalid icon name. Please choose 'monitune', 'mdl2', or 'fluent'.")
+            logger.warning(f"Invalid icon name: {icon_name}. Available options are: {list(tray_icons.keys())}")
 
     # MARK: changeIconTheme()
     def changeIconTheme(self, theme):
@@ -82,7 +88,7 @@ class SystemTrayIcon(QSystemTrayIcon):
             icon_path = tray_icons[self.icon_name][theme]
             self.changeIcon(icon_path)
         else:
-            print("Invalid theme. Please choose 'Light' or 'Dark'.")
+            logger.warning(f"Invalid theme: {theme}. Available options are: ['Light', 'Dark']")
 
     
     # MARK: open_display_settings()

@@ -8,10 +8,15 @@ import screen_brightness_control as sbc
 # from monitorcontrol import get_monitors, VCPError
 import screeninfo
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 VCP_LUMINANCE_CODE = 0x10
 VCP_CONTRAST_CODE = 0x12
+# 0x01: power on, 0x04: standby (screenoff + blinking led), 0x05: power off
+VCP_POWER_MODE_CODE = 0xD6 
 PHYSICAL_MONITOR_DESCRIPTION_SIZE = 128
 
 
@@ -93,12 +98,21 @@ def get_monitors_info():
     enum_display_monitors(None, None, MonitorEnumProc(monitor_enum_proc), 0)
 
     sbc_info = sbc.list_monitors_info()
+    # logger.debug(f"sbc_info: {sbc_info}")
+    logger.debug("sbc_info:\n" + "\n".join(f"{monitor}" for monitor in sbc_info))
+    
     # monitorcontrol_monitors = get_monitors()
     for index, monitor in enumerate(monitors):
         monitor["index"] = index
         monitor["name"] = sbc_info[index]["name"]
         monitor["model"] = sbc_info[index]["model"]
+
         monitor["serial"] = sbc_info[index]["serial"]
+        # monitor["serial"] = None
+        if not monitor["serial"]:
+            logger.warning(f"Monitor {index} does not have a serial number, using index as serial")
+            monitor["serial"] = index
+
         monitor["manufacturer"] = sbc_info[index]["manufacturer"]
         monitor["manufacturer_id"] = sbc_info[index]["manufacturer_id"]
 
@@ -127,6 +141,9 @@ def get_monitors_info():
 
         # monitor["mc_obj"] = monitorcontrol_monitors[index]
 
+    # logger.debug(f"Monitors info: {monitors}")
+    logger.debug("Monitors info:\n" + "\n".join(f"{monitor}" for monitor in monitors))
+
     return monitors
 
 
@@ -140,10 +157,10 @@ def set_refresh_rate(monitor, refresh_rate):
     result = win32api.ChangeDisplaySettingsEx(device, devmode)
 
     if result == win32con.DISP_CHANGE_SUCCESSFUL:
-        print(f"Successfully changed the refresh rate of {device} to {refresh_rate} Hz.")
+        logger.info(f"Successfully changed the refresh rate of {device} to {refresh_rate} Hz.")
         return True
     else:
-        print(f"Failed to change the refresh rate of {device}.")
+        logger.error(f"Failed to change the refresh rate of {device} to {refresh_rate}.")
         return False
 
 
@@ -159,7 +176,7 @@ def get_brightness_sbc(display):
     try:
         br_value = sbc.get_brightness(display=display)[0]
     except Exception as e:
-        print(f"Error getting brightness for display {display}: {e}")
+        logger.error(f"Error getting brightness for display {display}: {e}")
         br_value = None
     
     return br_value
@@ -176,6 +193,7 @@ def set_resolution(device, width, height):
     result = win32api.ChangeDisplaySettingsEx(device, devmode)
     if result != win32con.DISP_CHANGE_SUCCESSFUL:
         raise Exception(f"Failed to change resolution to {width}x{height} for device {device}")
+
 
 
 # MARK: get_vcf_feature_and_vcf_feature_reply()
@@ -208,7 +226,7 @@ def get_brightness_vcp(handle, retries=1):
             # raise ValueError("brightness value is None")
             return br_value
         except Exception as e:
-            print(f"Attempt {attempt + 1} failed to get brightness: {e}")
+            logger.info(f"Attempt {attempt + 1} failed to get brightness: {e}")
             if attempt == retries - 1:
                 return None
             time.sleep(0.05)
@@ -221,7 +239,7 @@ def set_brightness_vcp(handle, value, retries=1):
                 set_vcp_feature(handle, VCP_LUMINANCE_CODE, value)
                 return True
             except Exception as e:
-                print(f"Attempt {attempt + 1} failed to set brightness: {e}")
+                logger.info(f"Attempt {attempt + 1} failed to set brightness: {e}")
                 if attempt == retries - 1:
                     return False
                 time.sleep(0.05)
@@ -230,11 +248,11 @@ def set_brightness_vcp(handle, value, retries=1):
 def get_contrast_vcp(handle, retries=1):
     for attempt in range(retries):
         try:
-             contrast_value = get_vcf_feature_and_vcf_feature_reply(handle, VCP_CONTRAST_CODE)[0]
-             # raise ValueError("contrast value is None")
-             return contrast_value
+            contrast_value = get_vcf_feature_and_vcf_feature_reply(handle, VCP_CONTRAST_CODE)[0]
+            # raise ValueError("contrast value is None")
+            return contrast_value
         except Exception as e:
-            print(f"Attempt {attempt + 1} failed to get contrast: {e}")
+            logger.info(f"Attempt {attempt + 1} failed to get contrast: {e}")
             if attempt == retries - 1:
                 return None
             time.sleep(0.05)
@@ -247,11 +265,40 @@ def set_contrast_vcp(handle, value, retries=1):
                 set_vcp_feature(handle, VCP_CONTRAST_CODE, value)
                 return True
             except Exception as e:
-                print(f"Attempt {attempt + 1} failed to set contrast: {e}")
+                logger.info(f"Attempt {attempt + 1} failed to set contrast: {e}")
                 if attempt == retries - 1:
                     return False
                 time.sleep(0.05)
 
+# MARK: get_power_mode_vcp()
+def get_power_mode_vcp(handle, retries=1):
+    for attempt in range(retries):
+        try:
+            power_mode = get_vcf_feature_and_vcf_feature_reply(handle, VCP_POWER_MODE_CODE)[0]
+            # raise ValueError("contrast value is None")
+            return power_mode
+        except Exception as e:
+            logger.info(f"Attempt {attempt + 1} failed to get power mode: {e}")
+            if attempt == retries - 1:
+                return None
+            time.sleep(0.05)
+
+# MARK: set_power_mode_vcp()
+def set_power_mode_vcp(handle, value, retries=1):
+        valid_power_modes = [0x01, 0x04, 0x05]
+        if value not in valid_power_modes:
+            logger.error(f"Invalid power mode value: {value}. Must be one of {valid_power_modes}.")
+            return False
+        
+        for attempt in range(retries):
+            try:
+                set_vcp_feature(handle, VCP_POWER_MODE_CODE, value)
+                return True
+            except Exception as e:
+                logger.info(f"Attempt {attempt + 1} failed to set power mode: {e}")
+                if attempt == retries - 1:
+                    return False
+                time.sleep(0.05)
 
 
 # MARK: print_mi()
@@ -281,6 +328,11 @@ def print_mi(monitors_info):
 # MARK: main
 if __name__ == "__main__":
 
+    logging.basicConfig(level=logging.INFO, 
+                        format='[%(asctime)s] [%(levelname)s] %(message)s', 
+                        datefmt="%H:%M:%S")
+    
+
     monitors_info = get_monitors_info()
     print_mi(monitors_info)
 
@@ -289,6 +341,11 @@ if __name__ == "__main__":
 
     screen_info = screeninfo.get_monitors()
     print(f"screen_info: {screen_info}")
+
+    # set_brightness_sbc(1, 0)
+
+    # monitors = get_monitors()
+    # print(f"monitors: {monitors}")
 
     # mc_monitors = get_monitors()
     # print(f"mc_monitors: {mc_monitors}")
@@ -312,6 +369,9 @@ if __name__ == "__main__":
 
     #             print(f"Monitor {monitor['serial']} - Brightness: {get_brightness_vcp(monitor['hPhysicalMonitor'], retries=5)}")
     #             # print(f"Monitor {monitor['serial']} - Contrast: {get_contrast_vcp(monitor['hPhysicalMonitor'], retries=5)}")
+    #             # print(f"Monitor {monitor['serial']} - Power Mode: {get_power_mode_vcp(monitor['hPhysicalMonitor'], retries=5)}")
+                
+    #             # set_power_mode_vcp(monitor['hPhysicalMonitor'], 4, retries=5)
 
     #             # set contrast
     #             # set_contrast_vcp(monitor['hPhysicalMonitor'], 75, retries=5)

@@ -16,6 +16,11 @@ from PySide6.QtCore import (
     QVariantAnimation
 )
 
+import logging
+logger = logging.getLogger(__name__)
+
+
+
 class BrightnessIcon(QLabel):
     def __init__(self, icon_path, parent=None):
         super().__init__(parent)
@@ -36,8 +41,7 @@ class BrightnessIcon(QLabel):
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setPixmap(self.sun_icon.pixmap(self.icon_size, self.icon_size))
 
-        self.animation = QVariantAnimation()
-        self.animation.valueChanged.connect(self.set_value)
+        self.animation = None
 
 
     def set_value(self, value):
@@ -59,39 +63,50 @@ class BrightnessIcon(QLabel):
         self.setPixmap(rotated_pixmap)
 
     
-    def animate_to(self, target_value, step_duration=8, easing_curve=None):
+    def animate_to(self, target_value, step_duration=7, easing_curve=None):
         # print(f"BrightnessIcon animate_to {self.value}-{target_value}")
 
         self.stop_animation()  # Stop any ongoing animation before starting a new one
 
         target_value = max(0, min(100, target_value))  # Ensure target value is between 0 and 100
+
         distance = abs(target_value - self.value)
         duration = int(distance * step_duration)
         # print(f"distance: {distance}, duration: {duration}")
 
-        # animation = QVariantAnimation()
+        # Skip animation if the target value is very close to the current value
+        if (distance <= 2):
+            self.set_value(target_value)
+            return
+
+        self.animation = QVariantAnimation()
         self.animation.setDuration(duration)
         self.animation.setStartValue(self.value)
         self.animation.setEndValue(target_value)
         if easing_curve:
             self.animation.setEasingCurve(easing_curve)
+        
+        self.animation.valueChanged.connect(self.set_value)
 
-        # animation.valueChanged.connect(self.set_value)
         self.animation.start()
 
 
     def stop_animation(self):
-        """Stops the current animation if it is running."""
-        if (self.animation.state() == QVariantAnimation.State.Running):
+        if self.animation and (self.animation.state() == QVariantAnimation.State.Running):
             # print("BrightnessIcon stop_animation")
             self.animation.stop()
 
-            # self.animation.deleteLater()
-            # self.animation = None
+            self.animation.deleteLater()
+            self.animation = None
 
 
 
 if __name__ == "__main__":
+
+    logging.basicConfig(level=logging.INFO, 
+                        format='[%(asctime)s] [%(levelname)s] %(message)s', 
+                        datefmt="%H:%M:%S")
+
     import sys
     app = QApplication(sys.argv)
 

@@ -32,7 +32,8 @@ from PySide6.QtWidgets import (
     QComboBox,
     QGridLayout,
     QSpacerItem,
-    QSizePolicy
+    QSizePolicy,
+    QMessageBox
 )
 
 from system_tray_icon import SystemTrayIcon
@@ -40,6 +41,7 @@ from settings_window import SettingsWindow
 
 from custom_widgets import (
     RRButton,
+    HoverIconButton,
     NoScrollComboBox,
     BrightnessIcon,
     AnimatedSliderBS,
@@ -57,6 +59,8 @@ from utils.monitor_utils import (
     set_brightness_vcp, 
     get_contrast_vcp, 
     set_contrast_vcp, 
+    get_power_mode_vcp,
+    set_power_mode_vcp,
 )
 from utils.reg_utils import (
     reg_write_bool, 
@@ -64,10 +68,16 @@ from utils.reg_utils import (
     reg_write_list, 
     reg_read_list, 
     reg_write_dict, 
-    reg_read_dict
+    reg_read_dict,
+    add_to_startup,
+    remove_from_startup,
 )
-from utils.utils import get_idle_time, is_laptop
+from utils.utils import get_idle_time, is_laptop, is_on_battery, get_display_timeouts
 from utils.lock_detect import LockDetect
+
+from utils.logger import get_logger
+logger = get_logger(__name__)
+# debug, info, warning, error, critical
 
 import config as cfg
 
@@ -95,16 +105,16 @@ class SliderFrame(QWidget):
 
         self.slider_callback = slider_callback
 
-        self.font_size = "22px"
-        self.font_weight = "bold"
-        self.padding_bottom = "2px"
-
         self.hbox = QHBoxLayout(self)
         self.hbox.setContentsMargins(0, 0, 2, 0)
         self.hbox.setSpacing(0)
 
         self.icon = BrightnessIcon(icon_path=icon_path)
         self.icon.set_value(value)
+        # self.icon.setStyleSheet(f"""
+        #                          background-color: green;
+                                
+        #                          """)
         
         self.slider = AnimatedSliderBS(Qt.Orientation.Horizontal, 
                                        scrollStep=1, # step when scrolling with mouse wheel
@@ -114,16 +124,15 @@ class SliderFrame(QWidget):
         self.slider.setValue(value)
         
         self.label = QLabel()
-        self.label.setFixedWidth(39)
-        self.label.setFixedHeight(30)
+        self.label.setFixedSize(39, 30)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setText(str(value))
         self.label.setStyleSheet(f"""
-                                 font-size: {self.font_size}; 
-                                 font-weight: {self.font_weight}; 
-                                 padding-bottom: {self.padding_bottom}; 
+                                 font-size: 22px; 
+                                 font-weight: bold; 
+                                 padding-bottom: 2px; 
 
-                                 """) # padding-bottom: 4px; background-color: green; font-size: 22px; font-weight: bold; font: 600 16pt "{cfg.font_family}";
+                                 """) # background-color: green;
         
         # add widgets to layout
         self.hbox.addWidget(self.icon)
@@ -146,7 +155,7 @@ class SliderFrame(QWidget):
         self.icon.set_value(value)
 
     def animate_to(self, target_value, duration=1000, easing_curve=QEasingCurve.Type.OutCubic):
-        print(f"SliderFrame animate_to {self.slider.value()}-{target_value}")
+        logger.info(f"SliderFrame animate_to {self.slider.value()}-{target_value}")
         self.icon.stop_animation()  # Stop any ongoing animation in the icon
         self.slider.animate_to(target_value, duration, easing_curve)
 
@@ -175,14 +184,25 @@ class MainWindow(QMainWindow):
         self.lock_state_changed.connect(self._on_lock_state_change)
 
         self.win_release = platform.release()
-        print(f"Windows release: {self.win_release}")
+        logger.info(f"win_release: {self.win_release}")
 
         self.is_laptop = is_laptop()
+        logger.info(f"is_laptop: {self.is_laptop}")
 
         self.theme = darkdetect.theme()
+        logger.debug(f"theme: {self.theme}")
+
+        self.exe_path = os.path.realpath(sys.argv[0])
+        logger.info(f"exe_path: {self.exe_path}")
 
         # General settings
+        self.launch_on_startup = reg_read_bool(cfg.REGISTRY_PATH, "LaunchOnStartup", False)
+        logger.info(f"launch_on_startup: {self.launch_on_startup}")
+        if self.launch_on_startup:
+            self.update_autostart()
+        
         self.enable_rounded_corners = reg_read_bool(cfg.REGISTRY_PATH, "EnableRoundedCorners", False if self.win_release != "11" else True)
+        logger.debug(f"enable_rounded_corners: {self.enable_rounded_corners}")
         if self.enable_rounded_corners:
             self.window_corner_radius = cfg.WIN11_WINDOW_CORNER_RADIUS
             self.window_offset = cfg.WIN11_WINDOW_OFFSET
@@ -191,43 +211,59 @@ class MainWindow(QMainWindow):
             self.window_offset = 0
 
         self.enable_fusion_theme = reg_read_bool(cfg.REGISTRY_PATH, "EnableFusionTheme", False)
+        logger.debug(f"enable_fusion_theme: {self.enable_fusion_theme}")
         if self.enable_fusion_theme:
             QApplication.instance().setStyle("Fusion")
         self.update_theme_colors(self.theme)
 
         self.enable_break_reminders = reg_read_bool(cfg.REGISTRY_PATH, "EnableBreakReminders", False)
+        logger.debug(f"enable_break_reminders: {self.enable_break_reminders}")
 
         self.hidden_displays = reg_read_list(cfg.REGISTRY_PATH, "HiddenDisplays")
+        logger.debug(f"hidden_displays: {self.hidden_displays}")
 
         self.custom_monitor_names = reg_read_dict(cfg.REGISTRY_PATH, "CustomMonitorNames")
-        print(f"custom_monitor_names {self.custom_monitor_names}")
+        logger.info(f"custom_monitor_names: {self.custom_monitor_names}")
 
         self.monitors_order = reg_read_list(cfg.REGISTRY_PATH, "MonitorsOrder")
+        logger.debug(f"monitors_order: {self.monitors_order}")
 
         # Resolution settings
         self.show_resolution = reg_read_bool(cfg.REGISTRY_PATH, "ShowResolution")
+        logger.debug(f"show_resolution: {self.show_resolution}")
 
         # Refresh rate settings
         self.show_refresh_rates = reg_read_bool(cfg.REGISTRY_PATH, "ShowRefreshRates")
+        logger.debug(f"show_refresh_rates: {self.show_refresh_rates}")
         self.excluded_rates = list(map(int, reg_read_list(cfg.REGISTRY_PATH, "ExcludedHzRates")))
+        logger.debug(f"excluded_rates: {self.excluded_rates}")
         # self.excluded_rates = list(map(int, filter(None, reg_read_list(cfg.REGISTRY_PATH, "ExcludedHzRates"))))
 
         # Brightness settings
         self.restore_last_brightness = reg_read_bool(cfg.REGISTRY_PATH, "RestoreLastBrightness")
+        logger.debug(f"restore_last_brightness: {self.restore_last_brightness}")
         
         self.brightness_values = reg_read_dict(cfg.REGISTRY_PATH, "BrightnessValues")
-        print(f"self.brightness_values {self.brightness_values}")
+        logger.info(f"brightness_values: {self.brightness_values}")
 
         self.time_adjustment_startup = reg_read_bool(cfg.REGISTRY_PATH, "TimeAdjustmentStartup")
+        logger.debug(f"time_adjustment_startup: {self.time_adjustment_startup}")
         self.time_adjustment_data = reg_read_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData")
         # self.time_adjustment_data = {}
+        logger.debug(f"time_adjustment_data: {self.time_adjustment_data}")
 
         # DDC/CI settings
         self.show_contrast_sliders = reg_read_bool(cfg.REGISTRY_PATH, "ShowContrastSliders", False)
+        logger.debug(f"show_contrast_sliders: {self.show_contrast_sliders}")
         self.contrast_values = reg_read_dict(cfg.REGISTRY_PATH, "ContrastValues")
-        print(f"self.contrast_values {self.contrast_values}")
+        logger.info(f"contrast_values: {self.contrast_values}")
 
         self.link_brightness = reg_read_bool(cfg.REGISTRY_PATH, "LinkBrightness", False)
+        logger.debug(f"link_brightness: {self.link_brightness}")
+
+        self.display_timeout_ac, self.display_timeout_dc = get_display_timeouts()
+        # self.display_timeout_ac = self.display_timeout_dc = 120 # 2 min for testing
+        logger.info(f"display_timeout_ac: {self.display_timeout_ac} sec, display_timeout_dc: {self.display_timeout_dc} sec")
 
 
         self.window_open = False
@@ -325,10 +361,12 @@ class MainWindow(QMainWindow):
         # Timer setup
         self.timer = QTimer()
         self.timer.timeout.connect(self.check_all_tasks)
-        self.last_check_time = QDateTime.currentDateTime()
+        # self.last_check_time = QDateTime.currentDateTime()
+        self.last_check_time = None
 
         self.time_active = 0
         self.saved_time = 0
+        self.screen_disabled = False
 
         # Run the lock state listener in a separate thread
         self.lock_listener = LockDetect(lambda state: self.lock_state_changed.emit(state)) # _on_lock_state_change
@@ -358,37 +396,66 @@ class MainWindow(QMainWindow):
 
     # MARK: _on_lock_state_change()
     def _on_lock_state_change(self, state: str):
-        print(f"State changed to: {state}")
+        logger.info(f"Screen state changed to: {state}")
         if state == "unlocked":
-            print("Screen unlocked at:", QTime.currentTime().toString("HH:mm"))
             self.execute_recent_task(delay=10 * 1000) # Execute after 10 seconds  
-            self.start_checking()
-
+            self.start_checking(interval=(cfg.timer_interval * 1000))
         elif state == "locked":
-            print("Screen locked at:", QTime.currentTime().toString("HH:mm"))
             self.stop_checking()
 
 
     # MARK: stop_checking()
     def stop_checking(self):
         self.timer.stop()
-        print("Task checking stopped")
+        logger.info("Task checking stopped")
 
     # MARK: start_checking()
     def start_checking(self, interval=60000):
-        self.last_check_time = QDateTime.currentDateTime()
+        # self.last_check_time = QDateTime.currentDateTime()
+        self.last_check_time = None
+        self.time_active = 0
+        self.saved_time = 0
         self.timer.start(interval)
-        print("Task checking started")
+        logger.info(f"Task checking started (interval: {interval / 1000} sec)")
 
 
     # MARK: check_all_tasks()
     def check_all_tasks(self):
+        log_messages = []
         current_time = QTime.currentTime().toString("HH:mm")
-        current_datetime = QDateTime.currentDateTime()
-        print(f"Checking tasks at: {current_time}")
-        # print(f"self.time_adjustment_data {self.time_adjustment_data}")
+        idle_time = get_idle_time()
+        can_change_br = True
 
 
+        timeout = self.display_timeout_ac
+        power_type = "AC" # AC - plugged, DC - battery
+        if self.is_laptop:
+            on_battery = is_on_battery()
+            timeout = self.display_timeout_dc if on_battery else self.display_timeout_ac
+            power_type = "DC" if on_battery else "AC"
+        
+
+        # Calculate time_active, saved_time
+        if idle_time > (5 * 60):
+            logger.info(f"idle {5}min, reset time_active")
+            self.time_active = 0
+            self.saved_time = 0
+        elif idle_time < (cfg.timer_interval * 1.0):
+            self.time_active += cfg.timer_interval
+            self.time_active += self.saved_time
+            self.saved_time = 0
+        else:
+            self.saved_time += cfg.timer_interval
+
+        
+        log_messages.append(
+            f"idle: {idle_time:.2f}s, "
+            f"timeout({power_type}): {timeout}s, "
+            f"active: {self.time_active / 60:.2f}m, "
+            f"saved: {self.saved_time / 60:.2f}m"
+        )
+
+    
         # Monitor connected monitors
         current_screeninfo = screeninfo.get_monitors()
 
@@ -399,63 +466,60 @@ class MainWindow(QMainWindow):
         removed_monitors = previous_serials - current_serials
 
         if added_monitors:
-            print(f"New monitors added: {added_monitors}")
+            logger.info(f"Added monitors: {added_monitors}")
             # QTimer.singleShot(10000, lambda: self.execute_recent_task(delay=10000))
             QTimer.singleShot(10 * 1000, self.execute_recent_task)
+            can_change_br = False
         if removed_monitors:
-            print(f"Monitors removed: {removed_monitors}")
-        # if not added_monitors and not removed_monitors:
-        #     print("No changes in connected monitors.")
+            logger.info(f"Removed monitors: {removed_monitors}")
 
         self.previous_screeninfo = current_screeninfo
 
 
+        # Monitor display timeout
+        if (timeout >= 120) and (idle_time >= timeout):
+            logger.info(f"Display timeout reached ({power_type}): {timeout} sec")
+            self.screen_disabled = True
+
+        if self.screen_disabled and (idle_time < timeout):
+            logger.info("Activity after timeout, restoring brightness")
+            self.screen_disabled = False
+            QTimer.singleShot(10 * 1000, self.execute_recent_task)
+            can_change_br = False
+
+
         # MARK: Check time adjustment tasks
-        if not added_monitors:
+        if (self.last_check_time != current_time) and can_change_br:
             if current_time in self.time_adjustment_data:
                 self.apply_brightness(self.time_adjustment_data[current_time])
+                log_messages.append(f"Applied brightness: {self.time_adjustment_data[current_time]}")
             else:
-                print("No tasks at this time")
-        else:
-            print("Skipped time adjustment tasks due to new monitor(s)")
+                log_messages.append("idle")
 
-        self.last_check_time = current_datetime
-
-
-        # MARK: Check idle time for break reminders
-        if not self.enable_break_reminders:
-            self.time_active = 0
-            self.saved_time = 0
-        else:
-            idle_time = get_idle_time()
-            if idle_time is not None:
-                print(f"idle_time: {idle_time:.2f} sec")
-
-                if idle_time > 5 * 60:
-                    print("idle 5min, reset time_active")
-                    self.time_active = 0
-                    self.saved_time = 0
-                elif idle_time < cfg.timer_interval * 1.0:
-                    self.time_active += cfg.timer_interval
-                    self.time_active += self.saved_time
-                    self.saved_time = 0
-
-                    if self.time_active >= cfg.break_notification_interval * 60:
-                        print("show break notification")
-                        self.break_notification()
-                        self.time_active = 0
-                else:
-                    self.saved_time += cfg.timer_interval
-
-                print(f"time_active: {self.time_active / 60} min, saved_time: {self.saved_time / 60} min")
         
+        # MARK: Check time active for break reminders
+        if (self.enable_break_reminders and 
+            (self.time_active >= (cfg.break_notification_interval * 60)) and 
+            (self.window_open == False)
+        ):
+            logger.info(f"show break notification, time_active: {self.time_active / 60} min")
+            self.tray_icon.show_notification(
+                "Take a break from the screen!",
+                "Look at least 6 meters away from the screen for 20 seconds.",
+                QIcon(self.eye_icon_path)
+            )
+            self.time_active = 0
+        
+        
+        logger.info(" | ".join(log_messages))
+        self.last_check_time = current_time
+
 
 
     # MARK: execute_recent_task()
     def execute_recent_task(self, delay=0):
         if not self.time_adjustment_data:
-            print("execute_recent_task: No tasks found")
-            print("Restoring last change")
+            logger.info("execute_recent_task: No tasks found, restoring last change")
             self.apply_brightness(self.brightness_values, delay=delay)
             return
 
@@ -463,20 +527,20 @@ class MainWindow(QMainWindow):
         past_tasks = [time for time in self.time_adjustment_data.keys() if time <= current_time]
         if past_tasks:
             recent_task_time = max(past_tasks)
-            print(f"Executing recent task at: {recent_task_time}")
+            logger.info(f"Executing recent task at: {recent_task_time}, delay: {delay / 1000} sec")
             self.apply_brightness(self.time_adjustment_data[recent_task_time], delay=delay)
         else:
-            print("No past tasks to execute for today, checking previous day")
+            logger.info("No past tasks to execute for today, checking previous day")
             if self.time_adjustment_data:
                 recent_task_time = max(self.time_adjustment_data.keys())
-                print(f"Executing last task from previous day at: {recent_task_time}")
+                logger.info(f"Executing last task from previous day at: {recent_task_time}, delay: {delay / 1000} sec")
                 self.apply_brightness(self.time_adjustment_data[recent_task_time], delay=delay)
     
 
 
     # MARK: apply_brightness()
     def apply_brightness(self, brightness_data, delay=0):
-        print(f"apply_brightness: {brightness_data}, delay: {delay / 1000} sec")
+        logger.info(f"apply_brightness: {brightness_data}, delay: {delay / 1000} sec")
         
         self.update_monitors_info()
         for serial in self.monitors_dict:
@@ -502,25 +566,17 @@ class MainWindow(QMainWindow):
 
                 # Compare versions
                 if latest_version > current_version:
-                    print(f"New version available: {latest_version}. Current version: {current_version}.")
+                    logger.info(f"New version available: {latest_version}. Current version: {current_version}.")
                     return True, latest_version
                 else:
-                    print(f"Current version {current_version} is up to date.")
+                    logger.info(f"Current version {current_version} is up to date.")
                     return False, latest_version
             else:
-                print(f"Error fetching release data: {response.status_code}")
+                logger.error(f"Error fetching release data: {response.status_code}")
                 return False, None
         except Exception as e:
-            print(f"Error checking for updates: {e}")
+            logger.error(f"Error checking for updates: {e}")
             return False, None
-
-    # MARK: break_notification()
-    def break_notification(self):
-        self.tray_icon.show_notification(
-            "Take a break from the screen!",
-            "Look at least 6 meters away from the screen for 20 seconds.",
-            QIcon(self.eye_icon_path)
-        )
 
 
 
@@ -533,7 +589,7 @@ class MainWindow(QMainWindow):
         monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
 
         self.monitors_dict = monitors_dict
-        # print(f"self.monitors_dict {self.monitors_dict}")
+        logger.debug(f"monitors_dict {self.monitors_dict}")
 
 
 
@@ -574,6 +630,7 @@ class MainWindow(QMainWindow):
             self.eye_icon_path = cfg.eye_icon_light_path
             self.contrast_icon_path = cfg.contrast_icon_light_path
             self.link_icon_path = cfg.link_icon_light_path
+            self.shutdown_icon_path = cfg.shutdown_icon_light_path
         else:
             # colors for dark theme
             self.bg_color = cfg.bg_color_dark
@@ -594,22 +651,34 @@ class MainWindow(QMainWindow):
             self.eye_icon_path = cfg.eye_icon_dark_path
             self.contrast_icon_path = cfg.contrast_icon_dark_path
             self.link_icon_path = cfg.link_icon_dark_path
+            self.shutdown_icon_path = cfg.shutdown_icon_dark_path
 
-        # print("Checking MEIPASS contents:")
-        # print(os.listdir(sys._MEIPASS))
+
+    # MARK: update_autostart()
+    def update_autostart(self):
+        if not getattr(sys, 'frozen', False): # if not running as EXE
+            logger.info("Not running as EXE, skipping startup registry modification")
+            return
+        
+        if self.launch_on_startup:
+            logger.info("Adding to startup")
+            add_to_startup(cfg.app_name, self.exe_path)
+        else:
+            logger.info("Removing from startup")
+            remove_from_startup(cfg.app_name)
 
 
 
     # MARK: _apply_theme()
     def _apply_theme(self, theme: str):
-        print(f"Theme changed to: {theme}")
+        logger.info(f"Theme changed to: {theme}")
         self.theme = theme
         self.update_theme_colors(theme)
         self.update_central_widget()
         self.tray_icon.changeIconTheme(theme)
         if self.settings_window:
             self.settings_window.theme = theme
-            self.settings_window.updateLayout()
+            self.settings_window.update_tab_widget()
 
 
 
@@ -631,11 +700,11 @@ class MainWindow(QMainWindow):
         
         # Handle right mouse button click on bottom_frame
         if source == self.bottom_frame and event.type() == QEvent.Type.MouseButtonPress:
-            if event.button() == Qt.LeftButton:
-                print("bottom frame LMB click")
+            if event.button() == Qt.MouseButton.LeftButton:
+                logger.info("bottom frame LMB click")
                 return True
-            if event.button() == Qt.RightButton:
-                print("bottom frame RMB click")
+            if event.button() == Qt.MouseButton.RightButton:
+                logger.info("bottom frame RMB click")
                 self.execute_recent_task()
                 return True
         
@@ -648,7 +717,6 @@ class MainWindow(QMainWindow):
         
         start_time = time.time()
 
-
         # Clear old widgets
         while self.monitors_layout.count():
             child = self.monitors_layout.takeAt(0)
@@ -659,9 +727,9 @@ class MainWindow(QMainWindow):
         self.contrast_frames.clear()  # Clear contrast frames dictionary
 
 
-
         self.update_monitors_info()
-        print_mi(self.monitors_dict)
+        # print_mi(self.monitors_dict)
+
 
         # placeholder if no monitors are available (or all are hidden)
         if not self.monitors_dict:  # Check if no monitors are available
@@ -694,9 +762,7 @@ class MainWindow(QMainWindow):
                                             font-weight: bold;
                                             """)
             placeholder_layout.addWidget(placeholder_label)
-
             self.monitors_layout.addWidget(placeholder_frame)
-
             return
 
 
@@ -705,18 +771,20 @@ class MainWindow(QMainWindow):
         monitors_order = [serial for serial in self.monitors_order if serial in self.monitors_dict]
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
         monitors_order += [serial for serial in self.monitors_dict if serial not in monitors_order]
-        print(f"monitors_order: {monitors_order}")
-        for monitor_serial in self.monitors_order:
-            if monitor_serial in self.monitors_dict:
-                monitor_name = self.custom_monitor_names.get(monitor_serial, self.monitors_dict[monitor_serial]['display_name'])
-                print(f"  {monitor_name} ({monitor_serial})")
-
+        logger.info(f"monitors_order: {monitors_order}")
+        
 
 
         for index, monitor_serial in enumerate(monitors_order):
 
             monitor = self.monitors_dict[monitor_serial]
-            # print(f"monitor {monitor}")
+            logger.info(
+                f"display_name: {monitor['display_name']} | "
+                f"serial: {monitor['serial']} | "
+                f"method: {monitor['method']} | "
+                f"Device: {monitor['Device']} | "
+                f"hPhysicalMonitor: {monitor['hPhysicalMonitor']}"
+            )
 
             monitor_frame = QWidget()
             monitor_frame.setObjectName("MonitorsFrame")
@@ -734,25 +802,47 @@ class MainWindow(QMainWindow):
             monitor_vbox.setContentsMargins(7, 7, 7, 7)
             
 
-            # MARK: Monitor Label
+            # MARK: Label Frame
             label_frame = QWidget()
             # label_frame.setMinimumHeight(34)
             # label_frame.setFixedHeight(34)
             label_hbox = QHBoxLayout(label_frame)
             label_hbox.setContentsMargins(0, 0, 0, 0)
-            label_hbox.setSpacing(6)
+            label_hbox.setSpacing(5)
 
-            # Add monitor icon
-            monitor_icon = QLabel()
-            # monitor_icon.setStyleSheet("""background-color: blue;""")
-            icon_size = 30
-            if (monitor["Device"] == "\\\\.\\DISPLAY1") and self.is_laptop:
-                monitor_icon.setPixmap(QIcon(self.laptop_icon_path).pixmap(26, 26))
-            else:
-                monitor_icon.setPixmap(QIcon(self.monitor_icon_path).pixmap(icon_size, icon_size))
-            monitor_icon.setFixedSize(icon_size, icon_size)
-            monitor_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label_hbox.addWidget(monitor_icon)
+
+            if monitor["method"] == "VCP": 
+                # add power button with monitor icon
+                monitor_power_btn = HoverIconButton(icon_path=self.monitor_icon_path,
+                                                    hover_icon_path=self.shutdown_icon_path)
+                monitor_power_btn.setFlat(True)
+                monitor_power_btn.setStyleSheet("""
+                                                QPushButton {
+                                                    background-color: transparent;
+                                                }
+                                                """) 
+                monitor_power_btn.setSizePolicy(QSizePolicy.Policy.Preferred, 
+                                                QSizePolicy.Policy.Expanding)
+                monitor_power_btn.setFixedSize(30, 30)
+                monitor_power_btn.setIconSize(QSize(30, 30))
+                monitor_power_btn.setToolTip("Power off")
+                monitor_power_btn.clicked.connect(lambda checked,
+                                                    mf=monitor_frame,
+                                                    h=monitor["hPhysicalMonitor"]: 
+                                                    self.disable_monitor(h, mf))
+                label_hbox.addWidget(monitor_power_btn)
+            else: 
+                # add monitor icon
+                monitor_icon = QLabel()
+                # monitor_icon.setStyleSheet("""background-color: blue;""")
+                icon_size = 30
+                if (monitor["Device"] == "\\\\.\\DISPLAY1") and self.is_laptop:
+                    monitor_icon.setPixmap(QIcon(self.laptop_icon_path).pixmap(26, 26))
+                else:
+                    monitor_icon.setPixmap(QIcon(self.monitor_icon_path).pixmap(icon_size, icon_size))
+                monitor_icon.setFixedSize(icon_size, icon_size)
+                monitor_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                label_hbox.addWidget(monitor_icon)
 
 
             monitor_label_text = self.custom_monitor_names[monitor_serial] if monitor_serial in self.custom_monitor_names else monitor["display_name"]
@@ -766,7 +856,8 @@ class MainWindow(QMainWindow):
                                         """) # background-color: blue;
             label_hbox.addWidget(monitor_label)
             
-            
+
+            # MARK: Resolution
             if self.show_resolution:
                 available_resolutions = monitor["AvailableResolutions"]
                 sorted_resolutions = sorted(available_resolutions, key=lambda res: res[0] * res[1], reverse=True)
@@ -797,7 +888,7 @@ class MainWindow(QMainWindow):
                                             """)
                 
                 max_res_length = max(len(res) for res in formatted_resolutions)
-                res_combobox_width = 105 if max_res_length <= 9 else 112 if max_res_length == 10 else 120
+                res_combobox_width = 105 if (max_res_length <= 9) else 112 if (max_res_length == 10) else 120
                 res_combobox.setFixedWidth(res_combobox_width)
                 res_combobox.setSizePolicy(QSizePolicy.Policy.Fixed, 
                                            QSizePolicy.Policy.Expanding)
@@ -813,18 +904,17 @@ class MainWindow(QMainWindow):
             monitor_vbox.addWidget(label_frame)
             
 
-
-
             # MARK: Refresh Rates
             if self.show_refresh_rates:
 
-                # Add separator line
-                monitor_vbox.addWidget(SeparatorLine(color=self.separator_color))
-                
                 refresh_rates = monitor["AvailableRefreshRates"]
                 refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
 
                 if len(refresh_rates) >= 2:
+
+                    # Add separator line
+                    monitor_vbox.addWidget(SeparatorLine(color=self.separator_color))
+
                     rr_frame = QWidget()
                     rr_grid = QGridLayout(rr_frame)
                     rr_grid.setContentsMargins(0, 0, 0, 0)
@@ -835,6 +925,8 @@ class MainWindow(QMainWindow):
                     num_columns = 6
                     for idx, rate in enumerate(refresh_rates):
                         rr_button = RRButton(f"{rate} Hz")
+                        rr_button.setMinimumWidth(55)
+                        rr_button.setFixedHeight(28) # 26
                         if rate == monitor["RefreshRate"]:
                             rr_button.setChecked(True)
                         rr_button.clicked.connect(lambda checked, 
@@ -843,7 +935,6 @@ class MainWindow(QMainWindow):
                                                   btn=rr_button: 
                                                   self.on_rr_button_click(r, m, btn))
                         
-
                         row = idx // num_columns
                         col = idx % num_columns
                         
@@ -861,10 +952,12 @@ class MainWindow(QMainWindow):
             else:
                 br_level = get_brightness_sbc(display=monitor['serial'])
 
+            # br_level = None
+            brightness_failed = False
             if br_level is None:
-                print(f"Brightness level is None for monitor {monitor['serial']}")
+                logger.warning(f"Failed to get brightness for monitor {monitor['serial']}")
                 br_level = self.brightness_values.get(monitor["serial"], 50)
-                monitor_frame.setDisabled(True)  # Disable the entire monitor frame if brightness is None
+                brightness_failed = True
 
             # Add separator line
             monitor_vbox.addWidget(SeparatorLine(color=self.separator_color))
@@ -880,6 +973,8 @@ class MainWindow(QMainWindow):
                 value=br_level,
                 slider_callback=lambda value, ms=monitor_serial: self.on_brightness_change(value, ms)
             )
+            if brightness_failed:
+                br_frame.setDisabled(True)
 
             self.br_frames[monitor['serial']] = br_frame  # Store frame in dictionary
 
@@ -889,14 +984,15 @@ class MainWindow(QMainWindow):
             # MARK: Contrast
             if self.show_contrast_sliders and (monitor["method"] == "VCP"):
                 contrast_level = None
-                if monitor_frame.isEnabled(): # check contrast only if monitor is enabled
+                if br_frame.isEnabled():
                     contrast_level = get_contrast_vcp(monitor["hPhysicalMonitor"], 
                                                     retries=5)
                 
+                contrast_failed = False
                 if contrast_level is None:
-                    print(f"Contrast level is None for monitor {monitor['serial']}")
+                    logger.warning(f"Failed to get contrast for monitor {monitor['serial']}")
                     contrast_level = self.contrast_values.get(monitor["serial"], 50)
-                    monitor_frame.setDisabled(True)  # Disable the entire monitor frame
+                    contrast_failed = True
 
                 # self.contrast_values[monitor_serial] = contrast_level # dont change contrast
                 
@@ -909,6 +1005,8 @@ class MainWindow(QMainWindow):
                     value=contrast_level,
                     slider_callback=lambda value, ms=monitor_serial: self.on_contrast_change(value, ms)
                 )
+                if contrast_failed:
+                    contrast_frame.setDisabled(True)
 
                 self.contrast_frames[monitor['serial']] = contrast_frame
 
@@ -924,10 +1022,10 @@ class MainWindow(QMainWindow):
             # if self.show_refresh_rates: rr_frame.setStyleSheet("background-color: green")
 
 
-        print(f"self.brightness_values {self.brightness_values}")
-        print(f"self.contrast_values {self.contrast_values}")
+        logger.info(f"brightness_values {self.brightness_values}")
+        logger.info(f"contrast_values {self.contrast_values}")
 
-        print(f"updateMonitorsFrame took {time.time() - start_time:.4f} seconds")
+        logger.info(f"updateMonitorsFrame took {time.time() - start_time:.4f} seconds")
 
     
     
@@ -951,31 +1049,41 @@ class MainWindow(QMainWindow):
                                  padding-bottom: 2px;
 
                                  """) # padding-left: 5px; background-color: blue;
-        
+        self.bottom_frame_hbox.addWidget(bf_label)
+
+        # self.buttons_frame = QFrame()
+        # self.buttons_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        # self.buttons_frame.setFixedSize(41, 39) # 39 39
+        # buttons_layout = QGridLayout(self.buttons_frame)
+        # buttons_layout.setContentsMargins(0, 0, 0, 0)
+        # buttons_layout.setSpacing(0)
+        # for row in range(2):
+        #     for col in range(2):
+        #         num = row * 2 + col + 1
+        #         button = QPushButton()
+        #         button.setCheckable(True)
+        #         buttons_layout.addWidget(button, row, col)
+        # self.bottom_frame_hbox.addWidget(self.buttons_frame)
+
         self.link_br_btn = QPushButton()
         self.link_br_btn.setCheckable(True)
         self.link_br_btn.setChecked(self.link_brightness)
-        self.link_br_btn.setFixedWidth(41) # 39
-        self.link_br_btn.setFixedHeight(39)
-        # self.link_br_btn.setIcon(QIcon(self.link_icon_path))
+        self.link_br_btn.setFixedSize(41, 39) # 39 39
         self.link_br_btn.setIcon(self.get_link_icon())
         self.link_br_btn.setIconSize(QSize(21, 21))
         self.link_br_btn.setToolTip("Link brightness levels")
         self.link_br_btn.toggled.connect(self.toggle_link_brightness)
+        self.bottom_frame_hbox.addWidget(self.link_br_btn)
 
         settings_btn = QPushButton()
-        settings_btn.setFixedWidth(41) # 39
-        settings_btn.setFixedHeight(39)
+        settings_btn.setFixedSize(41, 39) # 39 39
         settings_btn.setIcon(QIcon(self.settings_icon_path))
         settings_btn.setIconSize(QSize(21, 21))
         settings_btn.setToolTip("Settings")
         settings_btn.clicked.connect(self.openSettingsWindow)
-
-        self.bottom_frame_hbox.addWidget(bf_label)
-        self.bottom_frame_hbox.addWidget(self.link_br_btn)
         self.bottom_frame_hbox.addWidget(settings_btn)
 
-        print(f"updateBottomFrame took {time.time() - start_time:.4f} seconds")
+        logger.info(f"updateBottomFrame took {time.time() - start_time:.4f} seconds")
 
 
     # MARK: toggle_link_brightness()
@@ -983,7 +1091,7 @@ class MainWindow(QMainWindow):
         self.link_brightness = checked
         self.link_br_btn.setIcon(self.get_link_icon())
         reg_write_bool(cfg.REGISTRY_PATH, "LinkBrightness", checked)
-        print(f"Link brightness is now {'on' if checked else 'off'}")
+        logger.info(f"link_brightness - {checked}")
 
 
     # MARK: get_link_icon()
@@ -998,22 +1106,29 @@ class MainWindow(QMainWindow):
         return QIcon(icon_path)
 
 
+    # MARK: disable_monitor()
+    def disable_monitor(self, hPhysicalMonitor, monitor_frame):
+        if set_power_mode_vcp(hPhysicalMonitor, 4, retries=7):
+            logger.info(f"Monitor powered off successfully.")
+            monitor_frame.setDisabled(True)
+        else:
+            logger.warning(f"Failed to power off monitor {hPhysicalMonitor}.")
+
 
     # MARK: on_rr_button_click()
     def on_rr_button_click(self, rate, monitor, button: RRButton):
-        print(f"Selected refresh rate: {rate} Hz for monitor {monitor["serial"]}")
-        # print(monitor)
+        logger.info(f"Selected refresh rate: {rate} Hz for monitor {monitor['serial']}")
 
         self.update_monitors_info()
         updated_monitor = self.monitors_dict.get(monitor["serial"], None)
 
         if not updated_monitor:
-            print(f"Monitor {monitor['Device']} not found")
+            logger.warning(f"Monitor {monitor['Device']} not found")
             button.setChecked(False)
             return
         
         if updated_monitor and (updated_monitor["RefreshRate"] == rate):
-            print(f"Monitor {monitor['Device']} already has refresh rate {rate} Hz")
+            logger.info(f"Monitor {monitor['Device']} already has refresh rate {rate} Hz")
             return
 
         # save brightness and contrast before changing refresh rate
@@ -1039,7 +1154,7 @@ class MainWindow(QMainWindow):
 
         #restore brightness and contrast after 6 seconds
         def restore_parameters():
-            print(f"restore_parameters {monitor['serial']}: {brightness_before}, {contrast_before}")
+            logger.info(f"restore_parameters {monitor['serial']}: {brightness_before}, {contrast_before}")
             if brightness_before is not None:
                 self.brightness_values[monitor['serial']] = brightness_before
             if contrast_before is not None:
@@ -1061,7 +1176,7 @@ class MainWindow(QMainWindow):
 
     # MARK: on_resolution_select()
     def on_resolution_select(self, monitor, resolution):
-        print(f"on_resolution_select {monitor['serial']} {resolution}")
+        logger.info(f"on_resolution_select {monitor['serial']} {resolution}")
         
         width, height = map(int, resolution.split('x'))
         set_resolution(monitor["Device"], width, height)
@@ -1076,13 +1191,19 @@ class MainWindow(QMainWindow):
         if self.link_brightness:
             previous_value = self.brightness_values.get(monitor_serial, 0)
             change = value - previous_value
-            print(f"Brightness change for {monitor_serial}: {change}")
+            # print(f"Brightness change for {monitor_serial}: {change}")
 
             for serial, frame in self.br_frames.items():
                 slider = frame.slider
                 
                 if (serial != monitor_serial) and slider.isEnabled():
-                    new_value = max(0, min(100, (slider.value() + change)))
+
+                    # new_value = max(0, min(100, (slider.value() + change)))
+
+                    # use prev_value to preserve the offset between sliders
+                    prev_value = self.brightness_values.get(serial, 0)
+                    new_value = max(0, min(100, (prev_value + change)))
+
                     frame.setValueBS(int(new_value))
 
                     self.brightness_values[serial] = int(new_value)
@@ -1096,15 +1217,16 @@ class MainWindow(QMainWindow):
 
     # MARK: on_bottom_frame_scroll()
     def on_bottom_frame_scroll(self, delta):
-        # print("on_bottom_frame_scroll ", delta)
+        logger.debug(f"on_bottom_frame_scroll delta: {delta}")
 
         link_brightness_save = self.link_brightness
         self.link_brightness = False  # Disable linking temporarily
 
         for frame in self.br_frames.values():
             slider = frame.slider
-            new_value = max(0, min(100, slider.value() + (1 if delta > 0 else -1)))
-            slider.setValue(new_value)
+            if slider.isEnabled():
+                new_value = max(0, min(100, slider.value() + (1 if delta > 0 else -1)))
+                slider.setValue(new_value)
         
         self.link_brightness = link_brightness_save  # Restore linking state
 
@@ -1130,16 +1252,16 @@ class MainWindow(QMainWindow):
                                                retries=1):
                                 raise Exception(f"Failed to set brightness for monitor {monitor_serial}")
                             
-                            print(f"brightness_sync set_brightness_vcp {monitor_serial} {brightness}")
+                            logger.info(f"brightness_sync set_brightness_vcp {monitor_serial} {brightness}")
                         else:
                             set_brightness_sbc(monitor_serial, brightness)
-                            print(f"brightness_sync set_brightness {monitor_serial} {brightness}")
+                            logger.info(f"brightness_sync set_brightness {monitor_serial} {brightness}")
 
                         previous_brightness_values[monitor_serial] = brightness
                         reg_write_dict(cfg.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
 
                     except Exception as e:
-                        print(f"Error: {e}")
+                        logger.error(f"Error: {e}")
             
             if self.show_contrast_sliders:
                 contrast_values_copy = self.contrast_values.copy()
@@ -1153,28 +1275,27 @@ class MainWindow(QMainWindow):
                                                     retries=1):
                                 raise Exception(f"Failed to set contrast for monitor {monitor_serial}")
                             
-                            print(f"brightness_sync set_contrast_vcp {monitor_serial} {contrast}")
+                            logger.info(f"brightness_sync set_contrast_vcp {monitor_serial} {contrast}")
 
                             previous_contrast_values[monitor_serial] = contrast
                             reg_write_dict(cfg.REGISTRY_PATH, "ContrastValues", self.contrast_values)
 
                         except Exception as e:
-                            print(f"Error: {e}")
+                            logger.error(f"Error: {e}")
 
 
-            # print(f"Brightness sync took {time.time() - start_time:.4f} seconds")
+            # logger.debug(f"Brightness sync took {time.time() - start_time:.4f} seconds")
 
             time.sleep(0.10) # 0.15
 
 
     # MARK: brightness_sync_onetime()
     def brightness_sync_onetime(self):
-        print("brightness_sync_onetime")
+        logger.info("brightness_sync_onetime")
         start_time = time.time()
         # self.update_monitors_info()
 
         brightness_values_copy = self.brightness_values.copy()
-        # print(f"brightness_values_copy {brightness_values_copy}")
         for monitor_serial, brightness in brightness_values_copy.items():
             if monitor_serial in self.monitors_dict:  # Check if monitor is connected
                 try:
@@ -1184,13 +1305,13 @@ class MainWindow(QMainWindow):
                                            retries=7):
                             raise Exception(f"Failed to set brightness for monitor {monitor_serial}")
 
-                        print(f"brightness_sync_onetime set_brightness_vcp {monitor_serial} {brightness}")
+                        logger.info(f"brightness_sync_onetime set_brightness_vcp {monitor_serial} {brightness}")
                     else:
                         set_brightness_sbc(monitor_serial, brightness)
-                        print(f"brightness_sync_onetime set_brightness {monitor_serial} {brightness}")
+                        logger.info(f"brightness_sync_onetime set_brightness {monitor_serial} {brightness}")
 
                 except Exception as e:
-                    print(f"Error: {e}")
+                    logger.error(f"Error: {e}")
         
         if self.show_contrast_sliders:
             contrast_values_copy = self.contrast_values.copy()
@@ -1202,17 +1323,17 @@ class MainWindow(QMainWindow):
                                          retries=7):
                             raise Exception(f"Failed to set contrast for monitor {monitor_serial}")
                         
-                        print(f"brightness_sync_onetime set_contrast_vcp {monitor_serial} {contrast}")
+                        logger.info(f"brightness_sync_onetime set_contrast_vcp {monitor_serial} {contrast}")
 
                     except Exception as e:
-                        print(f"Error: {e}")
+                        logger.error(f"Error: {e}")
 
-        print(f"brightness_sync_onetime took {time.time() - start_time:.4f} seconds")
+        logger.info(f"brightness_sync_onetime took {time.time() - start_time:.4f} seconds")
 
 
     # MARK: showEvent()
     def showEvent(self, event):
-        print("showEvent")
+        logger.info("showEvent")
 
         self.updateBottomFrame() # Update bottom frame contents each time the window is shown
         self.updateMonitorsFrame()  # Update frame contents each time the window is shown
@@ -1229,7 +1350,8 @@ class MainWindow(QMainWindow):
         
         self.window_open = True
         if self.brightness_sync_thread is None or not self.brightness_sync_thread.is_alive():
-            print("brightness_sync_thread start")
+            logger.info("brightness_sync_thread start")
+
             # self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
             # self.brightness_sync_thread.start()
             QTimer.singleShot(250, self.start_brightness_sync_thread) 
@@ -1237,9 +1359,8 @@ class MainWindow(QMainWindow):
             # self.brightness_sync_thread = threading.Timer(0.25, self.brightness_sync)
             # self.brightness_sync_thread.daemon = True
             # self.brightness_sync_thread.start()
-            # print("brightness_sync_thread started")
         else:
-            print("brightness_sync_thread is already running")
+            logger.info("brightness_sync_thread is already running")
 
         super().showEvent(event)
 
@@ -1249,9 +1370,16 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(150, lambda: self.animate_sliders(self.contrast_frames, self.contrast_values))
 
 
+    def on_exit(self):
+        logger.info("Exiting application")
+
+        # Close app
+        QGuiApplication.quit()
+
+
     # MARK: animate_sliders()
     def animate_sliders(self, frames, values):
-        print(f"animate_sliders: {list(frames.keys())}, {values}")
+        logger.info(f"animate_sliders: {list(frames.keys())}, {values}")
         for index, (serial, frame) in enumerate(frames.items()):
             if serial in values:
                 # QTimer.singleShot(index * 100, lambda s=slider: s.animate_to(int(values[serial])))
@@ -1261,7 +1389,7 @@ class MainWindow(QMainWindow):
 
     # MARK: start_brightness_sync_thread()
     def start_brightness_sync_thread(self):
-        print("brightness_sync_thread started")
+        logger.info("brightness_sync_thread started")
         self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
         self.brightness_sync_thread.start()
 
@@ -1269,7 +1397,7 @@ class MainWindow(QMainWindow):
 
     # MARK: hideEvent()
     def hideEvent(self, event):
-        print("hideEvent")
+        logger.info("hideEvent")
         self.window_open = False
         self.stop_brightness_sync_thread()
         # QTimer.singleShot(2000, self.stop_brightness_sync_thread)  # Add 2-second delay
@@ -1280,22 +1408,22 @@ class MainWindow(QMainWindow):
     # MARK: stop_brightness_sync_thread()
     def stop_brightness_sync_thread(self):
         if self.brightness_sync_thread and self.brightness_sync_thread.is_alive():
-            # print("brightness_sync_thread.join()")
             self.brightness_sync_thread.join()  # Stop brightness sync thread
             if not self.brightness_sync_thread.is_alive():
-                print("thread is dead")
+                logger.info("brightness_sync_thread is dead")
             else:
-                print("thread is still alive")
+                logger.info("brightness_sync_thread is still alive")
         else:
-            print("brightness_sync_thread is not running")
+            logger.info("brightness_sync_thread is not running")
 
 
     # MARK: updateSizeAndPosition()
     def updateSizeAndPosition(self):
-        print("updateSizeAndPosition sizeHint:", self.sizeHint().height(), "self.height()", self.height())
+        logger.info(f"updateSizeAndPosition self.sizeHint().height(): {self.sizeHint().height()}, self.height(): {self.height()}")
         screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
         self.move(screen_geometry.width() - self.width() - self.window_offset, 
                   screen_geometry.height() - self.sizeHint().height() - self.window_offset)
+        logger.debug(f"self.move({screen_geometry.width() - self.width() - self.window_offset}, {screen_geometry.height() - self.sizeHint().height() - self.window_offset})")
         self.resize(self.width(), self.sizeHint().height())
 
 
@@ -1314,7 +1442,7 @@ class MainWindow(QMainWindow):
                          self.sizeHint().height()
                          )
 
-        print("self.width()", self.width(), "self.height()", self.sizeHint().height())
+        logger.debug(f"self.width() {self.width()}, self.sizeHint().height() {self.sizeHint().height()}")
 
         self.open_animation = QPropertyAnimation(self, b"geometry") 
         self.open_animation.setStartValue(start_rect)
@@ -1385,22 +1513,36 @@ class MainWindow(QMainWindow):
 # MARK: main
 if __name__ == "__main__":
 
+    app = QApplication([])
+    app.setWindowIcon(QIcon(cfg.app_icon_path))
+
+    logger.info(f"Starting app (v{cfg.version})")
+
+
     # Check if another instance is already running
     if getattr(sys, 'frozen', False):
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         mutex = kernel32.CreateMutexW(None, False, "MoniTune-Qt")
         if not mutex: # Error creating mutex
-            print(f"Error code: {ctypes.get_last_error()}")
+            logger.error(f"Error code: {ctypes.get_last_error()}")
             sys.exit(1)
         if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS (mutex already exists)
-            print("Another instance is already running")
+            logger.warning("Another instance is already running")
+
+            # Create a message box to notify the user
+            QMessageBox.information(
+                None,
+                "MoniTune",
+                "Another instance of MoniTune is already running.\nPlease close the other instance to continue.",
+                QMessageBox.StandardButton.Ok
+            )
+
             sys.exit(1)
 
-    app = QApplication([])
 
-    # print(QStyleFactory.keys()) # ['windows11', 'windowsvista', 'Windows', 'Fusion']
+    logger.info(f"Available styles: {QStyleFactory.keys()}") # ['windows11', 'windowsvista', 'Windows', 'Fusion']
     # app.setStyle("windows11")
-    print(f"Current style: {app.style().objectName()}")
+    logger.info(f"Current style: {app.style().objectName()}")
 
 
     window = MainWindow()

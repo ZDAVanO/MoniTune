@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QTimeEdit, 
     QSizePolicy,
     QSpacerItem,
+    QMessageBox,
 )
 from PySide6.QtCore import (
     Qt, 
@@ -41,7 +42,8 @@ from utils.reg_utils import (
     reg_write_list, 
     reg_read_list, 
     reg_write_dict, 
-    reg_read_dict
+    reg_read_dict,
+    delete_reg_key,
     )
 import config as cfg
 from config import tray_icons
@@ -50,6 +52,9 @@ import darkdetect
 
 import webbrowser
 import time
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 
@@ -64,7 +69,7 @@ class SettingToggle:
 
     # MARK: toggle()
     def toggle(self, state):
-        print(f"Setting {self.setting_name} to {state}")
+        logger.info(f"toggle {self.setting_name} - {state}")
         if not self.after_restart:
             setattr(self.parent, self.setting_name, state)
         reg_write_bool(cfg.REGISTRY_PATH, self.reg_setting_name, state)
@@ -86,7 +91,7 @@ class SettingToggle:
 class TrayIconSelector(QFrame):
     def __init__(self, parent):
         super().__init__()
-        self.setFrameShape(QFrame.StyledPanel)
+        self.setFrameShape(QFrame.Shape.StyledPanel)
         self.parent = parent
 
         layout = QHBoxLayout(self)
@@ -118,7 +123,7 @@ class TrayIconSelector(QFrame):
         for btn in self.icon_buttons:
             btn.setChecked(False)
         button.setChecked(True)
-        print(f"Selected icon: {icon_name}")
+        logger.info(f"Selected icon: {icon_name}")
 
         self.parent.tray_icon.changeIconName(icon_name)
         reg_write_list(cfg.REGISTRY_PATH, "TrayIcon", [icon_name])
@@ -130,7 +135,7 @@ class TrayIconSelector(QFrame):
                 button.setChecked(False)
             selected_button = next(btn for btn, name in zip(self.icon_buttons, self.tray_icons.keys()) if name == icon_name)
             selected_button.setChecked(True)
-            print(f"select_icon Selected icon: {icon_name}")
+            logger.info(f"select_icon: {icon_name}")
 
 
 
@@ -142,9 +147,10 @@ class TimeAdjustmentFrame(QFrame):
         self.monitors_order = monitors_order
         self.monitors_dict = monitors_dict
 
-        self.setFrameShape(QFrame.StyledPanel)
+        self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setMaximumWidth(500)
-        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)  # Prevent frame from expanding
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, 
+                           QSizePolicy.Policy.Fixed)  # Prevent frame from expanding
         
         self.setObjectName("TimeAdjustmentFrame")
         
@@ -191,12 +197,12 @@ class TimeAdjustmentFrame(QFrame):
             slider_label = QLabel(f"{self.monitors_dict[serial]['display_name']}")
             slider_label.setFixedWidth(110)
 
-            slider = NoScrollSlider(Qt.Horizontal)
+            slider = NoScrollSlider(Qt.Orientation.Horizontal)
             slider.setRange(0, 100)
             slider.setValue(self.brightness_data.get(serial, 50))
             self.sliders[serial] = slider
 
-            spacer = QSpacerItem(3, 0, QSizePolicy.Minimum, QSizePolicy.Expanding)
+            spacer = QSpacerItem(3, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
             value_label = QLabel(f"{slider.value()}")
             value_label.setFixedWidth(19)
@@ -267,7 +273,7 @@ class ScrollableTab(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         scroll_area = QScrollArea()
-        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         scroll_area.setWidgetResizable(True)
 
         self.content_widget = QWidget()
@@ -312,16 +318,16 @@ class SettingsWindow(QWidget):
 
     # MARK: closeEvent()
     def closeEvent(self, event):
-        print("Settings window closeEvent")
+        logger.info("Settings window closed")
         event.ignore()
         self.hide()
         # self.close()
 
     # MARK: showEvent()
     def showEvent(self, event):
-        print("Settings window showEvent")
-        # self.updateLayout()
-        QTimer.singleShot(0, self.updateLayout)
+        logger.info("Settings window opened")
+        # self.update_tab_widget()
+        QTimer.singleShot(0, self.update_tab_widget)
         super().showEvent(event)
 
 
@@ -341,7 +347,7 @@ class SettingsWindow(QWidget):
         # Sort the time adjustment data by time
         sorted_time_adjustment_data = dict(sorted(self.time_adjustment_data.items()))
 
-        print(f"Collected time adjustment data: {sorted_time_adjustment_data}")
+        logger.info(f"Collected time adjustment data: {sorted_time_adjustment_data}")
         reg_write_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData", sorted_time_adjustment_data)
 
         self.parent.time_adjustment_data = sorted_time_adjustment_data
@@ -354,12 +360,12 @@ class SettingsWindow(QWidget):
 
     # Mark: on_tab_changed()
     def on_tab_changed(self, index):
-        print(f"Tab changed to index: {index}")
+        logger.info(f"Tab changed to index: {index}")
         self.selected_tab = index
 
 
-    # MARK: updateLayout()
-    def updateLayout(self):
+    # MARK: update_tab_widget()
+    def update_tab_widget(self):
         
         self.tab_widget.blockSignals(True)
         # Clear old widgets
@@ -389,7 +395,15 @@ class SettingsWindow(QWidget):
 
         # MARK: General Tab
         general_tab = ScrollableTab()
-        
+
+        general_tab.content_layout.addWidget(SettingToggle(self.parent, 
+                                               "launch_on_startup", 
+                                               "LaunchOnStartup",
+                                               self.parent.update_autostart)
+                                               .create_toggle(
+                                                   "Launch on startup", 
+                                                   "Launch MoniTune on Windows startup"
+                                                   ))
         general_tab.content_layout.addWidget(SettingToggle(self.parent, 
                                                "enable_rounded_corners", 
                                                "EnableRoundedCorners",
@@ -418,7 +432,7 @@ class SettingsWindow(QWidget):
 
         icon_widget = TrayIconSelector(self.parent)
         icon = reg_read_list(cfg.REGISTRY_PATH, "TrayIcon")
-        print("Icon:", icon) # ['fluent']
+        logger.info(f"Icon: {icon}")
         icon_widget.select_icon(icon[0] if icon else "monitune")
         general_tab.content_layout.addWidget(icon_widget)
 
@@ -435,14 +449,14 @@ class SettingsWindow(QWidget):
 
         # MARK: Hide Displays
         hide_displays_widget = QFrame()
-        hide_displays_widget.setFrameShape(QFrame.StyledPanel)
+        hide_displays_widget.setFrameShape(QFrame.Shape.StyledPanel)
         hide_displays_layout = QVBoxLayout(hide_displays_widget)
         hide_displays_label = QLabel("Hide Displays")
         hide_displays_layout.addWidget(hide_displays_label)
 
         hidden_displays = reg_read_list(cfg.REGISTRY_PATH, "HiddenDisplays")
         # hidden_displays = list(map(str, filter(None, reg_read_list(cfg.REGISTRY_PATH, "HiddenDisplays"))))
-        print("reg Hidden displays:", hidden_displays)
+        logger.info(f"Hidden displays (reg): {hidden_displays}")
 
         def update_hidden_displays(monitor_id, state):
             # print(f"Monitor ID: {monitor_id}, State: {state}")
@@ -454,7 +468,7 @@ class SettingsWindow(QWidget):
                     hidden_displays.remove(monitor_id)
             reg_write_list(cfg.REGISTRY_PATH, "HiddenDisplays", hidden_displays)
             self.parent.hidden_displays = hidden_displays
-            print(f"Updated hidden displays: {hidden_displays}")
+            logger.info(f"Updated hidden displays: {hidden_displays}")
 
         for monitor_id in monitors_order:
             checkbox = QCheckBox(f"{monitors_dict[monitor_id]['display_name']}")
@@ -468,7 +482,7 @@ class SettingsWindow(QWidget):
 
         # MARK: Rename Monitors
         rename_monitors_widget = QFrame()
-        rename_monitors_widget.setFrameShape(QFrame.StyledPanel)
+        rename_monitors_widget.setFrameShape(QFrame.Shape.StyledPanel)
         rename_monitors_layout = QVBoxLayout(rename_monitors_widget)
         rename_monitors_label = QLabel("Rename Monitors")
         rename_monitors_layout.addWidget(rename_monitors_label)
@@ -479,7 +493,7 @@ class SettingsWindow(QWidget):
                 custom_monitor_names[monitor_id] = new_name
             elif len(new_name) == 0:
                 custom_monitor_names.pop(monitor_id, None)
-            print(f"Updated names: {custom_monitor_names}")
+            logger.info(f"Updated names: {custom_monitor_names}")
             self.parent.custom_monitor_names = custom_monitor_names
             # # self.show_parent_window()
             reg_write_dict(cfg.REGISTRY_PATH, "CustomMonitorNames", custom_monitor_names)
@@ -492,7 +506,7 @@ class SettingsWindow(QWidget):
 
             label = QLabel(f"{monitors_dict[monitor_id]['display_name']}")
             # label.setAlignment(Qt.AlignLeft)
-            label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             row_layout.addWidget(label)
 
             entry = QLineEdit()
@@ -516,14 +530,15 @@ class SettingsWindow(QWidget):
         # MARK: Reorder Monitors
         def save_order():
             monitors_order = [self.list_widget.item(i).data(Qt.UserRole) for i in range(self.list_widget.count())]
-            print("New order:", monitors_order)
+            logger.info(f"New monitors_order: {monitors_order}")
             reg_write_list(cfg.REGISTRY_PATH, "MonitorsOrder", monitors_order)
             self.parent.monitors_order = monitors_order
             # self.show_parent_window()
 
         reorder_monitors_widget = QFrame()
-        reorder_monitors_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        reorder_monitors_widget.setFrameShape(QFrame.StyledPanel)
+        reorder_monitors_widget.setSizePolicy(QSizePolicy.Policy.Preferred, 
+                                              QSizePolicy.Policy.Maximum)
+        reorder_monitors_widget.setFrameShape(QFrame.Shape.StyledPanel)
         reorder_monitors_layout = QVBoxLayout(reorder_monitors_widget)
         reorder_monitors_label = QLabel("Reorder Monitors")
         reorder_monitors_layout.addWidget(reorder_monitors_label)
@@ -536,7 +551,7 @@ class SettingsWindow(QWidget):
                                         }
                                         """)
 
-        self.list_widget.setDragDropMode(QListWidget.InternalMove)  # Дозволяє перетягування
+        self.list_widget.setDragDropMode(QListWidget.DragDropMode.InternalMove)  # Дозволяє перетягування
         self.list_widget.model().rowsMoved.connect(save_order)
         
         for monitor_id in monitors_order:
@@ -559,6 +574,31 @@ class SettingsWindow(QWidget):
 
         reorder_monitors_layout.addWidget(self.list_widget)
         general_tab.content_layout.addWidget(reorder_monitors_widget)
+
+
+
+        reset_settings_btn = QPushButton("Reset Settings")
+        reset_settings_btn.setStyleSheet("padding: 5px 15px;")
+        reset_settings_btn.setSizePolicy(QSizePolicy.Policy.Fixed, 
+                                         QSizePolicy.Policy.Fixed)
+
+        def confirm_and_delete():
+            reply = QMessageBox.warning(
+                self,
+                "Confirm Reset",
+                "Are you sure you want to reset settings?\n"
+                "This action cannot be undone.\n\n"
+                "Changes will take effect after restarting the application.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                delete_reg_key(cfg.REGISTRY_PATH)
+
+        reset_settings_btn.clicked.connect(confirm_and_delete)
+        # reset_settings_btn.clicked.connect(lambda: delete_reg_key(cfg.REGISTRY_PATH))
+        general_tab.content_layout.addWidget(reset_settings_btn)
+
 
 
         self.tab_widget.addTab(general_tab, "General")
@@ -606,7 +646,7 @@ class SettingsWindow(QWidget):
         # Function to update the excluded list
 
         def update_excluded(rate, value):
-            print(f"Rate: {rate}, Switch: {value}")
+            logger.info(f"Rate: {rate}, Switch: {value}")
 
             if value == 2: # If the switch is on
                 if rate in excluded_rates:
@@ -618,11 +658,11 @@ class SettingsWindow(QWidget):
             reg_write_list(cfg.REGISTRY_PATH, "ExcludedHzRates", excluded_rates)
             self.parent.excluded_rates = excluded_rates
             # self.show_parent_window()
-            print(f"Updated excluded list: {excluded_rates}")
+            logger.info(f"Updated excluded list: {excluded_rates}")
 
 
         exclude_rr_frame = QFrame()
-        exclude_rr_frame.setFrameShape(QFrame.StyledPanel)
+        exclude_rr_frame.setFrameShape(QFrame.Shape.StyledPanel)
 
         exclude_rr_layout = QVBoxLayout(exclude_rr_frame)
         exclude_rr_label = QLabel("Exclude Refresh Rates")
@@ -665,7 +705,7 @@ class SettingsWindow(QWidget):
 
         # MARK: Time adjustment Frame
         time_adjustment_frame = QFrame()
-        time_adjustment_frame.setFrameShape(QFrame.StyledPanel)
+        time_adjustment_frame.setFrameShape(QFrame.Shape.StyledPanel)
         time_adjustment_layout = QVBoxLayout(time_adjustment_frame)
         time_adjustment_label = QLabel("Time adjustment")
         time_adjustment_layout.addWidget(time_adjustment_label)
@@ -744,7 +784,14 @@ class SettingsWindow(QWidget):
                 update_label.setText(f"Update available: <a href='{cfg.LATEST_RELEASE_URL}'>v{latest_version}</a>")
                 update_label.setOpenExternalLinks(True)
             elif latest_version:
-                update_label.setText("You are using the latest version.")
+                update_label.setText(
+                    f"""
+                    <div style='text-align: center;'>
+                        You are using the latest version.
+                        <br>
+                        (last checked: {time.strftime("%H:%M:%S")})
+                    </div>
+                    """)
             else:
                 update_label.setText(
                     f"""
@@ -753,8 +800,7 @@ class SettingsWindow(QWidget):
                         <br>
                         Or check manually <a href='{cfg.LATEST_RELEASE_URL}'>here</a>.
                     </div>
-                    """
-                )
+                    """)
                 update_label.setOpenExternalLinks(True)
 
         check_update_button = QPushButton("Check for Updates")

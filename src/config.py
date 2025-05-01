@@ -6,9 +6,9 @@ import sys
 
 app_name = "MoniTune"
 
-version = "0.3.5"
+version = "0.3.7"
 
-timer_interval = 60  # seconds
+timer_interval = 20  # seconds
 break_notification_interval = 30  # minutes
 
 REGISTRY_PATH = r"Software\MoniTune\Settings"
@@ -29,7 +29,7 @@ border_color_light = "#bebebe"
 border_color_dark = "#404040"
 
 bg_color_light = "#f3f3f3"
-bg_color_dark = "#202020"
+bg_color_dark = "#202020" # 141414
 
 
 fr_color_light = "#fbfbfb"  
@@ -92,6 +92,9 @@ if getattr(sys, 'frozen', False):
     link_icon_light_path = os.path.join(sys._MEIPASS, 'link_light.png')
     link_icon_dark_path = os.path.join(sys._MEIPASS, 'link_dark.png')
 
+    shutdown_icon_light_path = os.path.join(sys._MEIPASS, 'shutdown_light.png')
+    shutdown_icon_dark_path = os.path.join(sys._MEIPASS, 'shutdown_dark.png')
+
 
 else:
     # Якщо програма запущена з Python, використовуємо поточну директорію
@@ -127,6 +130,9 @@ else:
 
     link_icon_light_path = 'src/assets/icons/link_light.png'
     link_icon_dark_path = 'src/assets/icons/link_dark.png'
+
+    shutdown_icon_light_path = 'src/assets/icons/shutdown_light.png'
+    shutdown_icon_dark_path = 'src/assets/icons/shutdown_dark.png'
 
 
 # MARK: Tray Icons

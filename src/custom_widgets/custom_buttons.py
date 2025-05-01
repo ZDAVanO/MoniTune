@@ -5,18 +5,39 @@ from PySide6.QtWidgets import (
     QVBoxLayout, 
     QApplication
 )
+from PySide6.QtGui import (
+    QIcon, 
+)
 
 class RRButton(QPushButton):
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
-        self.setMinimumWidth(55)
-        # self.setFixedHeight(26)
-        self.setFixedHeight(28)
         self.setCheckable(True)
 
     def mousePressEvent(self, event):
         if not self.isChecked():
             super().mousePressEvent(event)
+
+
+class HoverIconButton(QPushButton):
+    def __init__(self, icon_path, hover_icon_path, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.default_icon = QIcon(icon_path)
+        self.hover_icon = QIcon(hover_icon_path)
+
+        self.setIcon(self.default_icon)
+
+    def enterEvent(self, event):
+        if self.isEnabled():
+            self.setIcon(self.hover_icon)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        if self.isEnabled():
+            self.setIcon(self.default_icon)
+        super().leaveEvent(event)
+
 
 if __name__ == "__main__":
     import sys

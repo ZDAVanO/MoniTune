@@ -20,6 +20,9 @@ from PySide6.QtGui import (
 
 import time
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class CustomSlider(QSlider):
@@ -116,7 +119,8 @@ class AnimatedSliderBS(QSlider):
         self.animation.start()
     
     def stop_animation(self):
-        print("AnimatedSliderBS stop_animation")
+        logger.info("AnimatedSliderBS stop_animation")
+        
         self.animation.stop()
         self.blockSignals(False)  # Ensure signals are unblocked
         
@@ -211,6 +215,11 @@ class SliderAnimationDemo(QMainWindow):
 
 
 if __name__ == "__main__":
+
+    logging.basicConfig(level=logging.INFO, 
+                        format='[%(asctime)s] [%(levelname)s] %(message)s', 
+                        datefmt="%H:%M:%S")
+
     app = QApplication([])
     window = SliderAnimationDemo()
     window.show()
