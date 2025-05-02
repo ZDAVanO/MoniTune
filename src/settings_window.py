@@ -295,7 +295,7 @@ class SettingsWindow(QWidget):
         self.theme = darkdetect.theme()
 
         self.setWindowTitle(f"{cfg.app_name} Settings")
-        self.setWindowIcon(QIcon(cfg.app_icon_path))
+        self.setWindowIcon(QIcon(cfg.icons["monitune"]["Light"]))
         
         self.resize(475, 600)
         self.setMinimumWidth(450)

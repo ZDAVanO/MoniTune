@@ -76,8 +76,7 @@ from utils.utils import get_idle_time, is_laptop, is_on_battery, get_display_tim
 from utils.lock_detect import LockDetect
 
 from utils.logger import get_logger
-logger = get_logger(__name__)
-# debug, info, warning, error, critical
+logger = get_logger(__name__) # debug, info, warning, error, critical
 
 import config as cfg
 
@@ -214,7 +213,6 @@ class MainWindow(QMainWindow):
         logger.debug(f"enable_fusion_theme: {self.enable_fusion_theme}")
         if self.enable_fusion_theme:
             QApplication.instance().setStyle("Fusion")
-        self.update_theme_colors(self.theme)
 
         self.enable_break_reminders = reg_read_bool(cfg.REGISTRY_PATH, "EnableBreakReminders", False)
         logger.debug(f"enable_break_reminders: {self.enable_break_reminders}")
@@ -303,9 +301,9 @@ class MainWindow(QMainWindow):
         central_widget.setStyleSheet(
             f"""
             #Container {{
-            background: {self.bg_color};
+            background: {cfg.colors["main_bg"][self.theme]};
             border-radius: {self.window_corner_radius}px;
-            border: 1px solid {self.border_color};
+            border: 1px solid {cfg.colors["main_border"][self.theme]};
             }}
             """
         )
@@ -384,7 +382,7 @@ class MainWindow(QMainWindow):
             self.tray_icon.show_notification(
                         "New Update Available!",
                         f"A new version of MoniTune (v{latest_version}) is ready! Click here to download.",
-                        QIcon(cfg.app_icon_path),
+                        QIcon(cfg.icons["monitune"]["Light"]),
                         on_click_callback=lambda: webbrowser.open(cfg.LATEST_RELEASE_URL)
                     )
 
@@ -506,7 +504,7 @@ class MainWindow(QMainWindow):
             self.tray_icon.show_notification(
                 "Take a break from the screen!",
                 "Look at least 6 meters away from the screen for 20 seconds.",
-                QIcon(self.eye_icon_path)
+                QIcon(cfg.icons["eye"][self.theme])
             )
             self.time_active = 0
         
@@ -600,58 +598,13 @@ class MainWindow(QMainWindow):
         self.centralWidget().setStyleSheet(
             f"""
             #Container {{
-            background: {self.bg_color};
+            background: {cfg.colors["main_bg"][self.theme]};
             border-radius: {corner_radius}px;
-            border: 1px solid {self.border_color};
+            border: 1px solid {cfg.colors["main_border"][self.theme]};
             }}
             """
         )
 
-
-    # MARK: update_theme_colors()
-    def update_theme_colors(self, theme: str):
-        if theme == "Light" or (self.win_release != "11" and not self.enable_fusion_theme):
-            # colors for light theme
-            self.bg_color = cfg.bg_color_light
-            self.border_color = cfg.border_color_light
-            self.fr_color = cfg.fr_color_light  
-            self.fr_border_color = cfg.fr_border_color_light
-            self.rr_border_color = cfg.rr_border_color_light
-            self.rr_fg_color = cfg.rr_fg_color_light
-            self.rr_hover_color = cfg.rr_hover_color_light
-            self.separator_color = cfg.separator_color_light
-
-            # icons
-            self.settings_icon_path = cfg.settings_icon_light_path
-            self.monitor_icon_path = cfg.monitor_icon_light_path
-            self.laptop_icon_path = cfg.laptop_icon_light_path
-            self.sun_icon_path = cfg.sun_icon_light_path
-            self.down_arrow_icon_path = cfg.down_arrow_icon_light_path
-            self.eye_icon_path = cfg.eye_icon_light_path
-            self.contrast_icon_path = cfg.contrast_icon_light_path
-            self.link_icon_path = cfg.link_icon_light_path
-            self.shutdown_icon_path = cfg.shutdown_icon_light_path
-        else:
-            # colors for dark theme
-            self.bg_color = cfg.bg_color_dark
-            self.border_color = cfg.border_color_dark
-            self.fr_color = cfg.fr_color_dark  
-            self.fr_border_color = cfg.fr_border_color_dark
-            self.rr_border_color = cfg.rr_border_color_dark
-            self.rr_fg_color = cfg.rr_fg_color_dark
-            self.rr_hover_color = cfg.rr_hover_color_dark
-            self.separator_color = cfg.separator_color_dark
-
-            # icons
-            self.settings_icon_path = cfg.settings_icon_dark_path
-            self.monitor_icon_path = cfg.monitor_icon_dark_path
-            self.laptop_icon_path = cfg.laptop_icon_dark_path
-            self.sun_icon_path = cfg.sun_icon_dark_path
-            self.down_arrow_icon_path = cfg.down_arrow_icon_dark_path
-            self.eye_icon_path = cfg.eye_icon_dark_path
-            self.contrast_icon_path = cfg.contrast_icon_dark_path
-            self.link_icon_path = cfg.link_icon_dark_path
-            self.shutdown_icon_path = cfg.shutdown_icon_dark_path
 
 
     # MARK: update_autostart()
@@ -673,7 +626,6 @@ class MainWindow(QMainWindow):
     def _apply_theme(self, theme: str):
         logger.info(f"Theme changed to: {theme}")
         self.theme = theme
-        self.update_theme_colors(theme)
         self.update_central_widget()
         self.tray_icon.changeIconTheme(theme)
         if self.settings_window:
@@ -738,9 +690,9 @@ class MainWindow(QMainWindow):
             placeholder_frame.setStyleSheet(
                 f"""
                 #EmptyPlaceholder {{
-                background: {self.fr_color};
+                background: {cfg.colors["frame_bg"][self.theme]};
                 border-radius: {6 if self.enable_rounded_corners else 0}px;
-                border: 1px solid {self.fr_border_color}; 
+                border: 1px solid {cfg.colors["frame_border"][self.theme]}; 
                 }}
                 """
             )
@@ -791,9 +743,9 @@ class MainWindow(QMainWindow):
             monitor_frame.setStyleSheet(
                 f"""
                 #MonitorsFrame {{
-                background: {self.fr_color};
+                background: {cfg.colors["frame_bg"][self.theme]};
                 border-radius: {6 if self.enable_rounded_corners else 0}px;
-                border: 1px solid {self.fr_border_color}; 
+                border: 1px solid {cfg.colors["frame_border"][self.theme]}; 
                 }}
                 """
             )
@@ -813,8 +765,8 @@ class MainWindow(QMainWindow):
 
             if monitor["method"] == "VCP": 
                 # add power button with monitor icon
-                monitor_power_btn = HoverIconButton(icon_path=self.monitor_icon_path,
-                                                    hover_icon_path=self.shutdown_icon_path)
+                monitor_power_btn = HoverIconButton(icon_path=cfg.icons["monitor"][self.theme],
+                                                    hover_icon_path=cfg.icons["shutdown"][self.theme])
                 monitor_power_btn.setFlat(True)
                 monitor_power_btn.setStyleSheet("""
                                                 QPushButton {
@@ -837,9 +789,9 @@ class MainWindow(QMainWindow):
                 # monitor_icon.setStyleSheet("""background-color: blue;""")
                 icon_size = 30
                 if (monitor["Device"] == "\\\\.\\DISPLAY1") and self.is_laptop:
-                    monitor_icon.setPixmap(QIcon(self.laptop_icon_path).pixmap(26, 26))
+                    monitor_icon.setPixmap(QIcon(cfg.icons["laptop"][self.theme]).pixmap(26, 26))
                 else:
-                    monitor_icon.setPixmap(QIcon(self.monitor_icon_path).pixmap(icon_size, icon_size))
+                    monitor_icon.setPixmap(QIcon(cfg.icons["monitor"][self.theme]).pixmap(icon_size, icon_size))
                 monitor_icon.setFixedSize(icon_size, icon_size)
                 monitor_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 label_hbox.addWidget(monitor_icon)
@@ -864,13 +816,13 @@ class MainWindow(QMainWindow):
                 formatted_resolutions = [f"{width}x{height}" for width, height in sorted_resolutions]
                 
                 res_combobox = NoScrollComboBox()
-                absolute_icon_path = os.path.abspath(self.down_arrow_icon_path).replace('\\', '/')
+                absolute_icon_path = os.path.abspath(cfg.icons["down_arrow"][self.theme]).replace('\\', '/')
                 res_combobox.setStyleSheet(f"""
                                             /* Basic QComboBox style */
                                             QComboBox {{
                                                 font-size: 14px; font-weight: bold;
                                                 padding-left: 7px;
-                                                {"background-color: " + self.rr_fg_color + ";" if not self.enable_fusion_theme else ""}
+                                                {"background-color: " + cfg.colors["combobox_bg"][self.theme] + ";" if not self.enable_fusion_theme else ""}
                                             }}
                                             /* Dropdown list style */
                                             QComboBox QAbstractItemView {{
@@ -913,7 +865,7 @@ class MainWindow(QMainWindow):
                 if len(refresh_rates) >= 2:
 
                     # Add separator line
-                    monitor_vbox.addWidget(SeparatorLine(color=self.separator_color))
+                    monitor_vbox.addWidget(SeparatorLine(color=cfg.colors["separator"][self.theme]))
 
                     rr_frame = QWidget()
                     rr_grid = QGridLayout(rr_frame)
@@ -960,7 +912,7 @@ class MainWindow(QMainWindow):
                 brightness_failed = True
 
             # Add separator line
-            monitor_vbox.addWidget(SeparatorLine(color=self.separator_color))
+            monitor_vbox.addWidget(SeparatorLine(color=cfg.colors["separator"][self.theme]))
 
             if self.restore_last_brightness and (monitor['serial'] in self.brightness_values):
                 pass
@@ -969,7 +921,7 @@ class MainWindow(QMainWindow):
 
             br_frame = SliderFrame(
                 parent=self,
-                icon_path=self.sun_icon_path,
+                icon_path=cfg.icons["sun"][self.theme],
                 value=br_level,
                 slider_callback=lambda value, ms=monitor_serial: self.on_brightness_change(value, ms)
             )
@@ -997,11 +949,11 @@ class MainWindow(QMainWindow):
                 # self.contrast_values[monitor_serial] = contrast_level # dont change contrast
                 
                 # Add separator line
-                monitor_vbox.addWidget(SeparatorLine(color=self.separator_color))
+                monitor_vbox.addWidget(SeparatorLine(color=cfg.colors["separator"][self.theme]))
 
                 contrast_frame = SliderFrame(
                     parent=self,
-                    icon_path=self.contrast_icon_path,
+                    icon_path=cfg.icons["contrast"][self.theme],
                     value=contrast_level,
                     slider_callback=lambda value, ms=monitor_serial: self.on_contrast_change(value, ms)
                 )
@@ -1069,7 +1021,7 @@ class MainWindow(QMainWindow):
         self.link_br_btn.setCheckable(True)
         self.link_br_btn.setChecked(self.link_brightness)
         self.link_br_btn.setFixedSize(41, 39) # 39 39
-        self.link_br_btn.setIcon(self.get_link_icon())
+        self.link_br_btn.setIcon(self.get_icon_for_toggle_state("link", self.link_brightness))
         self.link_br_btn.setIconSize(QSize(21, 21))
         self.link_br_btn.setToolTip("Link brightness levels")
         self.link_br_btn.toggled.connect(self.toggle_link_brightness)
@@ -1077,7 +1029,7 @@ class MainWindow(QMainWindow):
 
         settings_btn = QPushButton()
         settings_btn.setFixedSize(41, 39) # 39 39
-        settings_btn.setIcon(QIcon(self.settings_icon_path))
+        settings_btn.setIcon(QIcon(cfg.icons["settings"][self.theme]))
         settings_btn.setIconSize(QSize(21, 21))
         settings_btn.setToolTip("Settings")
         settings_btn.clicked.connect(self.openSettingsWindow)
@@ -1089,20 +1041,19 @@ class MainWindow(QMainWindow):
     # MARK: toggle_link_brightness()
     def toggle_link_brightness(self, checked):
         self.link_brightness = checked
-        self.link_br_btn.setIcon(self.get_link_icon())
+        self.link_br_btn.setIcon(self.get_icon_for_toggle_state("link", self.link_brightness))
         reg_write_bool(cfg.REGISTRY_PATH, "LinkBrightness", checked)
         logger.info(f"link_brightness - {checked}")
 
 
-    # MARK: get_link_icon()
-    def get_link_icon(self):
+    def get_icon_for_toggle_state(self, icon_name, checked):
         if self.enable_fusion_theme:
-            icon_path = cfg.link_icon_light_path if self.theme == "Light" else cfg.link_icon_dark_path
+            icon_path = cfg.icons[icon_name][self.theme]
         else:
             if self.theme == "Light":
-                icon_path = cfg.link_icon_dark_path if self.link_brightness else cfg.link_icon_light_path
+                icon_path = cfg.icons[icon_name]["Dark"] if checked else cfg.icons[icon_name]["Light"]
             else:
-                icon_path = cfg.link_icon_light_path if self.link_brightness else cfg.link_icon_dark_path
+                icon_path = cfg.icons[icon_name]["Light"] if checked else cfg.icons[icon_name]["Dark"]
         return QIcon(icon_path)
 
 
@@ -1513,8 +1464,8 @@ class MainWindow(QMainWindow):
 # MARK: main
 if __name__ == "__main__":
 
-    app = QApplication([])
-    app.setWindowIcon(QIcon(cfg.app_icon_path))
+    app = QApplication([]) 
+    app.setWindowIcon(QIcon(cfg.icons["monitune"]["Light"]))
 
     logger.info(f"Starting app (v{cfg.version})")
 

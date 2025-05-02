@@ -11,7 +11,7 @@ file_log_format = "[%(asctime)s,%(msecs)03d] [%(levelname)s] [%(name)s] [%(funcN
 console_log_format = "[%(asctime)s] [%(levelname)s] [%(funcName)s]: %(message)s"
 
 # Get the directory of the current script
-log_dir = os.path.dirname(os.path.abspath(__file__))
+log_dir = "C:\Program Files\MoniTune"  # os.path.dirname(os.path.abspath(sys.argv[0]))
 main_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 log_file_path = os.path.join(main_dir, "MoniTune.log")
 print(f"Log file path: {log_file_path}")
@@ -23,7 +23,7 @@ try:
     file_handler.setLevel(logging.DEBUG)  # all logs will be saved to file
     file_handler.setFormatter(logging.Formatter(file_log_format, datefmt="%H:%M:%S"))
     logger.addHandler(file_handler)
-except PermissionError as e:
+except Exception as e:
     logger.warning(f"Could not create log file: {e}")
 
 # Handler for console (prints logs to console)
