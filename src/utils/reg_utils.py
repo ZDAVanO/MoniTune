@@ -186,7 +186,7 @@ def add_to_startup(app_name, exe_path):
 
     winreg.SetValueEx(reg_key, app_name, 0, winreg.REG_SZ, exe_path)
     winreg.CloseKey(reg_key)
-    logger.info(f"{app_name} has been added to startup with path {exe_path}")
+    logger.info(f"{app_name} ({exe_path}) has been added to startup")
 
 
 def remove_from_startup(app_name):
