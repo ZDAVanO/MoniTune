@@ -38,6 +38,13 @@ class HoverIconButton(QPushButton):
             self.setIcon(self.default_icon)
         super().leaveEvent(event)
 
+    def applyDefaultIcon(self):
+        self.setIcon(self.default_icon)
+
+    def applyHoverIcon(self):
+        self.setIcon(self.hover_icon)
+
+
 
 if __name__ == "__main__":
     import sys

@@ -321,6 +321,8 @@ class MainWindow(QMainWindow):
         self.rr_buttons = {}  # Dictionary to store refresh rate buttons for each monitor
         self.br_frames = {}  # Dictionary to store brightness frames
         self.contrast_frames = {}  # Dictionary to store contrast frames
+        self.monitor_frames_vcp = {}
+        self.power_buttons = {}
 
         self.monitors_dict = {}
         self.update_monitors_info()
@@ -721,7 +723,16 @@ class MainWindow(QMainWindow):
                 if frame.isEnabled() and (frame != source) and self.link_brightness:
                     frame.update_styles(bg_color=cfg.colors["frame_hover"][self.theme] if hover else 'transparent')
             return True
-            
+        
+        if (source in self.monitor_frames_vcp.values()) and (event.type() in [QEvent.Type.Enter, QEvent.Type.Leave]):
+            serial = next((k for k, v in self.monitor_frames_vcp.items() if v is source), None)
+            hover = event.type() == QEvent.Type.Enter
+            if source.isEnabled():
+                if hover:
+                    self.power_buttons[serial].applyHoverIcon()
+                else:
+                    self.power_buttons[serial].applyDefaultIcon()
+            return True
         
         return super().eventFilter(source, event)
 
@@ -740,6 +751,8 @@ class MainWindow(QMainWindow):
 
         self.br_frames.clear()  # Clear brightness frames dictionary
         self.contrast_frames.clear()  # Clear contrast frames dictionary
+        self.monitor_frames_vcp.clear()  # Clear VCP monitor frames dictionary
+        self.power_buttons.clear()
 
 
         self.update_monitors_info()
@@ -846,6 +859,12 @@ class MainWindow(QMainWindow):
                                                     h=monitor["hPhysicalMonitor"]: 
                                                     self.disable_monitor(h, mf))
                 label_hbox.addWidget(monitor_power_btn)
+
+            
+                self.monitor_frames_vcp[monitor['serial']] = monitor_frame
+                monitor_frame.installEventFilter(self)
+                self.power_buttons[monitor['serial']] = monitor_power_btn
+
             else: 
                 # add monitor icon
                 monitor_icon = QLabel()
