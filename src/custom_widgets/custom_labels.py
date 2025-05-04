@@ -121,7 +121,7 @@ if __name__ == "__main__":
                        """)
     slider = QSlider(Qt.Horizontal)
     slider.setRange(0, 100)
-    slider.valueChanged.connect(lambda value: icon.set_value(value))
+    slider.valueChanged.connect(lambda value: icon.animate_to(value))
 
     layout.addWidget(icon)
     layout.addWidget(slider)

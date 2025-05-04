@@ -13,6 +13,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QIcon, 
     QGuiApplication, 
+    QWheelEvent,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -40,7 +41,7 @@ from system_tray_icon import SystemTrayIcon
 from settings_window import SettingsWindow 
 
 from custom_widgets import (
-    RRButton,
+    CheckLockButton,
     HoverIconButton,
     NoScrollComboBox,
     BrightnessIcon,
@@ -98,9 +99,26 @@ import webbrowser
 
 
 # MARK: SliderFrame
-class SliderFrame(QWidget):
+class SliderFrame(QFrame):
     def __init__(self, parent, icon_path, value, slider_callback=None):
         super().__init__(parent)
+
+        self.parent = parent
+
+        self.bg_color = 'transparent'
+        self.border_radius = 6
+
+        self.setObjectName("SliderFrame")
+        # self.setStyleSheet(f"""
+        #     #SliderFrame {{
+        #         background-color: transparent;
+        #         border-radius: 6px;
+        #     }}
+        #     #SliderFrame:hover {{
+        #         background-color: {'rgba(0, 0, 0, 0.03)' if self.parent.theme == "Light" else 'rgba(255, 255, 255, 0.03)'};
+        #         border-radius: 6px;
+        #     }}
+        # """)
 
         self.slider_callback = slider_callback
 
@@ -168,6 +186,38 @@ class SliderFrame(QWidget):
 
         self.label.setText(str(value))
         self.icon.animate_to(value)
+
+    # def enterEvent(self, event):
+    #     logger.info("SliderFrame enterEvent")
+    #     super().enterEvent(event)
+
+    # def leaveEvent(self, event):
+    #     logger.info("SliderFrame leaveEvent")
+    #     super().leaveEvent(event)
+    
+    def wheelEvent(self, event: QWheelEvent):
+        logger.info("SliderFrame wheelEvent")
+
+        delta = event.angleDelta().y()
+        step = 1
+        
+        if delta > 0:
+            new_value = min(self.slider.value() + step, self.slider.maximum())
+        else:
+            new_value = max(self.slider.value() - step, self.slider.minimum())
+
+        self.slider.setValue(new_value)
+        event.accept()  # Accept the event to prevent further processing
+
+    def update_styles(self, bg_color: str = 'transparent', border_radius: int = 6):
+        self.bg_color = bg_color
+        self.border_radius = border_radius
+        self.setStyleSheet(f"""
+            #SliderFrame {{
+                background-color: {self.bg_color};
+                border-radius: {self.border_radius}px;
+            }}
+        """)
 
 
 # MARK: MainWindow
@@ -269,11 +319,8 @@ class MainWindow(QMainWindow):
         self.settings_window = None  # No settings window yet
 
         self.rr_buttons = {}  # Dictionary to store refresh rate buttons for each monitor
-
         self.br_frames = {}  # Dictionary to store brightness frames
         self.contrast_frames = {}  # Dictionary to store contrast frames
-
-
 
         self.monitors_dict = {}
         self.update_monitors_info()
@@ -307,7 +354,7 @@ class MainWindow(QMainWindow):
             }}
             """
         )
-        
+
 
 
         self.monitors_frame = QWidget()
@@ -333,7 +380,7 @@ class MainWindow(QMainWindow):
 
         self.bottom_frame_hbox.setSpacing(4)
 
-        
+
 
         central_widget_layout = QVBoxLayout(central_widget)
         central_widget_layout.setContentsMargins(0, 0, 0, 0)
@@ -645,13 +692,13 @@ class MainWindow(QMainWindow):
             return True
         
         # Handle scroll events on the bottom frame
-        if source == self.bottom_frame and event.type() == QEvent.Type.Wheel:
+        if (source == self.bottom_frame) and (event.type() == QEvent.Type.Wheel):
             delta = event.angleDelta().y()
             self.on_bottom_frame_scroll(delta)
             return True
         
         # Handle right mouse button click on bottom_frame
-        if source == self.bottom_frame and event.type() == QEvent.Type.MouseButtonPress:
+        if (source == self.bottom_frame) and (event.type() == QEvent.Type.MouseButtonPress):
             if event.button() == Qt.MouseButton.LeftButton:
                 logger.info("bottom frame LMB click")
                 return True
@@ -659,6 +706,22 @@ class MainWindow(QMainWindow):
                 logger.info("bottom frame RMB click")
                 self.execute_recent_task()
                 return True
+        
+        # Add hover effect to all SliderFrame instances when hovering over bottom_frame
+        if (source == self.bottom_frame) and (event.type() in [QEvent.Type.Enter, QEvent.Type.Leave]):
+            hover = event.type() == QEvent.Type.Enter
+            for frame in self.br_frames.values():
+                if frame.isEnabled():
+                    frame.update_styles(bg_color=cfg.colors["frame_hover"][self.theme] if hover else 'transparent')
+            return True
+        
+        if (source in self.br_frames.values()) and (event.type() in [QEvent.Type.Enter, QEvent.Type.Leave]):
+            hover = event.type() == QEvent.Type.Enter
+            for frame in self.br_frames.values():
+                if frame.isEnabled() and (frame != source) and self.link_brightness:
+                    frame.update_styles(bg_color=cfg.colors["frame_hover"][self.theme] if hover else 'transparent')
+            return True
+            
         
         return super().eventFilter(source, event)
 
@@ -876,7 +939,7 @@ class MainWindow(QMainWindow):
 
                     num_columns = 6
                     for idx, rate in enumerate(refresh_rates):
-                        rr_button = RRButton(f"{rate} Hz")
+                        rr_button = CheckLockButton(f"{rate} Hz")
                         rr_button.setMinimumWidth(55)
                         rr_button.setFixedHeight(28) # 26
                         if rate == monitor["RefreshRate"]:
@@ -929,6 +992,7 @@ class MainWindow(QMainWindow):
                 br_frame.setDisabled(True)
 
             self.br_frames[monitor['serial']] = br_frame  # Store frame in dictionary
+            br_frame.installEventFilter(self)
 
             monitor_vbox.addWidget(br_frame)
 
@@ -937,8 +1001,7 @@ class MainWindow(QMainWindow):
             if self.show_contrast_sliders and (monitor["method"] == "VCP"):
                 contrast_level = None
                 if br_frame.isEnabled():
-                    contrast_level = get_contrast_vcp(monitor["hPhysicalMonitor"], 
-                                                    retries=5)
+                    contrast_level = get_contrast_vcp(monitor["hPhysicalMonitor"], retries=5)
                 
                 contrast_failed = False
                 if contrast_level is None:
@@ -1067,7 +1130,7 @@ class MainWindow(QMainWindow):
 
 
     # MARK: on_rr_button_click()
-    def on_rr_button_click(self, rate, monitor, button: RRButton):
+    def on_rr_button_click(self, rate, monitor, button: CheckLockButton):
         logger.info(f"Selected refresh rate: {rate} Hz for monitor {monitor['serial']}")
 
         self.update_monitors_info()

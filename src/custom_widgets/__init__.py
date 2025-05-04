@@ -1,5 +1,5 @@
 from .custom_buttons import (
-    RRButton,
+    CheckLockButton,
     HoverIconButton,
 )
 

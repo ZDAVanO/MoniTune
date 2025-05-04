@@ -30,15 +30,15 @@ NIGHT_LIGHT_SETTINGS_URL = "ms-settings:nightlight"
 
 # MARK: Colors
 colors = {
-    # main window border color
-    "main_border": {
-        "Light": "#bebebe",
-        "Dark": "#404040"
-    },
     # main window background color
     "main_bg": {
         "Light": "#f3f3f3",
         "Dark": "#202020"  # 141414
+    },
+    # main window border color
+    "main_border": {
+        "Light": "#bebebe",
+        "Dark": "#404040"
     },
     # monitor_frame, placeholder_frame background color
     "frame_bg": {
@@ -49,6 +49,10 @@ colors = {
     "frame_border": {
         "Light": "#e5e5e5",
         "Dark": "#1d1d1d"
+    },
+    "frame_hover": {
+        "Light": "rgba(0, 0, 0, 0.05)",
+        "Dark": "rgba(255, 255, 255, 0.07)"
     },
     # res_combobox background color
     "combobox_bg": {

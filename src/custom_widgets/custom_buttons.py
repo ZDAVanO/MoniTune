@@ -9,7 +9,7 @@ from PySide6.QtGui import (
     QIcon, 
 )
 
-class RRButton(QPushButton):
+class CheckLockButton(QPushButton):
     def __init__(self, text, parent=None):
         super().__init__(text, parent)
         self.setCheckable(True)
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     window = QWidget()
     layout = QVBoxLayout(window)
     
-    button = RRButton("Click Me")
+    button = CheckLockButton("Click Me")
     layout.addWidget(button)
     
     window.setLayout(layout)

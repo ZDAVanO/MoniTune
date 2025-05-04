@@ -13,9 +13,6 @@ class NoScrollComboBox(QComboBox):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # fusion_style = QStyleFactory.create("Fusion")
-        # self.setStyle(fusion_style)
-
     def wheelEvent(self, event: QWheelEvent):
         event.ignore()  # ignore the wheel event to prevent scrolling
 
