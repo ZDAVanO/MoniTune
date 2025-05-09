@@ -51,6 +51,7 @@ from custom_widgets import (
 
 from utils.monitor_utils import (
     get_monitors_info, 
+    get_monitor_list,
     print_mi, 
     set_resolution, 
     set_refresh_rate, 
@@ -81,8 +82,6 @@ logger = get_logger(__name__) # debug, info, warning, error, critical
 
 import config as cfg
 
-import screeninfo
-
 import darkdetect
 
 import sys
@@ -95,6 +94,72 @@ import platform
 import requests
 from packaging.version import Version
 import webbrowser
+
+
+# MARK: ButtonGridFrame
+class ButtonGridFrame(QFrame):
+    def __init__(self, parent, values, active_value, callback=None):
+        super().__init__(parent)
+
+        self.parent = parent
+        self.values = values
+        self.active_value = active_value
+        self.callback = callback
+
+        self.buttons = []
+
+        self.setObjectName("ButtonGridFrame")
+        # self.setStyleSheet(f"""
+        #     #ButtonGridFrame {{
+        #         background-color: gray;
+        #         border-radius: 6px;
+        #     }}
+        # """)
+
+        self.grid = QGridLayout(self)
+        self.grid.setContentsMargins(0, 0, 0, 0)
+        self.grid.setSpacing(0)
+
+        num_columns = 6
+        for idx, value in enumerate(values):
+            button = CheckLockButton(f"{value} Hz")
+            button.setMinimumWidth(55)
+            button.setFixedHeight(28) # 26
+            if value == self.active_value:
+                button.setChecked(True)
+            button.clicked.connect(lambda checked, 
+                                   r=value, 
+                                   btn=button: 
+                                   self.on_button_click(r, btn))
+            
+            row = idx // num_columns
+            col = idx % num_columns
+            
+            self.grid.addWidget(button, row, col)
+
+            self.buttons.append(button)  # Store button
+
+    # MARK: on_button_click()
+    def on_button_click(self, value, button):
+        logger.info(f"Button clicked: {value}")
+
+        callback_result = self.callback(value)
+
+        if callback_result:
+            # disable all other buttons for this monitor
+            for btn in self.buttons:
+                if btn != button:
+                    btn.setChecked(False)
+        else:
+            button.setChecked(False)  # Revert the button state if callback fails
+            # button.setStyleSheet("background-color: #ff3232;")
+            # button.setStyleSheet(f"""
+            #     QPushButton {{
+            #         background-color: #ff4545;
+            #     }}
+            #     """)
+            button.setToolTip("Failed to set refresh rate")
+            button.setDisabled(True)
 
 
 
@@ -153,9 +218,9 @@ class SliderFrame(QFrame):
         
         # add widgets to layout
         self.hbox.addWidget(self.icon)
-        self.hbox.addItem(QSpacerItem(6, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        self.hbox.addItem(QSpacerItem(6, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
         self.hbox.addWidget(self.slider)
-        self.hbox.addItem(QSpacerItem(3, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        self.hbox.addItem(QSpacerItem(3, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
         self.hbox.addWidget(self.label)
 
         if self.slider_callback:
@@ -419,7 +484,7 @@ class MainWindow(QMainWindow):
         self.lock_listener = LockDetect(lambda state: self.lock_state_changed.emit(state)) # _on_lock_state_change
         threading.Thread(target=self.lock_listener.run, daemon=True).start()
 
-        self.previous_screeninfo = screeninfo.get_monitors()
+        self.previous_monitor_list = get_monitor_list()
         self.start_checking(interval=(cfg.timer_interval * 1000))  # Start checking every minute
         if self.time_adjustment_startup:
             self.execute_recent_task()
@@ -446,6 +511,7 @@ class MainWindow(QMainWindow):
         logger.info(f"Screen state changed to: {state}")
         if state == "unlocked":
             self.execute_recent_task(delay=10 * 1000) # Execute after 10 seconds  
+            # QTimer.singleShot(10 * 1000, self.execute_recent_task)
             self.start_checking(interval=(cfg.timer_interval * 1000))
         elif state == "locked":
             self.stop_checking()
@@ -504,10 +570,10 @@ class MainWindow(QMainWindow):
 
     
         # Monitor connected monitors
-        current_screeninfo = screeninfo.get_monitors()
-
-        previous_serials = {monitor.name for monitor in self.previous_screeninfo}
-        current_serials = {monitor.name for monitor in current_screeninfo}
+        current_monitor_list = get_monitor_list()
+        # logger.info(f"current_monitor_list: {current_monitor_list}")
+        previous_serials = set(self.previous_monitor_list)
+        current_serials = set(current_monitor_list)
 
         added_monitors = current_serials - previous_serials
         removed_monitors = previous_serials - current_serials
@@ -520,7 +586,7 @@ class MainWindow(QMainWindow):
         if removed_monitors:
             logger.info(f"Removed monitors: {removed_monitors}")
 
-        self.previous_screeninfo = current_screeninfo
+        self.previous_monitor_list = current_monitor_list
 
 
         # Monitor display timeout
@@ -717,6 +783,7 @@ class MainWindow(QMainWindow):
                     frame.update_styles(bg_color=cfg.colors["frame_hover"][self.theme] if hover else 'transparent')
             return True
         
+        # Add hover effect to all br_frames except the one the mouse is on when link_brightness is enabled
         if (source in self.br_frames.values()) and (event.type() in [QEvent.Type.Enter, QEvent.Type.Leave]):
             hover = event.type() == QEvent.Type.Enter
             for frame in self.br_frames.values():
@@ -724,6 +791,7 @@ class MainWindow(QMainWindow):
                     frame.update_styles(bg_color=cfg.colors["frame_hover"][self.theme] if hover else 'transparent')
             return True
         
+        # Show power button icon on monitor_frames_vcp hover 
         if (source in self.monitor_frames_vcp.values()) and (event.type() in [QEvent.Type.Enter, QEvent.Type.Leave]):
             serial = next((k for k, v in self.monitor_frames_vcp.items() if v is source), None)
             hover = event.type() == QEvent.Type.Enter
@@ -755,7 +823,6 @@ class MainWindow(QMainWindow):
         self.power_buttons.clear()
 
 
-        self.update_monitors_info()
         # print_mi(self.monitors_dict)
 
 
@@ -934,7 +1001,6 @@ class MainWindow(QMainWindow):
                                                          self.on_resolution_select(m, cb.currentText()))
                 label_hbox.addWidget(res_combobox)
 
-
             monitor_vbox.addWidget(label_frame)
             
 
@@ -945,40 +1011,14 @@ class MainWindow(QMainWindow):
                 refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
 
                 if len(refresh_rates) >= 2:
-
                     # Add separator line
                     monitor_vbox.addWidget(SeparatorLine(color=cfg.colors["separator"][self.theme]))
-
-                    rr_frame = QWidget()
-                    rr_grid = QGridLayout(rr_frame)
-                    rr_grid.setContentsMargins(0, 0, 0, 0)
-                    rr_grid.setSpacing(0)
-
-                    self.rr_buttons[monitor_serial] = []  # Initialize list for this monitor
-
-                    num_columns = 6
-                    for idx, rate in enumerate(refresh_rates):
-                        rr_button = CheckLockButton(f"{rate} Hz")
-                        rr_button.setMinimumWidth(55)
-                        rr_button.setFixedHeight(28) # 26
-                        if rate == monitor["RefreshRate"]:
-                            rr_button.setChecked(True)
-                        rr_button.clicked.connect(lambda checked, 
-                                                  r=rate, 
-                                                  m=monitor, 
-                                                  btn=rr_button: 
-                                                  self.on_rr_button_click(r, m, btn))
-                        
-                        row = idx // num_columns
-                        col = idx % num_columns
-                        
-                        rr_grid.addWidget(rr_button, row, col)
-
-                        self.rr_buttons[monitor_serial].append(rr_button)  # Store button
-
+                    rr_frame = ButtonGridFrame(self, 
+                                          refresh_rates, 
+                                          monitor["RefreshRate"], 
+                                          callback=lambda value, m=monitor: self.on_rr_button_click(value, m))
                     monitor_vbox.addWidget(rr_frame)
-
-                    
+            
             
             # MARK: Brightness
             if monitor["method"] == "VCP":
@@ -1107,6 +1147,8 @@ class MainWindow(QMainWindow):
         self.link_br_btn.setIconSize(QSize(21, 21))
         self.link_br_btn.setToolTip("Link brightness levels")
         self.link_br_btn.toggled.connect(self.toggle_link_brightness)
+        if len(self.monitors_dict) < 2:
+            self.link_br_btn.setDisabled(True)
         self.bottom_frame_hbox.addWidget(self.link_br_btn)
 
         settings_btn = QPushButton()
@@ -1149,7 +1191,7 @@ class MainWindow(QMainWindow):
 
 
     # MARK: on_rr_button_click()
-    def on_rr_button_click(self, rate, monitor, button: CheckLockButton):
+    def on_rr_button_click(self, rate, monitor):
         logger.info(f"Selected refresh rate: {rate} Hz for monitor {monitor['serial']}")
 
         self.update_monitors_info()
@@ -1157,12 +1199,11 @@ class MainWindow(QMainWindow):
 
         if not updated_monitor:
             logger.warning(f"Monitor {monitor['Device']} not found")
-            button.setChecked(False)
-            return
+            return False
         
         if updated_monitor and (updated_monitor["RefreshRate"] == rate):
             logger.info(f"Monitor {monitor['Device']} already has refresh rate {rate} Hz")
-            return
+            return False
 
         # save brightness and contrast before changing refresh rate
         brightness_before = None
@@ -1185,6 +1226,8 @@ class MainWindow(QMainWindow):
             else:
                 contrast_before = get_contrast_vcp(monitor["hPhysicalMonitor"], retries=7)
 
+        logger.info(f"brightness_before: {brightness_before}, contrast_before: {contrast_before}")
+
         #restore brightness and contrast after 6 seconds
         def restore_parameters():
             logger.info(f"restore_parameters {monitor['serial']}: {brightness_before}, {contrast_before}")
@@ -1195,15 +1238,11 @@ class MainWindow(QMainWindow):
             self.brightness_sync_onetime()
             
         if not set_refresh_rate(monitor, rate): # set refresh rate
-            button.setChecked(False)
+            return False
         else:
             threading.Timer(6, restore_parameters).start()
             # QTimer.singleShot(6000, restore_parameters)
-
-            # disable all other buttons for this monitor
-            for btn in self.rr_buttons[serial]:
-                if btn != button:
-                    btn.setChecked(False)
+            return True
 
 
 
@@ -1367,6 +1406,8 @@ class MainWindow(QMainWindow):
     # MARK: showEvent()
     def showEvent(self, event):
         logger.info("showEvent")
+
+        self.update_monitors_info()
 
         self.updateBottomFrame() # Update bottom frame contents each time the window is shown
         self.updateMonitorsFrame()  # Update frame contents each time the window is shown

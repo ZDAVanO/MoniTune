@@ -3,6 +3,7 @@
 others
 local_build_ctk.bat
 src/!drafts
+save_py_as_txt.py
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/python

@@ -40,7 +40,10 @@ def is_on_battery():
 
 
 def get_display_timeouts():
-    result = subprocess.run(['powercfg', '/query'], capture_output=True, text=True)
+    result = subprocess.run(['powercfg', '/query'], 
+                            capture_output=True, 
+                            text=True,
+                            creationflags=subprocess.CREATE_NO_WINDOW)
     output = result.stdout
     logger.debug(f"Powercfg output:\n {output}")
 

@@ -6,7 +6,6 @@ import threading
 
 import screen_brightness_control as sbc
 # from monitorcontrol import get_monitors, VCPError
-import screeninfo
 
 import logging
 logger = logging.getLogger(__name__)
@@ -49,6 +48,18 @@ def get_available_resolutions(device):
         except Exception:
             break
     return sorted(resolutions)
+
+
+
+# MARK: list_monitors()
+def get_monitor_list():
+    monitor_list = []
+    monitors = win32api.EnumDisplayMonitors()
+    for i, m in enumerate(monitors):
+        monitor_info = win32api.GetMonitorInfo(m[0]) # {'Monitor': (0, 0, 1920, 1080), 'Work': (0, 0, 1920, 1032), 'Flags': 1, 'Device': '\\\\.\\DISPLAY1'}
+        device = monitor_info['Device']
+        monitor_list.append(device)
+    return monitor_list
 
 
 
@@ -339,8 +350,9 @@ if __name__ == "__main__":
     sbc_info = sbc.list_monitors_info()
     print(f"sbc_info: {sbc_info}")
 
-    screen_info = screeninfo.get_monitors()
-    print(f"screen_info: {screen_info}")
+    print(f"list_monitors: {get_monitor_list()}")
+
+    # print(f"screen_info: {screen_info}")
 
     # set_brightness_sbc(1, 0)
 

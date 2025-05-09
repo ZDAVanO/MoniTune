@@ -1,8 +1,7 @@
 @echo off
 pyinstaller ^
     --onefile ^
-    --noconsole ^
-    --name "MoniTune" ^
+    --name "MoniTune_console" ^
     --add-data "src/assets/icons/setting_light.png;./icons" ^
     --add-data "src/assets/icons/setting_dark.png;./icons" ^
     --add-data "src/assets/icons/monitor_light.png;./icons" ^
@@ -26,7 +25,7 @@ pyinstaller ^
     --add-data "src/assets/tray-icons/light/fluent.ico;./tray-icons/light" ^
     --add-data "src/assets/tray-icons/dark/fluent.ico;./tray-icons/dark" ^
     --add-data "src/assets/icons/icon_color.ico;./icons" ^
-    --icon="src/assets/icons/icon_color.png" ^
+    --icon="src/assets/icons/icon_color_dev.png" ^
     "src/MoniTune.py"
 pause
 
