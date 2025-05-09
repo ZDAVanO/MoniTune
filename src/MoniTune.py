@@ -299,12 +299,10 @@ class MainWindow(QMainWindow):
 
         self.win_release = platform.release()
         logger.info(f"win_release: {self.win_release}")
+        # self.win_release = 10
 
         self.is_laptop = is_laptop()
         logger.info(f"is_laptop: {self.is_laptop}")
-
-        self.theme = darkdetect.theme()
-        logger.debug(f"theme: {self.theme}")
 
         self.exe_path = os.path.realpath(sys.argv[0])
         logger.info(f"exe_path: {self.exe_path}")
@@ -328,6 +326,12 @@ class MainWindow(QMainWindow):
         logger.debug(f"enable_fusion_theme: {self.enable_fusion_theme}")
         if self.enable_fusion_theme:
             QApplication.instance().setStyle("Fusion")
+
+        if (self.win_release != "11") and (not self.enable_fusion_theme):
+            self.theme = "Light"
+        else:
+            self.theme = darkdetect.theme()
+        logger.debug(f"theme: {self.theme}")
 
         self.enable_break_reminders = reg_read_bool(cfg.REGISTRY_PATH, "EnableBreakReminders", False)
         logger.debug(f"enable_break_reminders: {self.enable_break_reminders}")
@@ -740,7 +744,10 @@ class MainWindow(QMainWindow):
     # MARK: _apply_theme()
     def _apply_theme(self, theme: str):
         logger.info(f"Theme changed to: {theme}")
-        self.theme = theme
+        if (self.win_release != "11") and (not self.enable_fusion_theme):
+            self.theme = "Light"
+        else:
+            self.theme = theme
         self.update_central_widget()
         self.tray_icon.changeIconTheme(theme)
         if self.settings_window:
