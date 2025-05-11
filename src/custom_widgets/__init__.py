@@ -5,6 +5,7 @@ from .custom_buttons import (
 
 from .custom_comboboxes import (
     NoScrollComboBox,
+    StyledComboBox,
 )
 
 from .custom_labels import (

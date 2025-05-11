@@ -44,6 +44,7 @@ from custom_widgets import (
     CheckLockButton,
     HoverIconButton,
     NoScrollComboBox,
+    StyledComboBox,
     BrightnessIcon,
     AnimatedSliderBS,
     SeparatorLine,
@@ -94,6 +95,7 @@ import platform
 import requests
 from packaging.version import Version
 import webbrowser
+
 
 
 # MARK: ButtonGridFrame
@@ -352,9 +354,8 @@ class MainWindow(QMainWindow):
         # Refresh rate settings
         self.show_refresh_rates = reg_read_bool(cfg.REGISTRY_PATH, "ShowRefreshRates")
         logger.debug(f"show_refresh_rates: {self.show_refresh_rates}")
-        self.excluded_rates = list(map(int, reg_read_list(cfg.REGISTRY_PATH, "ExcludedHzRates")))
+        self.excluded_rates = reg_read_dict(cfg.REGISTRY_PATH, "ExcludedHzRates")
         logger.debug(f"excluded_rates: {self.excluded_rates}")
-        # self.excluded_rates = list(map(int, filter(None, reg_read_list(cfg.REGISTRY_PATH, "ExcludedHzRates"))))
 
         # Brightness settings
         self.restore_last_brightness = reg_read_bool(cfg.REGISTRY_PATH, "RestoreLastBrightness")
@@ -387,11 +388,8 @@ class MainWindow(QMainWindow):
         self.brightness_sync_thread = None
         self.settings_window = None  # No settings window yet
 
-        self.rr_buttons = {}  # Dictionary to store refresh rate buttons for each monitor
         self.br_frames = {}  # Dictionary to store brightness frames
         self.contrast_frames = {}  # Dictionary to store contrast frames
-        self.monitor_frames_vcp = {}
-        self.power_buttons = {}
 
         self.monitors_dict = {}
         self.update_monitors_info()
@@ -790,24 +788,13 @@ class MainWindow(QMainWindow):
                     frame.update_styles(bg_color=cfg.colors["frame_hover"][self.theme] if hover else 'transparent')
             return True
         
-        # Add hover effect to all br_frames except the one the mouse is on when link_brightness is enabled
-        if (source in self.br_frames.values()) and (event.type() in [QEvent.Type.Enter, QEvent.Type.Leave]):
-            hover = event.type() == QEvent.Type.Enter
-            for frame in self.br_frames.values():
-                if frame.isEnabled() and (frame != source) and self.link_brightness:
-                    frame.update_styles(bg_color=cfg.colors["frame_hover"][self.theme] if hover else 'transparent')
-            return True
-        
-        # Show power button icon on monitor_frames_vcp hover 
-        if (source in self.monitor_frames_vcp.values()) and (event.type() in [QEvent.Type.Enter, QEvent.Type.Leave]):
-            serial = next((k for k, v in self.monitor_frames_vcp.items() if v is source), None)
-            hover = event.type() == QEvent.Type.Enter
-            if source.isEnabled():
-                if hover:
-                    self.power_buttons[serial].applyHoverIcon()
-                else:
-                    self.power_buttons[serial].applyDefaultIcon()
-            return True
+        # # Add hover effect to all br_frames except the one the mouse is on when link_brightness is enabled
+        # if (source in self.br_frames.values()) and (event.type() in [QEvent.Type.Enter, QEvent.Type.Leave]):
+        #     hover = event.type() == QEvent.Type.Enter
+        #     for frame in self.br_frames.values():
+        #         if frame.isEnabled() and (frame != source) and self.link_brightness:
+        #             frame.update_styles(bg_color=cfg.colors["frame_hover"][self.theme] if hover else 'transparent')
+        #     return True
         
         return super().eventFilter(source, event)
 
@@ -826,8 +813,6 @@ class MainWindow(QMainWindow):
 
         self.br_frames.clear()  # Clear brightness frames dictionary
         self.contrast_frames.clear()  # Clear contrast frames dictionary
-        self.monitor_frames_vcp.clear()  # Clear VCP monitor frames dictionary
-        self.power_buttons.clear()
 
 
         # print_mi(self.monitors_dict)
@@ -878,8 +863,8 @@ class MainWindow(QMainWindow):
 
 
         for index, monitor_serial in enumerate(monitors_order):
-
             monitor = self.monitors_dict[monitor_serial]
+            
             logger.info(
                 f"display_name: {monitor['display_name']} | "
                 f"serial: {monitor['serial']} | "
@@ -906,39 +891,33 @@ class MainWindow(QMainWindow):
 
             # MARK: Label Frame
             label_frame = QWidget()
-            # label_frame.setMinimumHeight(34)
-            # label_frame.setFixedHeight(34)
             label_hbox = QHBoxLayout(label_frame)
             label_hbox.setContentsMargins(0, 0, 0, 0)
             label_hbox.setSpacing(5)
 
-
             if monitor["method"] == "VCP": 
                 # add power button with monitor icon
-                monitor_power_btn = HoverIconButton(icon_path=cfg.icons["monitor"][self.theme],
-                                                    hover_icon_path=cfg.icons["shutdown"][self.theme])
-                monitor_power_btn.setFlat(True)
-                monitor_power_btn.setStyleSheet("""
-                                                QPushButton {
-                                                    background-color: transparent;
-                                                }
-                                                """) 
-                monitor_power_btn.setSizePolicy(QSizePolicy.Policy.Preferred, 
-                                                QSizePolicy.Policy.Expanding)
-                monitor_power_btn.setFixedSize(30, 30)
-                monitor_power_btn.setIconSize(QSize(30, 30))
-                monitor_power_btn.setToolTip("Power off")
-                monitor_power_btn.clicked.connect(lambda checked,
-                                                    mf=monitor_frame,
-                                                    h=monitor["hPhysicalMonitor"]: 
-                                                    self.disable_monitor(h, mf))
-                label_hbox.addWidget(monitor_power_btn)
+                power_btn = HoverIconButton(icon_path=cfg.icons["monitor"][self.theme],
+                                            hover_icon_path=cfg.icons["shutdown"][self.theme])
+                power_btn.setFlat(True)
+                power_btn.setStyleSheet("""
+                                        QPushButton {
+                                            background-color: transparent;
+                                        }
+                                        """) 
+                power_btn.setSizePolicy(QSizePolicy.Policy.Preferred, 
+                                        QSizePolicy.Policy.Expanding)
+                power_btn.setFixedSize(30, 30)
+                power_btn.setIconSize(QSize(30, 30))
+                power_btn.setToolTip("Power off")
+                power_btn.clicked.connect(lambda checked,
+                                          mf=monitor_frame,
+                                          h=monitor["hPhysicalMonitor"]: 
+                                          self.disable_monitor(h, mf))
+                label_hbox.addWidget(power_btn)
 
-            
-                self.monitor_frames_vcp[monitor['serial']] = monitor_frame
-                monitor_frame.installEventFilter(self)
-                self.power_buttons[monitor['serial']] = monitor_power_btn
-
+                monitor_frame.enterEvent = lambda event, pb=power_btn: pb.applyHoverIcon()
+                monitor_frame.leaveEvent = lambda event, pb=power_btn: pb.applyDefaultIcon()
             else: 
                 # add monitor icon
                 monitor_icon = QLabel()
@@ -970,61 +949,49 @@ class MainWindow(QMainWindow):
                 available_resolutions = monitor["AvailableResolutions"]
                 sorted_resolutions = sorted(available_resolutions, key=lambda res: res[0] * res[1], reverse=True)
                 formatted_resolutions = [f"{width}x{height}" for width, height in sorted_resolutions]
-                
-                res_combobox = NoScrollComboBox()
-                absolute_icon_path = os.path.abspath(cfg.icons["down_arrow"][self.theme]).replace('\\', '/')
-                res_combobox.setStyleSheet(f"""
-                                            /* Basic QComboBox style */
-                                            QComboBox {{
-                                                font-size: 14px; font-weight: bold;
-                                                padding-left: 7px;
-                                                {"background-color: " + cfg.colors["combobox_bg"][self.theme] + ";" if not self.enable_fusion_theme else ""}
-                                            }}
-                                            /* Dropdown list style */
-                                            QComboBox QAbstractItemView {{
-                                                padding: 0px;
-                                            }}
-                                            QComboBox::drop-down {{
-                                                border: 0px;
-                                            }}
-                                            QComboBox::down-arrow {{
-                                                image: url('{absolute_icon_path}');
-                                                width: 11px;
-                                                height: 11px;
-                                                margin-right: 10px;
-                                                }}
-                                            """)
-                
                 max_res_length = max(len(res) for res in formatted_resolutions)
                 res_combobox_width = 105 if (max_res_length <= 9) else 112 if (max_res_length == 10) else 120
+                rc_bg_color = (cfg.colors["combobox_bg"][self.theme] 
+                               if not self.enable_fusion_theme else None)
+                
+                res_combobox = StyledComboBox(self,
+                                              down_arrow=cfg.icons["down_arrow"][self.theme], 
+                                              bg_color=rc_bg_color,
+                                              )
                 res_combobox.setFixedWidth(res_combobox_width)
                 res_combobox.setSizePolicy(QSizePolicy.Policy.Fixed, 
                                            QSizePolicy.Policy.Expanding)
-                res_combobox.addItems(formatted_resolutions)
-                res_combobox.setCurrentText(monitor["Resolution"])
+                for res in sorted_resolutions:
+                    res_combobox.addItem(f"{res[0]}x{res[1]}", res)
+                res_combobox.setCurrentText(f"{monitor['Resolution'][0]}x{monitor['Resolution'][1]}")
                 res_combobox.currentIndexChanged.connect(lambda index, 
                                                          m=monitor, 
                                                          cb=res_combobox: 
-                                                         self.on_resolution_select(m, cb.currentText()))
+                                                         self.on_resolution_select(m, cb.currentData()))
                 label_hbox.addWidget(res_combobox)
 
             monitor_vbox.addWidget(label_frame)
             
 
             # MARK: Refresh Rates
-            if self.show_refresh_rates:
+            refresh_rates = monitor["AvailableRefreshRates"]
 
-                refresh_rates = monitor["AvailableRefreshRates"]
-                refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates]
+            # Ensure the serial key exists
+            if monitor_serial not in self.excluded_rates:
+                self.excluded_rates[monitor_serial] = []
+                logger.info(f"Added serial {monitor_serial} to excluded_rates with empty list")
 
-                if len(refresh_rates) >= 2:
-                    # Add separator line
-                    monitor_vbox.addWidget(SeparatorLine(color=cfg.colors["separator"][self.theme]))
-                    rr_frame = ButtonGridFrame(self, 
-                                          refresh_rates, 
-                                          monitor["RefreshRate"], 
-                                          callback=lambda value, m=monitor: self.on_rr_button_click(value, m))
-                    monitor_vbox.addWidget(rr_frame)
+            refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates[monitor_serial]]
+
+            if self.show_refresh_rates and (len(refresh_rates) >= 2):
+                # Add separator line
+                monitor_vbox.addWidget(SeparatorLine(color=cfg.colors["separator"][self.theme]))
+
+                rr_frame = ButtonGridFrame(self, 
+                                        refresh_rates, 
+                                        monitor["RefreshRate"], 
+                                        callback=lambda value, m=monitor: self.on_rr_button_click(value, m))
+                monitor_vbox.addWidget(rr_frame)
             
             
             # MARK: Brightness
@@ -1058,7 +1025,7 @@ class MainWindow(QMainWindow):
                 br_frame.setDisabled(True)
 
             self.br_frames[monitor['serial']] = br_frame  # Store frame in dictionary
-            br_frame.installEventFilter(self)
+            # br_frame.installEventFilter(self)
 
             monitor_vbox.addWidget(br_frame)
 
@@ -1109,7 +1076,7 @@ class MainWindow(QMainWindow):
         logger.info(f"updateMonitorsFrame took {time.time() - start_time:.4f} seconds")
 
     
-    
+
     # MARK: updateBottomFrame()
     def updateBottomFrame(self):
         
@@ -1257,7 +1224,7 @@ class MainWindow(QMainWindow):
     def on_resolution_select(self, monitor, resolution):
         logger.info(f"on_resolution_select {monitor['serial']} {resolution}")
         
-        width, height = map(int, resolution.split('x'))
+        width, height = resolution
         set_resolution(monitor["Device"], width, height)
         
         QTimer.singleShot(500, self.updateSizeAndPosition)
@@ -1629,7 +1596,7 @@ if __name__ == "__main__":
     window = MainWindow()
 
     if not getattr(sys, 'frozen', False): # if run from source code
-        # window.openSettingsWindow()
+        window.openSettingsWindow()
         window.show()
 
     app.exec()

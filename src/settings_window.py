@@ -176,6 +176,23 @@ class TimeAdjustmentFrame(QFrame):
         self.delete_button.clicked.connect(self.delete_frame)
         self.time_edit_layout.addWidget(self.delete_button)
 
+
+        # # Add scrollable field for adjusting all sliders
+        # self.scroll_field = QLabel()
+        # self.scroll_field.setFixedSize(20, 20)
+        # self.scroll_field.setStyleSheet("""
+        #     QLabel {
+        #         background-color: #d3d3d3;
+        #         border: 1px solid #a9a9a9;
+        #         border-radius: 2px;
+        #     }
+        # """)
+        # self.scroll_field.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # self.scroll_field.setToolTip("Scroll to adjust all sliders")
+        # self.scroll_field.wheelEvent = self.adjust_all_sliders
+        # self.time_edit_layout.addWidget(self.scroll_field)
+
+
         self.time_edit_layout.addStretch()  # Add stretch to push widgets to the left
 
         self.frame_layout.addLayout(self.time_edit_layout)
@@ -195,6 +212,7 @@ class TimeAdjustmentFrame(QFrame):
             slider_layout.setSpacing(0)
 
             slider_label = QLabel(f"{self.monitors_dict[serial]['display_name']}")
+            # slider_label.setStyleSheet("""background-color: red""")
             slider_label.setFixedWidth(110)
 
             slider = NoScrollSlider(Qt.Orientation.Horizontal)
@@ -260,6 +278,12 @@ class TimeAdjustmentFrame(QFrame):
             "time": self.time_edit.time().toString('HH:mm'),
             "brightness": self.brightness_data
         }
+
+    def adjust_all_sliders(self, event):
+        delta = event.angleDelta().y() // 120  # Each scroll step is 120 units
+        for slider in self.sliders.values():
+            new_value = max(0, min(100, slider.value() + delta))
+            slider.setValue(new_value)
 
 
 
@@ -470,10 +494,16 @@ class SettingsWindow(QWidget):
             self.parent.hidden_displays = hidden_displays
             logger.info(f"Updated hidden displays: {hidden_displays}")
 
-        for monitor_id in monitors_order:
-            checkbox = QCheckBox(f"{monitors_dict[monitor_id]['display_name']}")
-            checkbox.setChecked(monitor_id in hidden_displays)
-            checkbox.stateChanged.connect(lambda state, mid=monitor_id: update_hidden_displays(mid, state))
+        for serial in monitors_order:
+            monitor = monitors_dict[serial]
+
+            hide_checkbox_text = f"{monitor['display_name']}"
+            if serial in custom_monitor_names:
+                hide_checkbox_text = f"{custom_monitor_names[serial]} ({monitor['display_name']})"
+
+            checkbox = QCheckBox(hide_checkbox_text)
+            checkbox.setChecked(serial in hidden_displays)
+            checkbox.stateChanged.connect(lambda state, mid=serial: update_hidden_displays(mid, state))
             hide_displays_layout.addWidget(checkbox)
 
         general_tab.content_layout.addWidget(hide_displays_widget)
@@ -634,56 +664,68 @@ class SettingsWindow(QWidget):
 
 
         # MARK: Exclude Refresh Rates
-        all_rates = set()
-        for monitor in monitors_info:
-            all_rates.update(monitor['AvailableRefreshRates'])
-        all_rates = sorted(all_rates)
-
-        # excluded_rates = list(map(int, reg_read_list(cfg.REGISTRY_PATH, "ExcludedHzRates")))
-        excluded_rates = list(map(int, filter(None, reg_read_list(cfg.REGISTRY_PATH, "ExcludedHzRates"))))
-
-
-        # Function to update the excluded list
-
-        def update_excluded(rate, value):
-            logger.info(f"Rate: {rate}, Switch: {value}")
-
-            if value == 2: # If the switch is on
-                if rate in excluded_rates:
-                    excluded_rates.remove(rate)
-            else:  # If the switch is off
-                if rate not in excluded_rates:
-                    excluded_rates.append(rate)
-
-            reg_write_list(cfg.REGISTRY_PATH, "ExcludedHzRates", excluded_rates)
-            self.parent.excluded_rates = excluded_rates
-            # self.show_parent_window()
-            logger.info(f"Updated excluded list: {excluded_rates}")
-
+        excluded_rates = reg_read_dict(cfg.REGISTRY_PATH, "ExcludedHzRates")
+        logger.info(f"Excluded refresh rates (reg): {excluded_rates}")
 
         exclude_rr_frame = QFrame()
         exclude_rr_frame.setFrameShape(QFrame.Shape.StyledPanel)
-
         exclude_rr_layout = QVBoxLayout(exclude_rr_frame)
         exclude_rr_label = QLabel("Exclude Refresh Rates")
         exclude_rr_layout.addWidget(exclude_rr_label)
 
+        # Function to update the excluded list
+        def update_excluded_rates(state, rate, serial):
+            logger.info(f"state: {state}, rate: {rate}, ")
 
-        # scroll_area = QScrollArea()
-        # scroll_content = QWidget()
-        # scroll_layout = QVBoxLayout(scroll_content)
-        for rate in all_rates:
-            rate_checkbox = QCheckBox(f"{rate} Hz")
-            exclude_rr_layout.addWidget(rate_checkbox)
+            # Ensure the serial key exists
+            if serial not in excluded_rates:
+                excluded_rates[serial] = []
 
-            if rate not in excluded_rates:
-                rate_checkbox.setChecked(True)
-            
-            rate_checkbox.stateChanged.connect(lambda state, rate=rate: update_excluded(rate, state))
+            if state == 2: # If the switch is on
+                if rate in excluded_rates[serial]:
+                    excluded_rates[serial].remove(rate)
+            else:  # If the switch is off
+                if rate not in excluded_rates[serial]:
+                    excluded_rates[serial].append(rate)
 
-        # scroll_area.setWidget(scroll_content)
-        # exclude_rr_layout.addWidget(scroll_area)
-        
+            reg_write_dict(cfg.REGISTRY_PATH, "ExcludedHzRates", excluded_rates)
+            self.parent.excluded_rates = excluded_rates
+            logger.info(f"Updated excluded list: {excluded_rates}")
+
+        # for monitor in monitors_info:
+        for serial in monitors_order:
+            monitor = monitors_dict[serial]
+
+            rr_label_text = f"{monitor['display_name']}"
+            if serial in custom_monitor_names:
+                rr_label_text = f"{custom_monitor_names[serial]} ({monitor['display_name']})"
+
+            available_rates = sorted(set(monitor['AvailableRefreshRates']))
+
+            rr_frame = QFrame()
+            rr_frame.setFrameShape(QFrame.Shape.StyledPanel)
+            rr_layout = QVBoxLayout(rr_frame)
+            rr_label = QLabel(rr_label_text)
+            rr_layout.addWidget(rr_label)
+
+            for rate in available_rates:
+                rate_checkbox = QCheckBox(f"{rate} Hz")
+                rr_layout.addWidget(rate_checkbox)
+
+                if serial in excluded_rates:
+                    if rate not in excluded_rates[serial]:
+                        rate_checkbox.setChecked(True)
+                else:
+                    rate_checkbox.setChecked(True)
+                
+                rate_checkbox.stateChanged.connect(lambda state, 
+                                                   rate=rate, 
+                                                   ms=serial: 
+                                                   update_excluded_rates(state, rate, ms))
+                
+            exclude_rr_layout.addWidget(rr_frame)
+
+
         refresh_rate_tab.content_layout.addWidget(exclude_rr_frame)
         self.tab_widget.addTab(refresh_rate_tab, "Refresh Rate")
 

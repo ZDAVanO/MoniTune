@@ -7,6 +7,11 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QWheelEvent
 
+import os
+
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class NoScrollComboBox(QComboBox):
@@ -17,8 +22,45 @@ class NoScrollComboBox(QComboBox):
         event.ignore()  # ignore the wheel event to prevent scrolling
 
 
+class StyledComboBox(NoScrollComboBox):
+    def __init__(self, parent, down_arrow: str, bg_color: str = None):
+        super().__init__(parent)
+        
+        absolute_icon_path = os.path.abspath(down_arrow).replace('\\', '/')
+        logger.debug(f"StyledComboBox down_arrow: {down_arrow}")
+        logger.debug(f"StyledComboBox absolute_icon_path: {absolute_icon_path}")
+
+        self.setStyleSheet(f"""
+                            /* Basic QComboBox style */
+                            QComboBox {{
+                                font-size: 14px; font-weight: bold;
+                                padding-left: 7px;
+                                {f"background-color: {bg_color};" if bg_color else ""}
+                            }}
+                            /* Dropdown list style */
+                            QComboBox QAbstractItemView {{
+                                padding: 0px;
+                            }}
+                            QComboBox::drop-down {{
+                                border: 0px;
+                            }}
+                            QComboBox::down-arrow {{
+                                image: url('{absolute_icon_path}');
+                                width: 11px;
+                                height: 11px;
+                                margin-right: 10px;
+                                }}
+                            """)
+
+
 
 if __name__ == "__main__":
+
+    logging.basicConfig(level=logging.INFO, 
+                        format='[%(asctime)s] [%(levelname)s] %(message)s', 
+                        datefmt="%H:%M:%S")
+
+
     app = QApplication([])
     
     resolutions = [

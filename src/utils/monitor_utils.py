@@ -87,7 +87,7 @@ def get_monitors_info():
                 "hMonitor": hMonitor,
                 "RefreshRate": devmode.DisplayFrequency,
                 "AvailableRefreshRates": available_refresh_rates,
-                "Resolution": f"{devmode.PelsWidth}x{devmode.PelsHeight}",
+                "Resolution": (devmode.PelsWidth, devmode.PelsHeight),
                 "AvailableResolutions": available_resolutions
             })
         return True
