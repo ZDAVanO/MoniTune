@@ -33,37 +33,58 @@ colors = {
     # main window background color
     "main_bg": {
         "Light": "#f3f3f3",
-        "Dark": "#202020"  # 141414
+        "Dark": "#202020",  # 141414
+        "FusionLight": "red",
+        "FusionDark": "red",
     },
     # main window border color
     "main_border": {
         "Light": "#bebebe",
-        "Dark": "#404040"
+        "Dark": "#404040",
+        "FusionLight": "red",
+        "FusionDark": "red",
     },
     # monitor_frame, placeholder_frame background color
     "frame_bg": {
         "Light": "#fbfbfb",
-        "Dark": "#2b2b2b"
+        "Dark": "#2b2b2b",
+        "FusionLight": "red",
+        "FusionDark": "red",
     },
     # monitor_frame, placeholder_frame border color
     "frame_border": {
         "Light": "#e5e5e5",
-        "Dark": "#1d1d1d"
+        "Dark": "#1d1d1d",
+        "FusionLight": "red",
+        "FusionDark": "red",
     },
     "frame_hover": {
         "Light": "rgba(0, 0, 0, 0.05)",
-        "Dark": "rgba(255, 255, 255, 0.07)"
+        "Dark": "rgba(255, 255, 255, 0.07)",
+        "FusionLight": "red",
+        "FusionDark": "red",
     },
     # res_combobox background color
     "combobox_bg": {
         "Light": "#fefefe",
-        "Dark": "#373737"
+        "Dark": "#373737",
+        "FusionLight": "red",
+        "FusionDark": "red",
     },
     # separator color
     "separator": {
         "Light": "#d2d2d2", # #dcdcdc #bebebe
-        "Dark": "#555555" # #5f5f5f
-    }
+        "Dark": "#555555", # #5f5f5f
+        "FusionLight": "red",
+        "FusionDark": "red",
+    },
+    # settings separator color
+    "s_sep": {
+        "Light": "#f0f0f0",
+        "Dark": "#3c3c3c",
+        "FusionLight": "#b9b9b9",
+        "FusionDark": "#171717",
+    },
 }
 
 

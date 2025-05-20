@@ -9,6 +9,8 @@ from PySide6.QtCore import (
     QEvent, 
     QSize, 
     QRect, 
+    QTranslator,
+    QLocale,
 )
 from PySide6.QtGui import (
     QIcon, 
@@ -75,8 +77,14 @@ from utils.reg_utils import (
     add_to_startup,
     remove_from_startup,
 )
-from utils.utils import get_idle_time, is_laptop, is_on_battery, get_display_timeouts
+from utils.utils import (
+    get_idle_time, 
+    is_laptop, 
+    is_on_battery, 
+    get_display_timeouts, 
+)
 from utils.lock_detect import LockDetect
+from utils.active_process import ActiveProcessListener, get_active_process
 
 from utils.logger import get_logger
 logger = get_logger(__name__) # debug, info, warning, error, critical
@@ -89,8 +97,10 @@ import sys
 import os
 import ctypes
 import threading
-import time
+from pathlib import Path
+import psutil
 import platform
+import time
 
 import requests
 from packaging.version import Version
@@ -111,12 +121,6 @@ class ButtonGridFrame(QFrame):
         self.buttons = []
 
         self.setObjectName("ButtonGridFrame")
-        # self.setStyleSheet(f"""
-        #     #ButtonGridFrame {{
-        #         background-color: gray;
-        #         border-radius: 6px;
-        #     }}
-        # """)
 
         self.grid = QGridLayout(self)
         self.grid.setContentsMargins(0, 0, 0, 0)
@@ -292,12 +296,20 @@ class MainWindow(QMainWindow):
 
     theme_changed = Signal(str)
     lock_state_changed = Signal(str)
+    active_process_changed = Signal(dict)
+
+    show_signal = Signal()
+    hide_signal = Signal()
 
     def __init__(self):
         super().__init__()
 
         self.theme_changed.connect(self._apply_theme)
         self.lock_state_changed.connect(self._on_lock_state_change)
+        self.active_process_changed.connect(self._on_active_process_change)
+
+        self.show_signal.connect(self.show)
+        self.hide_signal.connect(self.animateWindowClose)
 
         self.win_release = platform.release()
         logger.info(f"win_release: {self.win_release}")
@@ -333,6 +345,10 @@ class MainWindow(QMainWindow):
             self.theme = "Light"
         else:
             self.theme = darkdetect.theme()
+
+        self.color_theme = f"Fusion{self.theme}" if self.enable_fusion_theme else self.theme
+        logger.debug(f"color_theme: {self.color_theme}")
+
         logger.debug(f"theme: {self.theme}")
 
         self.enable_break_reminders = reg_read_bool(cfg.REGISTRY_PATH, "EnableBreakReminders", False)
@@ -342,7 +358,7 @@ class MainWindow(QMainWindow):
         logger.debug(f"hidden_displays: {self.hidden_displays}")
 
         self.custom_monitor_names = reg_read_dict(cfg.REGISTRY_PATH, "CustomMonitorNames")
-        logger.info(f"custom_monitor_names: {self.custom_monitor_names}")
+        logger.debug(f"custom_monitor_names: {self.custom_monitor_names}")
 
         self.monitors_order = reg_read_list(cfg.REGISTRY_PATH, "MonitorsOrder")
         logger.debug(f"monitors_order: {self.monitors_order}")
@@ -360,10 +376,16 @@ class MainWindow(QMainWindow):
         # Brightness settings
         self.restore_last_brightness = reg_read_bool(cfg.REGISTRY_PATH, "RestoreLastBrightness")
         logger.debug(f"restore_last_brightness: {self.restore_last_brightness}")
+
+        self.show_brightness_popup = reg_read_bool(cfg.REGISTRY_PATH, "ShowBrightnessPopup", False)
+        logger.debug(f"show_brightness_popup: {self.show_brightness_popup}")
         
         self.brightness_values = reg_read_dict(cfg.REGISTRY_PATH, "BrightnessValues")
         logger.info(f"brightness_values: {self.brightness_values}")
+        self.manual_brightness_values = reg_read_dict(cfg.REGISTRY_PATH, "ManualBrightnessValues")
+        logger.info(f"manual_brightness_values: {self.manual_brightness_values}")
 
+        self.enable_time_adjustment = reg_read_bool(cfg.REGISTRY_PATH, "EnableTimeAdjustment", False)
         self.time_adjustment_startup = reg_read_bool(cfg.REGISTRY_PATH, "TimeAdjustmentStartup")
         logger.debug(f"time_adjustment_startup: {self.time_adjustment_startup}")
         self.time_adjustment_data = reg_read_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData")
@@ -375,6 +397,18 @@ class MainWindow(QMainWindow):
         logger.debug(f"show_contrast_sliders: {self.show_contrast_sliders}")
         self.contrast_values = reg_read_dict(cfg.REGISTRY_PATH, "ContrastValues")
         logger.info(f"contrast_values: {self.contrast_values}")
+
+        # Profiles settings
+        self.enable_profiles = reg_read_bool(cfg.REGISTRY_PATH, "EnableProfiles", False)
+        logger.debug(f"enable_profiles: {self.enable_profiles}")
+        self.profiles_data = reg_read_dict(cfg.REGISTRY_PATH, "ProfilesData")
+        # self.profiles_data = {}
+        logger.debug(f"profiles_data: {self.profiles_data}")
+        self.monitune_exe = psutil.Process().exe()
+        logger.info(f"monitune_exe: {self.monitune_exe}")
+        self.active_process = None # using for settings window
+        self.prev_active_process = None
+        self.profile_active = False
 
         self.link_brightness = reg_read_bool(cfg.REGISTRY_PATH, "LinkBrightness", False)
         logger.debug(f"link_brightness: {self.link_brightness}")
@@ -429,7 +463,7 @@ class MainWindow(QMainWindow):
         self.monitors_frame = QWidget()
         # self.monitors_frame.setStyleSheet("border-radius: 9px; background-color: red")
         self.monitors_layout = QVBoxLayout(self.monitors_frame)
-        self.monitors_layout.setContentsMargins(7, 7, 7, 0)
+        self.monitors_layout.setContentsMargins(0, 0, 0, 0)
         self.monitors_layout.setSpacing(6) # Set spacing between monitor frames
 
         self.bottom_frame = QWidget()
@@ -445,15 +479,16 @@ class MainWindow(QMainWindow):
         # self.bottom_frame.setFixedHeight(60)
         # self.bottom_frame_hbox.setContentsMargins(7, 0, 11, 0)
 
-        self.bottom_frame_hbox.setContentsMargins(7, 5, 7, 7)
+        # self.bottom_frame_hbox.setContentsMargins(7, 5, 7, 7)
+        self.bottom_frame_hbox.setContentsMargins(0, 0, 0, 0) # for popup
 
         self.bottom_frame_hbox.setSpacing(4)
 
 
 
         central_widget_layout = QVBoxLayout(central_widget)
-        central_widget_layout.setContentsMargins(0, 0, 0, 0)
-        central_widget_layout.setSpacing(0)
+        central_widget_layout.setContentsMargins(7, 7, 7, 7)
+        central_widget_layout.setSpacing(5)
         central_widget_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         central_widget_layout.addWidget(self.monitors_frame)
         # central_widget_layout.addStretch()  # Add stretch to push the bottom frame to the bottom
@@ -486,9 +521,14 @@ class MainWindow(QMainWindow):
         self.lock_listener = LockDetect(lambda state: self.lock_state_changed.emit(state)) # _on_lock_state_change
         threading.Thread(target=self.lock_listener.run, daemon=True).start()
 
+        self.process_listener = ActiveProcessListener(lambda pi: self.active_process_changed.emit(pi))
+        self.process_listener_thread = None
+        if self.enable_profiles:
+            self.toggle_process_listener(True)
+
         self.previous_monitor_list = get_monitor_list()
         self.start_checking(interval=(cfg.timer_interval * 1000))  # Start checking every minute
-        if self.time_adjustment_startup:
+        if self.enable_time_adjustment and self.time_adjustment_startup:
             self.execute_recent_task()
 
 
@@ -504,7 +544,8 @@ class MainWindow(QMainWindow):
 
         # self.monitors_frame.setStyleSheet("background-color: red;")
         # self.bottom_frame.setStyleSheet("background-color: green;") 
-        # self.openSettingsWindow() # Open settings window on startup
+
+        # self.slider_animation_delay = 150 # msec
 
 
 
@@ -514,9 +555,18 @@ class MainWindow(QMainWindow):
         if state == "unlocked":
             self.execute_recent_task(delay=10 * 1000) # Execute after 10 seconds  
             # QTimer.singleShot(10 * 1000, self.execute_recent_task)
-            self.start_checking(interval=(cfg.timer_interval * 1000))
+
+            # self.start_checking(interval=(cfg.timer_interval * 1000))
+            QTimer.singleShot(15 * 1000, lambda: self.start_checking(interval=(cfg.timer_interval * 1000)))
+
+            if self.enable_profiles:
+                self.toggle_process_listener(True)
+
         elif state == "locked":
             self.stop_checking()
+
+            if self.enable_profiles:
+                self.toggle_process_listener(False)
 
 
     # MARK: stop_checking()
@@ -530,6 +580,7 @@ class MainWindow(QMainWindow):
         self.last_check_time = None
         self.time_active = 0
         self.saved_time = 0
+        self.screen_disabled = False
         self.timer.start(interval)
         logger.info(f"Task checking started (interval: {interval / 1000} sec)")
 
@@ -604,10 +655,11 @@ class MainWindow(QMainWindow):
 
 
         # MARK: Check time adjustment tasks
-        if (self.last_check_time != current_time) and can_change_br:
+        if (self.last_check_time != current_time) and can_change_br and self.enable_time_adjustment:
             if current_time in self.time_adjustment_data:
-                self.apply_brightness(self.time_adjustment_data[current_time])
-                log_messages.append(f"Applied brightness: {self.time_adjustment_data[current_time]}")
+                if not self.profile_active:
+                    self.apply_brightness(self.time_adjustment_data[current_time])
+                    log_messages.append(f"Applied brightness: {self.time_adjustment_data[current_time]}")
             else:
                 log_messages.append("idle")
 
@@ -633,9 +685,17 @@ class MainWindow(QMainWindow):
 
     # MARK: execute_recent_task()
     def execute_recent_task(self, delay=0):
-        if not self.time_adjustment_data:
-            logger.info("execute_recent_task: No tasks found, restoring last change")
-            self.apply_brightness(self.brightness_values, delay=delay)
+
+        if self.profile_active:
+            logger.info(f"execute_recent_task: profile_active: {self.profile_active}, skip")
+            return
+
+        if not self.time_adjustment_data or (not self.enable_time_adjustment):
+            logger.info("execute_recent_task: No tasks found")
+            if self.restore_last_brightness:
+                logger.info("execute_recent_task: Restoring last brightness values")
+                # self.apply_brightness(self.brightness_values, delay=delay)
+                self.apply_brightness(self.manual_brightness_values, delay=delay)
             return
 
         current_time = QTime.currentTime().toString("HH:mm")
@@ -666,7 +726,14 @@ class MainWindow(QMainWindow):
         if self.window_open and (delay == 0):
             QTimer.singleShot(0, lambda: self.animate_sliders(self.br_frames, self.brightness_values))
         else:
-            threading.Timer((delay / 1000), self.brightness_sync_onetime).start() # change brightness after delay
+            if self.show_brightness_popup:
+                # self.show_signal.emit()
+                # QTimer.singleShot(delay, self.show_signal.emit)
+                QTimer.singleShot(delay, self.show_popup)
+
+                # QTimer.singleShot(1500 + delay, self.hide_signal.emit)
+            else:
+                threading.Timer((delay / 1000), self.brightness_sync_onetime).start() # change brightness after delay
 
 
 
@@ -709,7 +776,7 @@ class MainWindow(QMainWindow):
 
 
     # MARK: update_central_widget()
-    def update_central_widget(self):
+    def update_central_widget(self, checked=None):
         self.window_offset = cfg.WIN11_WINDOW_OFFSET if self.enable_rounded_corners else 0
         corner_radius = cfg.WIN11_WINDOW_CORNER_RADIUS if self.enable_rounded_corners else 0
         self.centralWidget().setStyleSheet(
@@ -724,8 +791,64 @@ class MainWindow(QMainWindow):
 
 
 
+    # MARK: toggle_process_listener()
+    def toggle_process_listener(self, enabled):
+        logger.info(f"toggle_process_listener: {enabled}")
+        if enabled:
+            self.process_listener_thread = threading.Thread(target=self.process_listener.run, daemon=True)
+            self.process_listener_thread.start()
+        else:
+            if self.process_listener_thread:
+                self.process_listener.stop()
+                self.process_listener_thread.join()
+
+            self.profile_active = False
+            self.execute_recent_task()
+
+        if self.process_listener_thread:
+            logger.info(f"process_listener_thread.is_alive(): {self.process_listener_thread.is_alive()}")
+
+
+
+    # MARK: _on_active_process_change()
+    def _on_active_process_change(self, process_info):
+        exe_path = process_info["exe_path"]
+        self.active_process = exe_path # using for settings window
+        logger.info(f"Active process changed: {exe_path}")
+        # hwnd, pid, p_name, p_path = get_active_process()
+
+        # if self.window_open and (exe_path != self.monitune_exe):
+        #     self.animateWindowClose()
+
+        # if self.show_brightness_popup and (exe_path == self.monitune_exe):
+        #     # self.prev_active_process = exe_path
+        #     return
+        
+        if (exe_path == self.prev_active_process):
+            logger.info(f"exe_path == prev_active_process, skip")
+            return
+
+        # if self.enable_profiles and self.active_process:
+        if exe_path in self.profiles_data:
+            profile = self.profiles_data[exe_path]
+            logger.info(f"Applying profile: {profile}")
+
+            self.profile_active = True
+            self.apply_brightness(profile)
+        else:
+            if self.profile_active:
+                self.profile_active = False
+                self.execute_recent_task()
+                logger.info(f"Disabling profile")
+            else: # reduce br changes when moving between processes outside profiles_data
+                logger.info(f"No active profile, skip")
+                
+        self.prev_active_process = exe_path
+
+
+
     # MARK: update_autostart()
-    def update_autostart(self):
+    def update_autostart(self, checked=None):
         if not getattr(sys, 'frozen', False): # if not running as EXE
             logger.info("Not running as EXE, skipping startup registry modification")
             return
@@ -746,10 +869,15 @@ class MainWindow(QMainWindow):
             self.theme = "Light"
         else:
             self.theme = theme
+
+        self.color_theme = f"Fusion{self.theme}" if self.enable_fusion_theme else self.theme
+        logger.info(f"color_theme: {self.color_theme}")
+
         self.update_central_widget()
         self.tray_icon.changeIconTheme(theme)
         if self.settings_window:
             self.settings_window.theme = theme
+            self.settings_window.color_theme = self.color_theme
             self.settings_window.update_tab_widget()
 
 
@@ -801,7 +929,7 @@ class MainWindow(QMainWindow):
 
 
     # MARK: updateMonitorsFrame()
-    def updateMonitorsFrame(self):
+    def updateMonitorsFrame(self, popup=False):
         
         start_time = time.time()
 
@@ -858,7 +986,7 @@ class MainWindow(QMainWindow):
         monitors_order = [serial for serial in self.monitors_order if serial in self.monitors_dict]
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
         monitors_order += [serial for serial in self.monitors_dict if serial not in monitors_order]
-        logger.info(f"monitors_order: {monitors_order}")
+        logger.debug(f"monitors_order: {monitors_order}")
         
 
 
@@ -945,7 +1073,7 @@ class MainWindow(QMainWindow):
             
 
             # MARK: Resolution
-            if self.show_resolution:
+            if self.show_resolution and (not popup):
                 available_resolutions = monitor["AvailableResolutions"]
                 sorted_resolutions = sorted(available_resolutions, key=lambda res: res[0] * res[1], reverse=True)
                 formatted_resolutions = [f"{width}x{height}" for width, height in sorted_resolutions]
@@ -983,7 +1111,7 @@ class MainWindow(QMainWindow):
 
             refresh_rates = [rate for rate in refresh_rates if rate not in self.excluded_rates[monitor_serial]]
 
-            if self.show_refresh_rates and (len(refresh_rates) >= 2):
+            if self.show_refresh_rates and (len(refresh_rates) >= 2) and (not popup):
                 # Add separator line
                 monitor_vbox.addWidget(SeparatorLine(color=cfg.colors["separator"][self.theme]))
 
@@ -1010,7 +1138,7 @@ class MainWindow(QMainWindow):
             # Add separator line
             monitor_vbox.addWidget(SeparatorLine(color=cfg.colors["separator"][self.theme]))
 
-            if self.restore_last_brightness and (monitor['serial'] in self.brightness_values):
+            if (self.restore_last_brightness or popup) and (monitor['serial'] in self.brightness_values):
                 pass
             else:
                 self.brightness_values[monitor['serial']] = br_level
@@ -1031,7 +1159,7 @@ class MainWindow(QMainWindow):
 
 
             # MARK: Contrast
-            if self.show_contrast_sliders and (monitor["method"] == "VCP"):
+            if self.show_contrast_sliders and (monitor["method"] == "VCP") and (not popup):
                 contrast_level = None
                 if br_frame.isEnabled():
                     contrast_level = get_contrast_vcp(monitor["hPhysicalMonitor"], retries=5)
@@ -1070,8 +1198,8 @@ class MainWindow(QMainWindow):
             # if self.show_refresh_rates: rr_frame.setStyleSheet("background-color: green")
 
 
-        logger.info(f"brightness_values {self.brightness_values}")
-        logger.info(f"contrast_values {self.contrast_values}")
+        logger.debug(f"brightness_values {self.brightness_values}")
+        logger.debug(f"contrast_values {self.contrast_values}")
 
         logger.info(f"updateMonitorsFrame took {time.time() - start_time:.4f} seconds")
 
@@ -1089,8 +1217,8 @@ class MainWindow(QMainWindow):
             if child.widget():
                 child.widget().deleteLater()
 
-
         bf_label = QLabel("Scroll to adjust brightness")
+        bf_label.setWordWrap(True)
         bf_label.setStyleSheet("""
                                  font-size: 14px; 
                                  padding-left: 5px;
@@ -1099,31 +1227,16 @@ class MainWindow(QMainWindow):
                                  """) # padding-left: 5px; background-color: blue;
         self.bottom_frame_hbox.addWidget(bf_label)
 
-        # self.buttons_frame = QFrame()
-        # self.buttons_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        # self.buttons_frame.setFixedSize(41, 39) # 39 39
-        # buttons_layout = QGridLayout(self.buttons_frame)
-        # buttons_layout.setContentsMargins(0, 0, 0, 0)
-        # buttons_layout.setSpacing(0)
-        # for row in range(2):
-        #     for col in range(2):
-        #         num = row * 2 + col + 1
-        #         button = QPushButton()
-        #         button.setCheckable(True)
-        #         buttons_layout.addWidget(button, row, col)
-        # self.bottom_frame_hbox.addWidget(self.buttons_frame)
-
-        self.link_br_btn = QPushButton()
-        self.link_br_btn.setCheckable(True)
-        self.link_br_btn.setChecked(self.link_brightness)
-        self.link_br_btn.setFixedSize(41, 39) # 39 39
-        self.link_br_btn.setIcon(self.get_icon_for_toggle_state("link", self.link_brightness))
-        self.link_br_btn.setIconSize(QSize(21, 21))
-        self.link_br_btn.setToolTip("Link brightness levels")
-        self.link_br_btn.toggled.connect(self.toggle_link_brightness)
-        if len(self.monitors_dict) < 2:
-            self.link_br_btn.setDisabled(True)
-        self.bottom_frame_hbox.addWidget(self.link_br_btn)
+        if len(self.monitors_dict) > 1:
+            self.link_br_btn = QPushButton()
+            self.link_br_btn.setCheckable(True)
+            self.link_br_btn.setChecked(self.link_brightness)
+            self.link_br_btn.setFixedSize(41, 39) # 39 39
+            self.link_br_btn.setIcon(self.get_icon_for_toggle_state("link", self.link_brightness))
+            self.link_br_btn.setIconSize(QSize(21, 21))
+            self.link_br_btn.setToolTip("Link brightness levels")
+            self.link_br_btn.toggled.connect(self.toggle_link_brightness)
+            self.bottom_frame_hbox.addWidget(self.link_br_btn)
 
         settings_btn = QPushButton()
         settings_btn.setFixedSize(41, 39) # 39 39
@@ -1157,8 +1270,11 @@ class MainWindow(QMainWindow):
 
     # MARK: disable_monitor()
     def disable_monitor(self, hPhysicalMonitor, monitor_frame):
-        if set_power_mode_vcp(hPhysicalMonitor, 4, retries=7):
-            logger.info(f"Monitor powered off successfully.")
+        status_4 = set_power_mode_vcp(hPhysicalMonitor, 4, retries=7)
+        status_5 = set_power_mode_vcp(hPhysicalMonitor, 5, retries=7)
+        logger.info(f"disable_monitor {hPhysicalMonitor}: status_4: {status_4}, status_5: {status_5}")
+
+        if status_4 or status_5:
             monitor_frame.setDisabled(True)
         else:
             logger.warning(f"Failed to power off monitor {hPhysicalMonitor}.")
@@ -1253,8 +1369,11 @@ class MainWindow(QMainWindow):
                     frame.setValueBS(int(new_value))
 
                     self.brightness_values[serial] = int(new_value)
+                    self.manual_brightness_values[serial] = int(new_value)
 
         self.brightness_values[monitor_serial] = int(value)
+        self.manual_brightness_values[monitor_serial] = int(value)
+        reg_write_dict(cfg.REGISTRY_PATH, "ManualBrightnessValues", self.manual_brightness_values)
 
     # MARK: on_contrast_change()
     def on_contrast_change(self, value, monitor_serial):
@@ -1377,40 +1496,43 @@ class MainWindow(QMainWindow):
         logger.info(f"brightness_sync_onetime took {time.time() - start_time:.4f} seconds")
 
 
+
     # MARK: showEvent()
     def showEvent(self, event):
         logger.info("showEvent")
 
-        self.update_monitors_info()
-
-        self.updateBottomFrame() # Update bottom frame contents each time the window is shown
-        self.updateMonitorsFrame()  # Update frame contents each time the window is shown
-        
         # hide window to avoid flickering before opening animation (when close animation disabled)
         screen_geometry = QGuiApplication.primaryScreen().geometry()
         self.move(screen_geometry.width(), screen_geometry.height())
 
+        super().showEvent(event)
+        self.window_open = True
+
+
+
+    # MARK: show_window()
+    def show_window(self):
+        logger.info("show_window")
+
+        if self.window_open:
+            logger.info("Window is already open")
+            return
+
+        self.update_monitors_info()
+        self.updateBottomFrame() # Update bottom frame contents each time the window is shown
+        self.bottom_frame.show()
+        self.updateMonitorsFrame()  # Update frame contents each time the window is shown
+        
+        self.show()
+        # self.show_signal.emit()
+
         QTimer.singleShot(0, self.animateWindowOpen)
         # QTimer.singleShot(0, self.updateSizeAndPosition)
 
-        self.activateWindow()
+        self.activateWindow() # focus on window
         self.raise_()
         
-        self.window_open = True
-        if self.brightness_sync_thread is None or not self.brightness_sync_thread.is_alive():
-            logger.info("brightness_sync_thread start")
-
-            # self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
-            # self.brightness_sync_thread.start()
-            QTimer.singleShot(250, self.start_brightness_sync_thread) 
-
-            # self.brightness_sync_thread = threading.Timer(0.25, self.brightness_sync)
-            # self.brightness_sync_thread.daemon = True
-            # self.brightness_sync_thread.start()
-        else:
-            logger.info("brightness_sync_thread is already running")
-
-        super().showEvent(event)
+        self.start_brightness_sync_thread(delay_msec=250)
 
         if self.restore_last_brightness:
             QTimer.singleShot(150, lambda: self.animate_sliders(self.br_frames, self.brightness_values))
@@ -1418,11 +1540,39 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(150, lambda: self.animate_sliders(self.contrast_frames, self.contrast_values))
 
 
-    def on_exit(self):
-        logger.info("Exiting application")
 
-        # Close app
-        QGuiApplication.quit()
+    # MARK: show_popup()
+    def show_popup(self):
+        logger.info(f"show_popup")
+        
+        if self.window_open:
+            logger.info("Window is already open")
+            return
+
+        self.update_monitors_info()
+        # self.updateBottomFrame() # Update bottom frame contents each time the window is shown
+        self.bottom_frame.hide()
+        self.updateMonitorsFrame(popup=True)  # Update frame contents each time the window is shown
+        
+        self.show()
+        # self.show_signal.emit()
+
+        QTimer.singleShot(0, self.animateWindowOpen)
+        # QTimer.singleShot(0, self.updateSizeAndPosition)
+
+        self.raise_()
+        
+        self.start_brightness_sync_thread(delay_msec=250)
+        # threading.Timer(0.25, self.brightness_sync_onetime).start() # change brightness after delay
+
+        # if self.restore_last_brightness or True:
+        QTimer.singleShot(300, lambda: self.animate_sliders(self.br_frames, self.brightness_values))
+        # if self.show_contrast_sliders:
+        #     QTimer.singleShot(300, lambda: self.animate_sliders(self.contrast_frames, self.contrast_values))
+
+        # QTimer.singleShot(1750, self.hide_signal.emit)
+        QTimer.singleShot(1750, self.animateWindowClose)
+
 
 
     # MARK: animate_sliders()
@@ -1436,10 +1586,15 @@ class MainWindow(QMainWindow):
 
 
     # MARK: start_brightness_sync_thread()
-    def start_brightness_sync_thread(self):
-        logger.info("brightness_sync_thread started")
-        self.brightness_sync_thread = threading.Thread(target=self.brightness_sync, daemon=True)
-        self.brightness_sync_thread.start()
+    def start_brightness_sync_thread(self, delay_msec=250):
+        delay_sec = delay_msec / 1000.0
+        if (self.brightness_sync_thread is None) or (not self.brightness_sync_thread.is_alive()):
+            self.brightness_sync_thread = threading.Timer(delay_sec, self.brightness_sync)
+            self.brightness_sync_thread.daemon = True
+            self.brightness_sync_thread.start()
+            logger.info(f"brightness_sync_thread started, delay: {delay_sec}s")
+        else:
+            logger.info("brightness_sync_thread is already running")
 
 
 
@@ -1557,6 +1712,12 @@ class MainWindow(QMainWindow):
         self.settings_window.raise_()
 
 
+    # MARK: on_exit()
+    def on_exit(self):
+        logger.info("Exiting application")
+        QGuiApplication.quit()
+
+
 
 # MARK: main
 if __name__ == "__main__":
@@ -1565,6 +1726,14 @@ if __name__ == "__main__":
     app.setWindowIcon(QIcon(cfg.icons["monitune"]["Light"]))
 
     logger.info(f"Starting app (v{cfg.version})")
+
+
+    # system_locale = QLocale.system().name()[:2]  # "uk", "fr", "en"
+    # translator = QTranslator()
+    # if translator.load(f"translations/app_{system_locale}.qm"):
+    #     app.installTranslator(translator)
+    # else:
+    #     system_locale = "en"
 
 
     # Check if another instance is already running
@@ -1597,6 +1766,6 @@ if __name__ == "__main__":
 
     if not getattr(sys, 'frozen', False): # if run from source code
         window.openSettingsWindow()
-        window.show()
+        window.show_window()
 
     app.exec()

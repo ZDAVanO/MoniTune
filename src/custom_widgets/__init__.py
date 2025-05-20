@@ -21,4 +21,5 @@ from .custom_sliders import (
 
 from .custom_widgets import (
     SeparatorLine,
+    FadingWidget,
 )

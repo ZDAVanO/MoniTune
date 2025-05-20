@@ -3,7 +3,7 @@ import win32con
 import win32ts
 import win32api
 
-import threading
+
 
 WM_WTSSESSION_CHANGE = 0x02B1
 WTS_SESSION_LOCK = 0x7

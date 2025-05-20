@@ -30,7 +30,7 @@ class SystemTrayIcon(QSystemTrayIcon):
 
         tray_menu = QMenu()
         show_action = tray_menu.addAction("Quick Access \tLeft-click")
-        show_action.triggered.connect(parent.show)
+        show_action.triggered.connect(self.show_main_window)
         
         settings_action = tray_menu.addAction("Settings")
         settings_action.triggered.connect(parent.openSettingsWindow)  # Connect to openSettingsWindow method
@@ -57,9 +57,14 @@ class SystemTrayIcon(QSystemTrayIcon):
     def trayIconClicked(self, reason):
         # print("trayIconClicked reason:", reason)
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self.parent().show()
+            logger.info("Tray icon clicked")
+            self.show_main_window()
         # elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
         #     self.parent().openSettingsWindow()  # Trigger Settings on double-click
+
+    def show_main_window(self):
+        # self.parent().show()
+        self.parent().show_window()
 
     # MARK: show_notification()
     def show_notification(self, title, message, icon, on_click_callback=None):
