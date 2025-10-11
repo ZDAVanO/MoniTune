@@ -1,15 +1,29 @@
-from PySide6.QtWidgets import QApplication, QMainWindow, QSlider, QPushButton, QVBoxLayout, QWidget, QLabel
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer
-from PySide6.QtGui import QWheelEvent, QKeyEvent
-
-# from custom_widgets.custom_labels import BrightnessIcon
-try:
-    from custom_labels import BrightnessIcon
-except ImportError:
-    print("Importing from custom_widgets")
-    from custom_widgets.custom_labels import BrightnessIcon
+from PySide6.QtWidgets import (
+    QApplication, 
+    QMainWindow, 
+    QSlider, 
+    QPushButton, 
+    QVBoxLayout, 
+    QWidget, 
+    QLabel,
+)
+from PySide6.QtCore import (
+    Qt, 
+    QPropertyAnimation, 
+    QEasingCurve, 
+    QTimer,
+)
+from PySide6.QtGui import (
+    QWheelEvent, 
+    QKeyEvent,
+)
 
 import time
+
+import logging
+logger = logging.getLogger(__name__)
+
+
 
 class CustomSlider(QSlider):
     def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, *args, **kwargs):
@@ -23,9 +37,11 @@ class CustomSlider(QSlider):
         else:
             self.setValue(value - self.scrollStep)
 
+
 class NoScrollSlider(QSlider):
     def wheelEvent(self, event: QWheelEvent):
         event.ignore()
+
 
 class AnimatedSlider(QSlider):
     def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, *args, **kwargs):
@@ -34,8 +50,7 @@ class AnimatedSlider(QSlider):
         self.animation = None
         self.scrollStep = scrollStep
 
-        self.setMinimum(0)
-        self.setMaximum(100)
+        self.setRange(0, 100)
 
 
     def animate_to(self, target_value, duration=1000, easing_curve=QEasingCurve.Type.OutCubic):
@@ -73,51 +88,50 @@ class AnimatedSlider(QSlider):
 
 
 
-class AnimatedSliderBlockSignals(QSlider):
-    def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, icon=None, label=None, *args, **kwargs):
+class AnimatedSliderBS(QSlider):
+    def __init__(self, orientation=Qt.Orientation.Horizontal, scrollStep=1, *args, **kwargs):
         super().__init__(orientation, *args, **kwargs)
 
-        self.animation = None
+        # self.setRange(0, 100)
         self.scrollStep = scrollStep
 
-        self.icon = icon  # BrightnessIcon to update
-        self.label = label  # QLabel to update
-
-        self.setMinimum(0)
-        self.setMaximum(100)
+        self.animation = QPropertyAnimation(self, b"value")
+        self.animation.finished.connect(lambda: self.blockSignals(False))
 
 
     def animate_to(self, target_value, duration=1000, easing_curve=QEasingCurve.Type.OutCubic):
-        distance = abs(target_value - self.value())
-        if distance == 0:
-            print("Animation distance is 0, skipping animation")
-            return
-        duration = max(250, (duration * distance / 100)) # Scale duration based on distance
-        # print(f"Animating to {target_value} in {duration} ms")
+        # print(f"AnimatedSliderBS animate_to {self.value()}-{target_value}")
 
-        self.animation = QPropertyAnimation(self, b"value")
+        if self.animation.state() == QPropertyAnimation.State.Running:
+            # logger.info("Animation is running, stopping it before starting a new one.")
+            self.stop_animation() # This will also unblock signals
+
+        current_value = self.value() # Get current value after any potential stop
+        distance = abs(target_value - current_value)
+        if distance == 0:
+            # print("Animation distance is 0, skipping animation")
+            return
+        
+        duration = max(250, (duration * distance / 100)) # Scale duration based on distance
+
         self.animation.setDuration(int(duration))
-        self.animation.setStartValue(self.value())
+        self.animation.setStartValue(current_value) # Use current_value
         self.animation.setEndValue(target_value)
         self.animation.setEasingCurve(easing_curve)
 
         self.blockSignals(True)  # Block signals during animation
-        self.animation.finished.connect(lambda: self.blockSignals(False))  
-        self.animation.valueChanged.connect(self.update_ui_elements)  # Connect to update label
 
         self.animation.start()
     
     def stop_animation(self):
-        if self.animation:
-            self.animation.stop()
-            self.blockSignals(False)  # Ensure signals are unblocked
-
-    def update_ui_elements(self, value):
-        if self.label:
-            self.label.setText(str(value))
-
-        if self.icon:
-            self.icon.set_value(value)
+        logger.info("AnimatedSliderBS stop_animation")
+        
+        self.animation.stop()
+        self.blockSignals(False)  # Ensure signals are unblocked
+        
+        # self.animation.deleteLater()
+        # self.animation = None
+        
 
     # Stop animation when user interacts with the slider
     def wheelEvent(self, event: QWheelEvent):
@@ -125,24 +139,24 @@ class AnimatedSliderBlockSignals(QSlider):
             self.setValue(self.value() + self.scrollStep)
         else:
             self.setValue(self.value() - self.scrollStep)
-        self.stop_animation()
-        # self.update_ui_elements(self.value())
+
+        if (self.animation.state() == QPropertyAnimation.State.Running):
+            self.stop_animation()
+            self.valueChanged.emit(self.value())
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
-        self.stop_animation()
-        self.update_ui_elements(self.value())
+        if event.button() == Qt.MouseButton.LeftButton:
+            # print("AnimatedSliderBS LeftButton pressed")
+            if (self.animation.state() == QPropertyAnimation.State.Running):
+                self.stop_animation()
+                self.valueChanged.emit(self.value())
 
     def keyPressEvent(self, event: QKeyEvent):
         super().keyPressEvent(event)
-        self.stop_animation()
-        # self.update_ui_elements(self.value())
-
-    def add_icon(self, icon):
-        self.icon = icon
-
-    def add_label(self, label):
-        self.label = label
+        if (self.animation.state() == QPropertyAnimation.State.Running):
+            self.stop_animation()
+            self.valueChanged.emit(self.value())
 
 
 
@@ -154,7 +168,6 @@ class SliderAnimationDemo(QMainWindow):
         self.setGeometry(100, 100, 400, 200)
 
         layout = QVBoxLayout()
-
 
 
         self.slider = AnimatedSlider()
@@ -169,7 +182,6 @@ class SliderAnimationDemo(QMainWindow):
         layout.addWidget(self.slider)
         layout.addWidget(self.button)
         layout.addWidget(self.button2)
-
 
 
         self.sliders = [AnimatedSlider() for _ in range(5)]
@@ -189,32 +201,11 @@ class SliderAnimationDemo(QMainWindow):
         self.continuous_slider.setValue(0)
         self.animate_continuous_slider()
 
-        # Demonstration of AnimatedSliderBlockSignals with QLabel
-        self.label_slider_label = QLabel("0")
-        self.label_slider = AnimatedSliderBlockSignals(label=self.label_slider_label)
-        self.label_slider.setValue(50)
-        self.label_slider_button = QPushButton("Animate to 100")
-        self.label_slider_button.clicked.connect(lambda: self.label_slider.animate_to(100))
-        layout.addWidget(self.label_slider)
-        layout.addWidget(self.label_slider_label)
-
-        # Demonstration with BrightnessIcon
-        self.br_icon = BrightnessIcon(icon_path="src/assets/icons/sun_dark.png")
-        self.br_icon.set_value(50)
-        self.label_slider.valueChanged.connect(lambda value, ico=self.br_icon: ico.set_value(value))
-        self.label_slider.add_icon(self.br_icon)
-        layout.addWidget(self.br_icon)
-
-        layout.addWidget(self.label_slider_button)
-
-        # Connect QLabel to slider's valueChanged signal
-        self.label_slider.valueChanged.connect(lambda value: self.label_slider_label.setText(str(value)))
 
         container = QWidget()
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-        # QTimer.singleShot(1000, self.sleep)
 
 
     def animate_sliders(self):
@@ -226,13 +217,14 @@ class SliderAnimationDemo(QMainWindow):
         self.continuous_slider.animate_to(target_value, duration=2000)
         QTimer.singleShot(2000, self.animate_continuous_slider)
 
-    def sleep(self):
-        time.sleep(2)
-
-
 
 
 if __name__ == "__main__":
+
+    logging.basicConfig(level=logging.INFO, 
+                        format='[%(asctime)s] [%(levelname)s] %(message)s', 
+                        datefmt="%H:%M:%S")
+
     app = QApplication([])
     window = SliderAnimationDemo()
     window.show()

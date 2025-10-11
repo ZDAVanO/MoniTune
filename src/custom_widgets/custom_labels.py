@@ -1,6 +1,25 @@
-from PySide6.QtWidgets import QLabel, QApplication, QVBoxLayout, QWidget, QSlider
-from PySide6.QtGui import QPixmap, QIcon, QTransform
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QLabel, 
+    QApplication, 
+    QVBoxLayout, 
+    QWidget, 
+    QSlider,
+    QPushButton
+)
+from PySide6.QtGui import (
+    QPixmap, 
+    QIcon, 
+    QTransform
+)
+from PySide6.QtCore import (
+    Qt,
+    QVariantAnimation
+)
+
+import logging
+logger = logging.getLogger(__name__)
+
+
 
 class BrightnessIcon(QLabel):
     def __init__(self, icon_path, parent=None):
@@ -18,38 +37,76 @@ class BrightnessIcon(QLabel):
 
         self.rotation_range = 270  # Control the range of rotation
 
-    
         self.setFixedSize(self.icon_size, self.icon_size)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setPixmap(self.sun_icon.pixmap(self.icon_size, self.icon_size))
-        # sun_icon = QPixmap("src/assets/icons/sun_dark.png").scaled(26, 26, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
+        self.animation = None
 
 
     def set_value(self, value):
-        if 0 <= value <= 100:
+        # print(f"BrightnessIcon set_value {value}")
 
-            self.value = value
+        value = max(0, min(100, value))  # Ensure value is between 0 and 100
+        self.value = value
 
-            # Calculate the new icon size based on the slider value
-            icon_size = self.min_size + (value / 100) * (self.icon_size - self.min_size)
-            # print("icon_size:", icon_size)
-            pixmap = self.sun_icon.pixmap(icon_size, icon_size)
-            
-            # Rotate the pixmap
-            angle = (value - 50) * (self.rotation_range / 100)
-            transform = QTransform().rotate(angle)
-            rotated_pixmap = pixmap.transformed(transform, Qt.SmoothTransformation)
-            
-            self.setPixmap(rotated_pixmap)
-
-        else:
-            raise ValueError("Value must be between 0 and 100")
-
-
+        # Calculate the new icon size based on the slider value
+        icon_size = self.min_size + (value / 100) * (self.icon_size - self.min_size)
+        # print("icon_size:", icon_size)
+        pixmap = self.sun_icon.pixmap(icon_size, icon_size)
+        
+        # Rotate the pixmap
+        angle = (value - 50) * (self.rotation_range / 100)
+        transform = QTransform().rotate(angle)
+        rotated_pixmap = pixmap.transformed(transform, Qt.SmoothTransformation)
+        
+        self.setPixmap(rotated_pixmap)
 
     
+    def animate_to(self, target_value, step_duration=7, easing_curve=None):
+        # print(f"BrightnessIcon animate_to {self.value}-{target_value}")
+
+        self.stop_animation()  # Stop any ongoing animation before starting a new one
+
+        target_value = max(0, min(100, target_value))  # Ensure target value is between 0 and 100
+
+        distance = abs(target_value - self.value)
+        duration = int(distance * step_duration)
+        # print(f"distance: {distance}, duration: {duration}")
+
+        # Skip animation if the target value is very close to the current value
+        if (distance <= 2):
+            self.set_value(target_value)
+            return
+
+        self.animation = QVariantAnimation()
+        self.animation.setDuration(duration)
+        self.animation.setStartValue(self.value)
+        self.animation.setEndValue(target_value)
+        if easing_curve:
+            self.animation.setEasingCurve(easing_curve)
+        
+        self.animation.valueChanged.connect(self.set_value)
+
+        self.animation.start()
+
+
+    def stop_animation(self):
+        if self.animation and (self.animation.state() == QVariantAnimation.State.Running):
+            # print("BrightnessIcon stop_animation")
+            self.animation.stop()
+
+            self.animation.deleteLater()
+            self.animation = None
+
+
+
 if __name__ == "__main__":
+
+    logging.basicConfig(level=logging.INFO, 
+                        format='[%(asctime)s] [%(levelname)s] %(message)s', 
+                        datefmt="%H:%M:%S")
+
     import sys
     app = QApplication(sys.argv)
 
@@ -60,15 +117,24 @@ if __name__ == "__main__":
     icon = BrightnessIcon(icon_path="src/assets/icons/sun_dark.png")
     # icon.set_value(100)
     icon.setStyleSheet("""
-                            background-color: blue;
-                           
-                            """) # background-color: yellow;
+                       background-color: blue;
+                       """)
     slider = QSlider(Qt.Horizontal)
     slider.setRange(0, 100)
-    slider.valueChanged.connect(lambda value: icon.set_value(value))
+    slider.valueChanged.connect(lambda value: icon.animate_to(value))
 
     layout.addWidget(icon)
     layout.addWidget(slider)
+
+    # Demonstration of animation
+    animate_button = QPushButton("Animate to 100")
+    animate_button.clicked.connect(lambda: icon.animate_to(100))
+    layout.addWidget(animate_button)
+
+    animate_button_0 = QPushButton("Animate to 0")
+    animate_button_0.clicked.connect(lambda: icon.animate_to(0))
+    layout.addWidget(animate_button_0)
+
     window.setLayout(layout)
     window.show()
 
