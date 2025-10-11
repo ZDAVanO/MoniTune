@@ -1,338 +1,378 @@
-import win32api, win32con
 import ctypes
-from ctypes import wintypes
-import time
+import logging
 import threading
+import time
+
+from ctypes import wintypes
 
 import screen_brightness_control as sbc
-# from monitorcontrol import get_monitors, VCPError
+import win32api, win32con
 
-import logging
 logger = logging.getLogger(__name__)
 
 
 
-VCP_LUMINANCE_CODE = 0x10
-VCP_CONTRAST_CODE = 0x12
-# 0x01: power on, 0x04: standby (screenoff + blinking led), 0x05: power off
-VCP_POWER_MODE_CODE = 0xD6 
+VCP_CODES = {
+    # 0-100, called 'brightness' on the OSD
+    "Luminance": 0x10,
+
+    # 0-100
+    "Contrast": 0x12,
+    
+    # 0x01: power on, 0x04: standby (screenoff + blinking led), 0x05: power off
+    "Power Mode": 0xD6,
+}
+
+METHOD_MAP = {
+    sbc.windows.WMI: "WMI",
+    sbc.windows.VCP: "VCP",
+}
+
+ORIENTATION = {
+    'landscape': 0,
+    'portrait': 1,
+    'landscape_flipped': 2,
+    'portrait_flipped': 3,
+}
+
 PHYSICAL_MONITOR_DESCRIPTION_SIZE = 128
 
-
-
-# MARK: get_available_refresh_rates()
-def get_available_refresh_rates(device):
-    refresh_rates = set()
-    i = 0
-    while True:
-        try:
-            devmode = win32api.EnumDisplaySettings(device, i)
-            refresh_rates.add(devmode.DisplayFrequency)
-            i += 1
-        except Exception:
-            break
-    return sorted(refresh_rates)
-
-
-
-# MARK: get_available_resolutions()
-def get_available_resolutions(device):
-    resolutions = set()
-    i = 0
-    while True:
-        try:
-            devmode = win32api.EnumDisplaySettings(device, i)
-            if devmode.PelsWidth >= 800 and devmode.PelsHeight >= 600:
-                resolutions.add((devmode.PelsWidth, devmode.PelsHeight))
-            i += 1
-        except Exception:
-            break
-    return sorted(resolutions)
-
-
-
-# MARK: list_monitors()
-def get_monitor_list():
-    monitor_list = []
-    monitors = win32api.EnumDisplayMonitors()
-    for i, m in enumerate(monitors):
-        monitor_info = win32api.GetMonitorInfo(m[0]) # {'Monitor': (0, 0, 1920, 1080), 'Work': (0, 0, 1920, 1032), 'Flags': 1, 'Device': '\\\\.\\DISPLAY1'}
-        device = monitor_info['Device']
-        monitor_list.append(device)
-    return monitor_list
-
-
-
 class _PHYSICAL_MONITOR(ctypes.Structure):
-    _fields_ = [('hPhysicalMonitor', wintypes.HANDLE), 
-                ('szPhysicalMonitorDescription', 
+    _fields_ = [('hPhysicalMonitor', wintypes.HANDLE),
+                ('szPhysicalMonitorDescription',
                            wintypes.WCHAR * PHYSICAL_MONITOR_DESCRIPTION_SIZE)]
-    
-# MARK: get_monitors_info()
-def get_monitors_info():
 
-    monitors = []
 
-    # Callback function for EnumDisplayMonitors
-    def monitor_enum_proc(hMonitor, hdcMonitor, lprcMonitor, dwData):
-        monitor_info = win32api.GetMonitorInfo(hMonitor)
-        device = monitor_info.get('Device', None)
+# MARK: Monitor
+class Monitor:
+    def __init__(self, index, hMonitor, sbc_monitor_info):
+        self.index = index
 
-        if device:
-            devmode = win32api.EnumDisplaySettings(device, win32con.ENUM_CURRENT_SETTINGS)
-            available_refresh_rates = get_available_refresh_rates(device)
-            available_resolutions = get_available_resolutions(device)
-            monitors.append({
-                "Device": device,
-                "hMonitor": hMonitor,
-                "RefreshRate": devmode.DisplayFrequency,
-                "AvailableRefreshRates": available_refresh_rates,
-                "Resolution": (devmode.PelsWidth, devmode.PelsHeight),
-                "AvailableResolutions": available_resolutions
-            })
-        return True
+        win_monitor_info = win32api.GetMonitorInfo(hMonitor)
+        self.device_name = win_monitor_info.get("Device", None)
 
-    # Define the callback type
-    MonitorEnumProc = ctypes.WINFUNCTYPE(wintypes.BOOL, 
-                                         wintypes.HMONITOR, 
-                                         wintypes.HDC, 
-                                         ctypes.POINTER(wintypes.RECT), 
-                                         wintypes.LPARAM)
+        self.hMonitor = hMonitor
+        self.hPhysicalMonitor = self._get_physical_monitor_handle()
 
-    # Load the function from user32.dll
-    user32 = ctypes.WinDLL('user32', use_last_error=True)
-    enum_display_monitors = user32.EnumDisplayMonitors
-    enum_display_monitors.argtypes = [wintypes.HDC, ctypes.POINTER(wintypes.RECT), MonitorEnumProc, wintypes.LPARAM]
-    enum_display_monitors.restype = wintypes.BOOL
-
-    # Call EnumDisplayMonitors
-    enum_display_monitors(None, None, MonitorEnumProc(monitor_enum_proc), 0)
-
-    sbc_info = sbc.list_monitors_info()
-    # logger.debug(f"sbc_info: {sbc_info}")
-    logger.debug("sbc_info:\n" + "\n".join(f"{monitor}" for monitor in sbc_info))
-    
-    # monitorcontrol_monitors = get_monitors()
-    for index, monitor in enumerate(monitors):
-        monitor["index"] = index
-        monitor["name"] = sbc_info[index]["name"]
-        monitor["model"] = sbc_info[index]["model"]
-
-        monitor["serial"] = sbc_info[index]["serial"]
-        # monitor["serial"] = None
-        if not monitor["serial"]:
-            logger.warning(f"Monitor {index} does not have a serial number, using index as serial")
-            monitor["serial"] = index
-
-        monitor["manufacturer"] = sbc_info[index]["manufacturer"]
-        monitor["manufacturer_id"] = sbc_info[index]["manufacturer_id"]
-
-        if sbc_info[index]["method"] == sbc.windows.WMI:
-            monitor["method"] = "WMI"
-        elif sbc_info[index]["method"] == sbc.windows.VCP:
-            monitor["method"] = "VCP"
-        else:
-            monitor["method"] = sbc_info[index]["method"]
+        devmode = win32api.EnumDisplaySettings(self.device_name,
+                                               win32con.ENUM_CURRENT_SETTINGS)
         
-        if monitor["manufacturer"] is None:
-            monitor["display_name"] = f"DISPLAY{index + 1}"
-        else:
-            monitor["display_name"] = f"{monitor['manufacturer']} ({index + 1})"
+        self.resolution = (devmode.PelsWidth, devmode.PelsHeight)
+        self.refresh_rate = devmode.DisplayFrequency
+        self.available_resolutions, self.available_refresh_rates = self._get_available_resolutions_and_refresh_rates()
+
+        self.name = sbc_monitor_info["name"]
+        self.model = sbc_monitor_info["model"]
+
+        self.serial = sbc_monitor_info["serial"] or self.index
+        if not sbc_monitor_info["serial"]:
+            logger.warning(f"Monitor {self.index} does not have a serial number, using index as serial")
         
+        self.manufacturer = sbc_monitor_info["manufacturer"]
+        self.manufacturer_id = sbc_monitor_info["manufacturer_id"]
+
+        self.method = METHOD_MAP.get(sbc_monitor_info["method"], 
+                                     sbc_monitor_info["method"]) # "VCP", "WMI"
+
+        self.display_name = f"DISPLAY {self.index + 1}"
+        if self.manufacturer:
+            self.display_name = f"{self.manufacturer} ({self.index + 1})"
+
+        logger.debug(
+            f"Monitor init: "
+            f"index={self.index}, "
+            f"device_name='{self.device_name}', "
+
+            f"hMonitor={self.hMonitor}, "
+            f"hPhysicalMonitor={self.hPhysicalMonitor}, "
+
+            f"resolution={self.resolution}, "
+            f"available_resolutions={self.available_resolutions}, "
+            f"refresh_rate={self.refresh_rate}, "
+            f"available_refresh_rates={self.available_refresh_rates}, "
+
+            f"name='{self.name}', "
+            f"model='{self.model}', "
+            f"serial='{self.serial}', "
+            f"manufacturer='{self.manufacturer}', "
+            f"manufacturer_id='{self.manufacturer_id}', "
+            f"method='{self.method}', "
+            
+            f"display_name='{self.display_name}'"
+        )
+
+
+    # MARK: __repr__()
+    def __repr__(self):
+        return (
+            f"<Monitor(name='{self.display_name}', "
+            f"serial='{self.serial}', "
+            f"method='{self.method}', "
+            f"hpm={self.hPhysicalMonitor})>"
+        )
+
+    # MARK: _get_physical_monitor_handle()
+    def _get_physical_monitor_handle(self):
+        # start_time = time.time()
         monitor_number = wintypes.DWORD()
         if not ctypes.windll.dxva2.GetNumberOfPhysicalMonitorsFromHMONITOR(
-                                         monitor["hMonitor"], ctypes.byref(monitor_number)):
+            int(self.hMonitor), ctypes.byref(monitor_number)
+        ):
             raise ctypes.WinError()
+
         physical_monitor_array = (_PHYSICAL_MONITOR * monitor_number.value)()
         if not ctypes.windll.dxva2.GetPhysicalMonitorsFromHMONITOR(
-                               monitor["hMonitor"], monitor_number, physical_monitor_array):
+            int(self.hMonitor), monitor_number, physical_monitor_array
+        ):
             raise ctypes.WinError()
-        for physical_monitor in physical_monitor_array:
-            monitor["hPhysicalMonitor"] = physical_monitor.hPhysicalMonitor
 
-        # monitor["mc_obj"] = monitorcontrol_monitors[index]
+        # logger.info(f"_get_physical_monitor_handle took {time.time() - start_time:.4f} seconds for hMonitor {self.hMonitor}")
+        return physical_monitor_array[0].hPhysicalMonitor  # Return first handle
 
-    # logger.debug(f"Monitors info: {monitors}")
-    logger.debug("Monitors info:\n" + "\n".join(f"{monitor}" for monitor in monitors))
+    # MARK: _get_available_resolutions_and_refresh_rates()
+    def _get_available_resolutions_and_refresh_rates(self):
+        # start_time = time.time()
+        resolutions = set()
+        refresh_rates = set()
+        i = 0
+        while True:
+            try:
+                devmode = win32api.EnumDisplaySettings(self.device_name, i)
+                if devmode.PelsWidth >= 800 and devmode.PelsHeight >= 600:
+                    resolutions.add((devmode.PelsWidth, devmode.PelsHeight))
+                refresh_rates.add(devmode.DisplayFrequency)
+                i += 1
+            except win32api.error:
+                break
+        # logger.info(f"_get_available_resolutions_and_refresh_rates took {time.time() - start_time:.4f} seconds for device {self.device_name}")
+        return sorted(resolutions, reverse=True), sorted(refresh_rates)
 
-    return monitors
+    # MARK: _get_vcp_feature_retry()
+    def _get_vcp_feature_retry(self, code, retries=1, delay=0.05):
+        for attempt in range(retries):
+            try:
+                current_value = wintypes.DWORD()
+                maximum_value = wintypes.DWORD()
+                if not ctypes.windll.dxva2.GetVCPFeatureAndVCPFeatureReply(
+                    self.hPhysicalMonitor, 
+                    wintypes.BYTE(code), 
+                    None,
+                    ctypes.byref(current_value), 
+                    ctypes.byref(maximum_value)
+                ):
+                    raise ctypes.WinError()
+                return current_value.value
+            except Exception as e:
+                logger.info(f"Attempt {attempt + 1} failed to get VCP feature {hex(code)}: {e}")
+                if attempt == retries - 1:
+                    logger.error(f"Failed to get VCP feature {hex(code)} after {retries} attempts.")
+                    return None
+                time.sleep(delay)
+
+    # MARK: _set_vcp_feature_retry()
+    def _set_vcp_feature_retry(self, code, value, retries=1, delay=0.05):
+        for attempt in range(retries):
+            try:
+                if not ctypes.windll.dxva2.SetVCPFeature(
+                    self.hPhysicalMonitor, wintypes.BYTE(code), wintypes.DWORD(value)
+                ):
+                    raise ctypes.WinError()
+                return True
+            except Exception as e:
+                logger.info(f"Attempt {attempt + 1} failed to set VCP feature {hex(code)}: {e}")
+                if attempt == retries - 1:
+                    logger.error(f"Failed to set VCP feature {hex(code)} after {retries} attempts.")
+                    return False
+                time.sleep(delay)
 
 
+    # MARK: get_brightness()
+    def get_brightness(self, retries=1):
+        logger.debug(f"Getting brightness for {self}")
+        if self.method == "VCP":
+            return self._get_vcp_feature_retry(VCP_CODES["Luminance"], retries=retries)
+        elif self.method == "WMI":
+            try:
+                # sbc.get_brightness returns a list, take the first element
+                # return sbc.get_brightness(display=self.index)[0] # Using index for WMI
+                return sbc.get_brightness(display=self.serial)[0]
+            except Exception as e:
+                logger.warning(f"Failed to get brightness for display {self.serial} (index {self.index}): {e}")
+                return None
+        logger.warning(f"Unknown method {self.method} for getting brightness of {self}")
+        return None
 
-# MARK: set_refresh_rate()
-def set_refresh_rate(monitor, refresh_rate):
-    device = monitor["Device"]
-
-    devmode = win32api.EnumDisplaySettings(device, win32con.ENUM_CURRENT_SETTINGS)
-    devmode.DisplayFrequency = refresh_rate
-    result = win32api.ChangeDisplaySettingsEx(device, devmode)
-
-    if result == win32con.DISP_CHANGE_SUCCESSFUL:
-        logger.info(f"Successfully changed the refresh rate of {device} to {refresh_rate} Hz.")
-        return True
-    else:
-        logger.error(f"Failed to change the refresh rate of {device} to {refresh_rate}.")
+    # MARK: set_brightness()
+    def set_brightness(self, value, retries=1):
+        logger.debug(f"Setting brightness for {self} to {value}")
+        value = int(max(0, min(100, value))) # Ensure value is between 0 and 100
+        if self.method == "VCP":
+            return self._set_vcp_feature_retry(VCP_CODES["Luminance"], value, retries=retries)
+        elif self.method == "WMI":
+            try:
+                # sbc.set_brightness(value, display=self.index) # Using index for WMI
+                sbc.set_brightness(value, display=self.serial)
+                return True
+            except Exception as e:
+                logger.warning(f"Failed to set brightness for display {self} to {value}: {e}")
+                return False
+        logger.warning(f"Unknown method {self.method} for setting brightness of {self}")
         return False
 
 
+    # MARK: get_contrast()
+    def get_contrast(self, retries=1):
+        if self.method == "VCP":
+            return self._get_vcp_feature_retry(VCP_CODES["Contrast"], retries=retries)
+        logger.debug(f"Contrast not supported via {self.method} for {self}")
+        return None
 
-# MARK: set_brightness_sbc()
-def set_brightness_sbc(monitor_serial, br_value):
-        # monitor_serial = get_monitors_info()[monitor_index]['serial']
-        sbc.set_brightness(int(br_value), display=monitor_serial)
-
-
-# MARK: get_brightness_sbc()
-def get_brightness_sbc(display):
-    try:
-        br_value = sbc.get_brightness(display=display)[0]
-    except Exception as e:
-        logger.error(f"Error getting brightness for display {display}: {e}")
-        br_value = None
-    
-    return br_value
+    # MARK: set_contrast()
+    def set_contrast(self, value, retries=1):
+        value = int(max(0, min(100, value))) # Ensure value is between 0 and 100
+        if self.method == "VCP":
+            return self._set_vcp_feature_retry(VCP_CODES["Contrast"], value, retries=retries)
+        logger.debug(f"Contrast not supported via {self.method} for {self}")
+        return False
 
 
+    # MARK: get_power_mode()
+    def get_power_mode(self, retries=1):
+        if self.method == "VCP":
+            return self._get_vcp_feature_retry(VCP_CODES["Power Mode"], retries=retries)
+        logger.debug(f"Power mode not supported via {self.method} for {self}")
+        return None
 
-# MARK: set_resolution()
-def set_resolution(device, width, height):
-    devmode = win32api.EnumDisplaySettings(device, win32con.ENUM_CURRENT_SETTINGS)
-    devmode.PelsWidth = width
-    devmode.PelsHeight = height
-    devmode.Fields = win32con.DM_PELSWIDTH | win32con.DM_PELSHEIGHT
-
-    result = win32api.ChangeDisplaySettingsEx(device, devmode)
-    if result != win32con.DISP_CHANGE_SUCCESSFUL:
-        raise Exception(f"Failed to change resolution to {width}x{height} for device {device}")
-
-
-
-# MARK: get_vcf_feature_and_vcf_feature_reply()
-def get_vcf_feature_and_vcf_feature_reply(handle, code):
-        """Get current and maximun values for continuous VCP codes"""
-        current_value = wintypes.DWORD()
-        maximum_value = wintypes.DWORD()
-        if not ctypes.windll.dxva2.GetVCPFeatureAndVCPFeatureReply(
-                                       handle, wintypes.BYTE(code), None, 
-                                       ctypes.byref(current_value), 
-                                       ctypes.byref(maximum_value)):
-            raise ctypes.WinError()
-        return current_value.value, maximum_value.value
-
-# MARK: set_vcp_feature()
-def set_vcp_feature(handle, code, value):
-        """Set 'code' to 'value'"""
-        if not ctypes.windll.dxva2.SetVCPFeature(handle, 
-                                                 wintypes.BYTE(code), 
-                                                 wintypes.DWORD(value)
-                                                 ):
-            raise ctypes.WinError()
-        
-
-# MARK: get_brightness_vcp()
-def get_brightness_vcp(handle, retries=1):
-    for attempt in range(retries):
-        try:
-            br_value = get_vcf_feature_and_vcf_feature_reply(handle, VCP_LUMINANCE_CODE)[0]
-            # raise ValueError("brightness value is None")
-            return br_value
-        except Exception as e:
-            logger.info(f"Attempt {attempt + 1} failed to get brightness: {e}")
-            if attempt == retries - 1:
-                return None
-            time.sleep(0.05)
-
-# MARK: set_brightness_vcp()
-def set_brightness_vcp(handle, value, retries=1):
-        value = max(0, min(100, value))  # Ensure value is between 0 and 100
-        for attempt in range(retries):
-            try:
-                set_vcp_feature(handle, VCP_LUMINANCE_CODE, value)
-                return True
-            except Exception as e:
-                logger.info(f"Attempt {attempt + 1} failed to set brightness: {e}")
-                if attempt == retries - 1:
-                    return False
-                time.sleep(0.05)
-
-# MARK: get_contrast_vcp()
-def get_contrast_vcp(handle, retries=1):
-    for attempt in range(retries):
-        try:
-            contrast_value = get_vcf_feature_and_vcf_feature_reply(handle, VCP_CONTRAST_CODE)[0]
-            # raise ValueError("contrast value is None")
-            return contrast_value
-        except Exception as e:
-            logger.info(f"Attempt {attempt + 1} failed to get contrast: {e}")
-            if attempt == retries - 1:
-                return None
-            time.sleep(0.05)
-
-# MARK: set_contrast_vcp()
-def set_contrast_vcp(handle, value, retries=1):
-        value = max(0, min(100, value)) # Ensure value is between 0 and 100
-        for attempt in range(retries):
-            try:
-                set_vcp_feature(handle, VCP_CONTRAST_CODE, value)
-                return True
-            except Exception as e:
-                logger.info(f"Attempt {attempt + 1} failed to set contrast: {e}")
-                if attempt == retries - 1:
-                    return False
-                time.sleep(0.05)
-
-# MARK: get_power_mode_vcp()
-def get_power_mode_vcp(handle, retries=1):
-    for attempt in range(retries):
-        try:
-            power_mode = get_vcf_feature_and_vcf_feature_reply(handle, VCP_POWER_MODE_CODE)[0]
-            # raise ValueError("contrast value is None")
-            return power_mode
-        except Exception as e:
-            logger.info(f"Attempt {attempt + 1} failed to get power mode: {e}")
-            if attempt == retries - 1:
-                return None
-            time.sleep(0.05)
-
-# MARK: set_power_mode_vcp()
-def set_power_mode_vcp(handle, value, retries=1):
+    # MARK: set_power_mode()
+    def set_power_mode(self, value, retries=1):
+        # 0x01: power on, 0x04: standby, 0x05: power off
         valid_power_modes = [0x01, 0x04, 0x05]
         if value not in valid_power_modes:
-            logger.error(f"Invalid power mode value: {value}. Must be one of {valid_power_modes}.")
+            logger.error(f"Invalid power mode value for {self}: {value}. Must be one of {valid_power_modes}.")
+            return False
+        if self.method == "VCP":
+            return self._set_vcp_feature_retry(VCP_CODES["Power Mode"], value, retries=retries)
+        logger.debug(f"Power mode not supported via {self.method} for {self}")
+        return False
+
+
+    # MARK: set_resolution()
+    def set_resolution(self, width, height):
+
+        if (width, height) not in self.available_resolutions:
+            logger.error(f"Resolution {width}x{height} is not supported by {self}")
             return False
         
-        for attempt in range(retries):
-            try:
-                set_vcp_feature(handle, VCP_POWER_MODE_CODE, value)
+        logger.info(f"Setting resolution for {self} to {width}x{height}")
+        
+        devmode = win32api.EnumDisplaySettings(self.device_name, win32con.ENUM_CURRENT_SETTINGS)
+        devmode.PelsWidth = width
+        devmode.PelsHeight = height
+        # devmode.Fields = win32con.DM_PELSWIDTH | win32con.DM_PELSHEIGHT # Закоментовано, бо може викликати помилки, якщо інші поля не валідні
+        devmode.Fields = win32con.DM_PELSWIDTH | win32con.DM_PELSHEIGHT
+        try:
+            # result = win32api.ChangeDisplaySettingsEx(self.device_name, devmode, 0) # Додано 0 як останній аргумент (dwflags)
+            # result = win32api.ChangeDisplaySettingsEx(self.device_name, devmode)
+            result = win32api.ChangeDisplaySettingsEx(self.device_name, devmode, Flags=win32con.CDS_UPDATEREGISTRY)
+
+            if result == win32con.DISP_CHANGE_SUCCESSFUL:
+                logger.info(f"Successfully changed resolution for {self} to {width}x{height}")
+                self.resolution = (width, height)
                 return True
+            else:
+                logger.error(f"Failed to change resolution for {self} to {width}x{height}. Result code: {result}")
+                return False
+        except Exception as e:
+            logger.error(f"Exception changing resolution for {self} to {width}x{height}: {e}")
+            return False
+
+    # MARK: set_refresh_rate()
+    def set_refresh_rate(self, rate):
+
+        if rate not in self.available_refresh_rates:
+            logger.error(f"Refresh rate {rate}Hz is not supported by {self}")
+            return False
+        
+        logger.info(f"Setting refresh rate for {self} to {rate}Hz")
+        
+        devmode = win32api.EnumDisplaySettings(self.device_name, win32con.ENUM_CURRENT_SETTINGS)
+        devmode.DisplayFrequency = rate
+        # devmode.Fields = win32con.DM_DISPLAYFREQUENCY # Закоментовано
+        try:
+            # result = win32api.ChangeDisplaySettingsEx(self.device_name, devmode, 0) # Додано 0 як останній аргумент (dwflags)
+            # result = win32api.ChangeDisplaySettingsEx(self.device_name, devmode)
+            result = win32api.ChangeDisplaySettingsEx(self.device_name, devmode, Flags=win32con.CDS_UPDATEREGISTRY)
+            if result == win32con.DISP_CHANGE_SUCCESSFUL:
+                logger.info(f"Successfully changed refresh rate for {self} to {rate}Hz")
+                self.refresh_rate = rate
+                return True
+            else:
+                logger.error(f"Failed to change refresh rate for {self} to {rate}Hz. Result code: {result}")
+                return False
+        except Exception as e:
+            logger.error(f"Exception changing refresh rate for {self} to {rate}Hz: {e}")
+            return False
+
+    # MARK: set_orientation()
+    def set_orientation(self, orientation):
+        devmode = win32api.EnumDisplaySettings(self.device_name, win32con.ENUM_CURRENT_SETTINGS)
+
+        # Change orientation
+        devmode.DisplayOrientation = orientation
+
+        # Swap width and height if orientation is vertical
+        if orientation in [1, 3]:
+            devmode.PelsWidth, devmode.PelsHeight = devmode.PelsHeight, devmode.PelsWidth
+
+        # Apply changes
+        result = win32api.ChangeDisplaySettingsEx(self.device_name, devmode,)
+
+        if result == win32con.DISP_CHANGE_SUCCESSFUL:
+            logger.info(f"Successfully changed orientation for {self} to {orientation}")
+            return True
+        else:
+            logger.error(f"Failed to change orientation for {self} to {orientation}. Result code: {result}")
+            return False
+
+
+# MARK: get_monitors()
+def get_monitors():
+    """Returns a list of Monitor objects for each detected monitor."""
+    start_time = time.time()
+    monitors_objects = []
+
+    try:
+        sbc_monitors_info = sbc.list_monitors_info()
+        logger.debug("sbc_info:\n" + "\n".join(f"{monitor}" for monitor in sbc_monitors_info))
+
+        for index, (hMonitor, hdcMonitor, rect) in enumerate(win32api.EnumDisplayMonitors()):
+            try:
+                # print(f"Processing monitor {index}: hMonitor={hMonitor}, hdcMonitor={hdcMonitor}, rect={rect}")
+                logger.debug(f"Processing monitor {index}: hMonitor={hMonitor}, hdcMonitor={hdcMonitor}, rect={rect}")
+                monitors_objects.append(Monitor(index, int(hMonitor), sbc_monitors_info[index]))
             except Exception as e:
-                logger.info(f"Attempt {attempt + 1} failed to set power mode: {e}")
-                if attempt == retries - 1:
-                    return False
-                time.sleep(0.05)
+                logger.error(f"Failed to create Monitor object for index {index}: {e}")
+
+    except Exception as e:
+        logger.error(f"Error in get_monitors: {e}")
+
+    logger.info(f"get_monitors took {time.time() - start_time:.4f} seconds")
+    return monitors_objects
 
 
-# MARK: print_mi()
-def print_mi(monitors_info):
-    print("Monitors Info:")
-    
-    if isinstance(monitors_info, dict):
-        # Якщо передано словник
-        for serial, monitor in monitors_info.items():
-            print(f"  Display: {monitor.get('display_name', 'Unknown')} ({serial})")
-            for key, value in monitor.items():
-                print(f"    {key}: {value}")
-                
-    elif isinstance(monitors_info, list):
-        # Якщо передано список
-        for monitor in monitors_info:
-            serial = monitor.get('serial', 'Unknown')
-            print(f"  Display: {monitor.get('display_name', 'Unknown')} ({serial})")
-            for key, value in monitor.items():
-                print(f"    {key}: {value}")
-                
-    else:
-        print("Unsupported data format. Please provide a list or dictionary.")
+# MARK: get_monitor_device_names()
+def get_monitor_device_names():
+    """Returns a list of monitor device names (e.g. '\\\\.\\DISPLAY1')."""
+    device_names = []
+    try:
+        monitors_enum = win32api.EnumDisplayMonitors()
+        for i, m_info in enumerate(monitors_enum):
+            monitor_info = win32api.GetMonitorInfo(m_info[0]) # {'Monitor': (0, 0, 1920, 1080), 'Work': (0, 0, 1920, 1032), 'Flags': 1, 'Device': '\\\\.\\DISPLAY1'}
+            device = monitor_info['Device']
+            device_names.append(device)
+    except Exception as e:
+        logger.error(f"Error enumerating display monitors: {e}")
+    return device_names
 
 
 
@@ -343,36 +383,26 @@ if __name__ == "__main__":
                         format='[%(asctime)s] [%(levelname)s] %(message)s', 
                         datefmt="%H:%M:%S")
     
+    print(f"get_monitor_device_names: {get_monitor_device_names()}")
 
-    monitors_info = get_monitors_info()
-    print_mi(monitors_info)
+    # sbc_info = sbc.list_monitors_info()
+    # print(f"sbc_info: {sbc_info}")
 
-    sbc_info = sbc.list_monitors_info()
-    print(f"sbc_info: {sbc_info}")
+    monitors_info = get_monitors()
+    print(f"monitors_info: {monitors_info}")
 
-    print(f"list_monitors: {get_monitor_list()}")
+    print(sbc.list_monitors())
 
-    # print(f"screen_info: {screen_info}")
+    # get_monitors()
+    # get_monitors()
+    # get_monitors()
 
     # set_brightness_sbc(1, 0)
 
-    # monitors = get_monitors()
-    # print(f"monitors: {monitors}")
-
-    # mc_monitors = get_monitors()
-    # print(f"mc_monitors: {mc_monitors}")
-
-
-    # with mc_monitors[1]:
-    #     try:
-    #         print(f"contrast: {mc_monitors[1].get_contrast()}")
-    #     except VCPError as e:
-    #         print(f"Failed to get contrast for monitor: {e}")
-    
-    
     # print(get_contrast_vcp(monitors_info[1]["hPhysicalMonitor"]))
     # set_contrast_vcp(monitors_info[1]["hPhysicalMonitor"], 100)
 
+    # rotate_display('\\\\.\\DISPLAY2', ORIENTATION['landscape'])
 
     # for monitor in monitors_info:
     #     if monitor['method'] == "VCP":
@@ -395,7 +425,7 @@ if __name__ == "__main__":
     #             # print(f"Monitor {monitor['serial']} - Brightness: {sbc.get_brightness(monitor['serial'])}")
 
                 
-    #             print(f"Execution time for get_monitors_info(): {time.time() - start_time:.2f} seconds")
+    #             print(f"Execution time for get_monitors(): {time.time() - start_time:.2f} seconds")
                 
     #             # time.sleep(0.2)
 

@@ -34,8 +34,8 @@ from custom_widgets import (
 )
 
 from utils.monitor_utils import (
-    get_monitors_info, 
-    )
+    get_monitors, 
+)
 from utils.reg_utils import (
     is_dark_theme, 
     key_exists, 
@@ -47,7 +47,10 @@ from utils.reg_utils import (
     reg_write_dict, 
     reg_read_dict,
     delete_reg_key,
-    )
+)
+from utils.utils import (
+    check_github_update_available,
+)
 import config as cfg
 from config import tray_icons
 
@@ -145,8 +148,38 @@ class SettingFrame(BaseSettingFrame):
 
 
 
+
+# MARK: BaseToggleButton
+class BaseToggleButton(QPushButton):
+    def __init__(self, 
+                 tool_tip=None, 
+                 initial_state=False, 
+                 callback=None):
+        super().__init__()
+
+        self.callback = callback
+
+        # self.setMinimumSize(77, 28)
+        self.setCheckable(True)
+        self.setChecked(initial_state)
+        self.setText("Enabled" if initial_state else "Disabled")
+
+        if tool_tip:
+            self.setToolTip(tool_tip)
+
+        self.toggled.connect(self.on_toggle)
+
+    # MARK: on_toggle()
+    def on_toggle(self, checked):
+        logger.info(f"toggle button - {checked}")
+        self.setText("Enabled" if checked else "Disabled")
+
+        if callable(self.callback):
+            self.callback(checked)
+
+
 # MARK: SettingToggleButton
-class SettingToggleButton(QPushButton):
+class SettingToggleButton(BaseToggleButton):
     def __init__(self, 
                  main_window, 
                  tool_tip,
@@ -154,39 +187,82 @@ class SettingToggleButton(QPushButton):
                  reg_setting_name, 
                  callback=None, 
                  after_restart=False):
-        super().__init__()
+        
+        
+
+        # Отримуємо поточний стан з main_window перед ініціалізацією базового класу
+        checked = getattr(main_window, setting_name)
+        
+        super().__init__(
+            tool_tip=tool_tip,
+            initial_state=checked,
+            callback=callback
+        )
+
+        self.setMinimumSize(77, 28)
 
         self.main_window = main_window
         self.setting_name = setting_name
         self.reg_setting_name = reg_setting_name
-        self.callback = callback
         self.after_restart = after_restart
 
-        self.setMinimumSize(77, 28)
-        self.setCheckable(True)
-
-        checked = getattr(self.main_window, self.setting_name)
-        self.setChecked(checked)
-        self.setText("Enabled" if checked else "Disabled")
-        
-        if tool_tip:
-            self.setToolTip(tool_tip)
-
-        self.toggled.connect(self.on_toggle)
-        
-    # MARK: on_toggle()
+    # Перевизначаємо on_toggle
     def on_toggle(self, checked):
         logger.info(f"toggle {self.setting_name} - {checked}")
         self.setText("Enabled" if checked else "Disabled")
 
-        # print(self.sizeHint().width())
-        # print(self.height())
-
         if not self.after_restart:
             setattr(self.main_window, self.setting_name, checked)
+
         reg_write_bool(cfg.REGISTRY_PATH, self.reg_setting_name, checked)
+
         if callable(self.callback):
             self.callback(checked)
+
+
+
+# # MARK: SettingToggleButton
+# class SettingToggleButton(QPushButton):
+#     def __init__(self, 
+#                  main_window, 
+#                  tool_tip,
+#                  setting_name, 
+#                  reg_setting_name, 
+#                  callback=None, 
+#                  after_restart=False):
+#         super().__init__()
+
+#         self.main_window = main_window
+#         self.setting_name = setting_name
+#         self.reg_setting_name = reg_setting_name
+#         self.callback = callback
+#         self.after_restart = after_restart
+
+#         self.setMinimumSize(77, 28)
+#         self.setCheckable(True)
+
+#         checked = getattr(self.main_window, self.setting_name)
+#         self.setChecked(checked)
+#         self.setText("Enabled" if checked else "Disabled")
+        
+#         if tool_tip:
+#             self.setToolTip(tool_tip)
+
+#         self.toggled.connect(self.on_toggle)
+        
+#     # MARK: on_toggle()
+#     def on_toggle(self, checked):
+#         logger.info(f"toggle {self.setting_name} - {checked}")
+#         self.setText("Enabled" if checked else "Disabled")
+
+#         # print(self.sizeHint().width())
+#         # print(self.height())
+
+#         if not self.after_restart:
+#             setattr(self.main_window, self.setting_name, checked)
+#         reg_write_bool(cfg.REGISTRY_PATH, self.reg_setting_name, checked)
+#         if callable(self.callback):
+#             self.callback(checked)
 
 
 
@@ -416,6 +492,11 @@ class ProfileFrame(BaseBrightnessSlidersFrame):
                          display_names, 
                          brightness_data)
 
+        self.toggle_bth = BaseToggleButton(initial_state=True)
+        # self.toggle_bth.setStyleSheet("padding: 4px 10px;")
+        # self.toggle_bth.clicked.connect(self.choose_exe_dialog)
+        self.title_layout.addWidget(self.toggle_bth)
+
         self.entry = QLineEdit()
         self.entry.setPlaceholderText("path/to/app.exe")
         if process:
@@ -463,6 +544,7 @@ class ProfileFrame(BaseBrightnessSlidersFrame):
 class ScrollableTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        # self.setStyleSheet("background-color: red;")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -502,6 +584,11 @@ class SettingsWindow(QWidget):
 
         self.tab_widget = QTabWidget()
         # self.tab_widget.setDocumentMode(True)
+        # self.tab_widget.setStyleSheet(f"""
+        #                               QTabWidget::pane {{
+        #                                     background-color: transparent;
+        #                                 }}
+        #                               """)
 
         self.selected_tab = 0  # Variable to store the selected tab index
         self.tab_widget.currentChanged.connect(self.on_tab_change)
@@ -526,6 +613,10 @@ class SettingsWindow(QWidget):
         # self.update_tab_widget()
         QTimer.singleShot(0, self.update_tab_widget)
         super().showEvent(event)
+
+        if self.ap_timer and (not self.ap_timer.isActive()):
+            self.ap_timer.start(1000)
+            logger.info("ap_timer started")
 
     # MARK: closeEvent()
     def closeEvent(self, event):
@@ -591,14 +682,17 @@ class SettingsWindow(QWidget):
 
 
     # MARK: update_tab_widget()
-    def update_tab_widget(self):
+    def update_tab_widget(self, force=False):
+        start_time = time.time()
         
-        monitors_info = get_monitors_info()
-        serial_list = [monitor['serial'] for monitor in monitors_info]
-        if serial_list == self.serial_list:
-            logger.info("Monitors info not changed")
-            return
-        self.serial_list = serial_list
+        monitors_info = get_monitors()
+
+        # # prevent unnecessary updates
+        # serial_list = [monitor.serial for monitor in monitors_info]
+        # if (serial_list == self.serial_list) and (not force):
+        #     logger.info("Monitors info not changed")
+        #     return
+        # self.serial_list = serial_list
 
 
         self.tab_widget.blockSignals(True)
@@ -613,24 +707,27 @@ class SettingsWindow(QWidget):
 
         # hidden_displays = reg_read_list(cfg.REGISTRY_PATH, "HiddenDisplays")
         # # Exclude monitors that are in self.hidden_displays
-        # monitors_info = [monitor for monitor in monitors_info if monitor['serial'] not in hidden_displays]
+        # monitors_info = [monitor for monitor in monitors_info if monitor.serial not in hidden_displays]
 
         # Створюємо словник, де ключ — серійний номер
-        monitors_dict = {monitor['serial']: monitor for monitor in monitors_info}
+        monitors_dict = {monitor.serial: monitor for monitor in monitors_info}
         reg_order = reg_read_list(cfg.REGISTRY_PATH, "MonitorsOrder")
         # Сортуємо список моніторів відповідно до порядку з реєстру
         monitors_order = [serial for serial in reg_order if serial in monitors_dict]
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
-        monitors_order += [monitor['serial'] for monitor in monitors_info if monitor['serial'] not in monitors_order]
+        monitors_order += [monitor.serial for monitor in monitors_info if monitor.serial not in monitors_order]
         custom_monitor_names = reg_read_dict(cfg.REGISTRY_PATH, "CustomMonitorNames")
 
         display_names = {}
+        short_display_names = {}
         for monitor in monitors_info:
-            serial = monitor['serial']
+            serial = monitor.serial
             if serial in custom_monitor_names:
-                display_names[serial] = f"{custom_monitor_names[serial]} ({monitor['display_name']})"
+                display_names[serial] = f"{custom_monitor_names[serial]} ({monitor.display_name})"
+                short_display_names[serial] = custom_monitor_names[serial]
             else:
-                display_names[serial] = monitor['display_name']
+                display_names[serial] = monitor.display_name
+                short_display_names[serial] = monitor.display_name
 
 
         # MARK: General Tab
@@ -672,13 +769,11 @@ class SettingsWindow(QWidget):
                                                            reg_setting_name="EnableBreakReminders"))
         
 
-
-        icon_widget = TrayIconSelector(self.main_window)
-        icon = reg_read_list(cfg.REGISTRY_PATH, "TrayIcon")
-        logger.info(f"Icon: {icon}")
-        icon_widget.select_icon(icon[0] if icon else "monitune")
-        general_tab.layout_.addWidget(icon_widget)
-
+        tray_icon_selector = TrayIconSelector(self.main_window)
+        tray_icon = reg_read_list(cfg.REGISTRY_PATH, "TrayIcon")
+        logger.info(f"tray_icon: {tray_icon}")
+        tray_icon_selector.select_icon(tray_icon[0] if tray_icon else "monitune")
+        general_tab.layout_.addWidget(tray_icon_selector)
 
 
         # MARK: Hide Displays
@@ -686,13 +781,16 @@ class SettingsWindow(QWidget):
         logger.info(f"Hidden displays (reg): {hidden_displays}")
 
         def update_hidden_displays(monitor_id, state):
-            # print(f"Monitor ID: {monitor_id}, State: {state}")
-            if state == 2:
-                if monitor_id not in hidden_displays:
-                    hidden_displays.append(monitor_id)
-            else:
+            if state == 2: # 2 - checked
+                # if monitor_id not in hidden_displays:
+                #     hidden_displays.append(monitor_id)
                 if monitor_id in hidden_displays:
                     hidden_displays.remove(monitor_id)
+            else: # 0 - unchecked
+                # if monitor_id in hidden_displays:
+                #     hidden_displays.remove(monitor_id)
+                if monitor_id not in hidden_displays:
+                    hidden_displays.append(monitor_id)
             reg_write_list(cfg.REGISTRY_PATH, "HiddenDisplays", hidden_displays)
             self.main_window.hidden_displays = hidden_displays
             logger.info(f"Updated hidden displays: {hidden_displays}")
@@ -700,7 +798,7 @@ class SettingsWindow(QWidget):
         hide_displays_frame = SettingFrame(self, "Hide Displays")
         for serial in monitors_order:
             checkbox = QCheckBox(display_names[serial])
-            checkbox.setChecked(serial in hidden_displays)
+            checkbox.setChecked(serial not in hidden_displays)
             checkbox.stateChanged.connect(lambda state, s=serial: update_hidden_displays(s, state))
             hide_displays_frame.content_layout.addWidget(checkbox)
         general_tab.layout_.addWidget(hide_displays_frame)
@@ -729,7 +827,7 @@ class SettingsWindow(QWidget):
             icon.setPixmap(QIcon(cfg.icons["monitor"][self.theme]).pixmap(22, 22))
             row_layout.addWidget(icon)
 
-            label = QLabel(f"{monitors_dict[serial]['display_name']}")
+            label = QLabel(f"{monitors_dict[serial].display_name}")
             # label.setStyleSheet("background-color: red")
             label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             row_layout.addWidget(label)
@@ -870,7 +968,7 @@ class SettingsWindow(QWidget):
         # for monitor in monitors_info:
         for serial in monitors_order:
             monitor = monitors_dict[serial]
-            available_rates = sorted(set(monitor['AvailableRefreshRates']))
+            available_rates = sorted(set(monitor.available_refresh_rates))
 
             exclude_rr_monitor_frame = SettingFrame(self)
             # exclude_rr_monitor_frame.title_layout.setSpacing(6)
@@ -937,7 +1035,7 @@ class SettingsWindow(QWidget):
 
         time_adjustment_frame.content_layout.addWidget(SettingToggleFrame(main_window=self.main_window,
                                                                      title="Check at app startup",
-                                                                     descr="Adjust the brightness to match the most relevant time when MoniTune starts.",
+                                                                     descr=f"Adjust the brightness to match the most relevant time when {cfg.app_name} starts.",
                                                                      setting_name="time_adjustment_startup",
                                                                      reg_setting_name="TimeAdjustmentStartup"))
 
@@ -1000,7 +1098,7 @@ class SettingsWindow(QWidget):
 
         def update_ap_line_edit():
             path = self.main_window.active_process
-            if path == self.main_window.monitune_exe:
+            if path == self.main_window.exe_path:
                 logger.debug(f"update_ap_line_edit MoniTune is active ({path})")
                 return
             logger.debug(f"update_ap_line_edit: {path}")
@@ -1075,7 +1173,11 @@ class SettingsWindow(QWidget):
         self.tab_widget.addTab(about_tab, "About")
 
         def check_update():
-            update_available, latest_version = self.main_window.check_for_update()
+            # update_available, latest_version = self.main_window.check_for_update()
+            update_available, latest_version = check_github_update_available(
+                repo_api_url=cfg.UPDATE_CHECK_URL,
+                current_version=cfg.version,
+            )
             if update_available and latest_version:
                 check_update_frame.descr_label.setText(f"Update available: <a href='{cfg.LATEST_RELEASE_URL}'>v{latest_version}</a>")
                 check_update_frame.descr_label.setOpenExternalLinks(True)
@@ -1118,6 +1220,8 @@ class SettingsWindow(QWidget):
         # restore the selected tab
         self.tab_widget.blockSignals(False)
         self.tab_widget.setCurrentIndex(self.selected_tab)
+
+        logger.info(f"update_tab_widget took {time.time() - start_time:.4f} seconds")
 
 
 

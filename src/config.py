@@ -12,7 +12,7 @@ app_name = "MoniTune"
 
 version = "0.3.7"
 
-timer_interval = 20  # seconds
+timer_interval = 15  # seconds
 break_notification_interval = 30  # minutes
 
 REGISTRY_PATH = r"Software\MoniTune\Settings"

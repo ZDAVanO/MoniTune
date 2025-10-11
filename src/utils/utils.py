@@ -8,14 +8,20 @@ import time
 import logging
 logger = logging.getLogger(__name__)
 
+import requests
+from packaging.version import Version
+
 
 
 class LASTINPUTINFO(ctypes.Structure):
     _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
 
-
 def get_idle_time():
-    """Returns the time (in seconds) during which the PC has been idle."""
+    """
+    Returns:
+        float: The time (in seconds) during which the PC has been idle.
+               Returns -1 if there is an error retrieving the data.
+    """
     lii = LASTINPUTINFO()
     lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
     
@@ -40,6 +46,11 @@ def is_on_battery():
 
 
 def get_display_timeouts():
+    """
+    Returns:
+        tuple: (AC timeout, DC timeout) in seconds.
+    """
+
     result = subprocess.run(['powercfg', '/query'], 
                             capture_output=True, 
                             text=True,
@@ -71,6 +82,42 @@ def get_display_timeouts():
     return display_timeout_ac, display_timeout_dc
 
 
+# MARK: check_github_update_available()
+def check_github_update_available(repo_api_url: str, current_version: str):
+    """
+    Checks if a newer version of the software is available on GitHub.
+
+    Args:
+        repo_api_url (str): The API URL of the GitHub repository.
+        current_version (str): The current version of the software.
+
+    Returns:
+        tuple: A tuple containing:
+               - bool: True if an update is available, False otherwise.
+               - Version or None: The latest version if available, None otherwise.
+    """
+    try:
+        response = requests.get(repo_api_url)
+        if response.status_code == 200:
+            latest_release = response.json()
+            latest_version = Version(latest_release["tag_name"].lstrip("v"))
+            current_version = Version(current_version)
+
+            # Compare versions
+            if latest_version > current_version:
+                logger.info(f"New version available: {latest_version}. Current version: {current_version}.")
+                return True, latest_version
+            else:
+                logger.info(f"Current version {current_version} is up to date.")
+                return False, latest_version
+        else:
+            logger.error(f"Error fetching release data: {response.status_code}")
+            return False, None
+    except Exception as e:
+        logger.error(f"Error checking for updates: {e}")
+        return False, None
+
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, 
@@ -83,6 +130,12 @@ if __name__ == "__main__":
     display_timeout_ac, display_timeout_dc = get_display_timeouts()
     print(f"Display Timeout on AC Power: {display_timeout_ac} seconds")
     print(f"Display Timeout on DC Power: {display_timeout_dc} seconds")
+
+    # Example usage of check_github_update_available
+    is_update_available, latest_version = check_github_update_available(
+        current_version="0.3.7", 
+        repo_api_url="https://api.github.com/repos/ZDAVanO/MoniTune/releases/latest"
+    )
 
     while True:
         idle_seconds = get_idle_time()

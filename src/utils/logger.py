@@ -3,8 +3,9 @@ import sys
 import logging
 
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+# logger.setLevel(logging.DEBUG)
 # logging.disable(logging.CRITICAL + 1) # disable all logging
+logging.disable(logging.CRITICAL)
 
 
 # Formats for logs
@@ -12,21 +13,21 @@ file_log_format = "[%(asctime)s,%(msecs)03d] [%(levelname)s] [%(name)s] [%(funcN
 console_log_format = "[%(asctime)s] [%(levelname)s] [%(funcName)s]: %(message)s"
 
 
-# Handler for file (saves logs to file)
-try:
-    # Get the directory of the current script
-    log_dir = r"C:\Program Files\MoniTune"  # os.path.dirname(os.path.abspath(sys.argv[0]))
-    main_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-    log_file_path = os.path.join(main_dir, "MoniTune.log")
-    print(f"Log file path: {log_file_path}")
+# # Handler for file (saves logs to file)
+# try:
+#     # Get the directory of the current script
+#     log_dir = r"C:\Program Files\MoniTune"  # os.path.dirname(os.path.abspath(sys.argv[0]))
+#     main_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+#     log_file_path = os.path.join(main_dir, "MoniTune.log")
+#     print(f"Log file path: {log_file_path}")
 
-    file_handler = logging.FileHandler(log_file_path, encoding="utf-8")
-    # file_handler = logging.FileHandler("MoniTune.log", mode="w", encoding="utf-8")  # Overwrite log file on each run
-    file_handler.setLevel(logging.DEBUG)  # all logs will be saved to file
-    file_handler.setFormatter(logging.Formatter(file_log_format, datefmt="%H:%M:%S"))
-    logger.addHandler(file_handler)
-except Exception as e:
-    logger.warning(f"Could not create log file: {e}")
+#     file_handler = logging.FileHandler(log_file_path, encoding="utf-8")
+#     # file_handler = logging.FileHandler("MoniTune.log", mode="w", encoding="utf-8")  # Overwrite log file on each run
+#     file_handler.setLevel(logging.DEBUG)  # all logs will be saved to file
+#     file_handler.setFormatter(logging.Formatter(file_log_format, datefmt="%H:%M:%S"))
+#     logger.addHandler(file_handler)
+# except Exception as e:
+#     logger.warning(f"Could not create log file: {e}")
 
 # Handler for console (prints logs to console)
 console_handler = logging.StreamHandler()

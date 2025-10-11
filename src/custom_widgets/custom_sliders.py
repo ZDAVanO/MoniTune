@@ -96,12 +96,18 @@ class AnimatedSliderBS(QSlider):
         self.scrollStep = scrollStep
 
         self.animation = QPropertyAnimation(self, b"value")
+        self.animation.finished.connect(lambda: self.blockSignals(False))
 
 
     def animate_to(self, target_value, duration=1000, easing_curve=QEasingCurve.Type.OutCubic):
         # print(f"AnimatedSliderBS animate_to {self.value()}-{target_value}")
 
-        distance = abs(target_value - self.value())
+        if self.animation.state() == QPropertyAnimation.State.Running:
+            # logger.info("Animation is running, stopping it before starting a new one.")
+            self.stop_animation() # This will also unblock signals
+
+        current_value = self.value() # Get current value after any potential stop
+        distance = abs(target_value - current_value)
         if distance == 0:
             # print("Animation distance is 0, skipping animation")
             return
@@ -109,12 +115,11 @@ class AnimatedSliderBS(QSlider):
         duration = max(250, (duration * distance / 100)) # Scale duration based on distance
 
         self.animation.setDuration(int(duration))
-        self.animation.setStartValue(self.value())
+        self.animation.setStartValue(current_value) # Use current_value
         self.animation.setEndValue(target_value)
         self.animation.setEasingCurve(easing_curve)
 
         self.blockSignals(True)  # Block signals during animation
-        self.animation.finished.connect(lambda: self.blockSignals(False))
 
         self.animation.start()
     
