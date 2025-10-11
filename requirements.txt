@@ -6,3 +6,5 @@ Pillow
 screen_brightness_control
 darkdetect
 psutil
+requests
+packaging
