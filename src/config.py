@@ -89,10 +89,8 @@ colors = {
 
 
 def get_icon_path(relative_path):
-    if is_exe:
-        return os.path.join(sys._MEIPASS, relative_path)
-    else:
-        return os.path.join('src/assets', relative_path)
+    clean_path = relative_path.replace('\\', '/')
+    return f":/assets/{clean_path}"
 
 
 # MARK: Icons

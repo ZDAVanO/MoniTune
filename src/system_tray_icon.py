@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QSystemTrayIcon, QMenu
 
 from utils.reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 import config as cfg
+import resources_rc
 from config import tray_icons
 
 import darkdetect

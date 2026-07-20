@@ -113,21 +113,24 @@ class Monitor:
 
     # MARK: _get_physical_monitor_handle()
     def _get_physical_monitor_handle(self):
-        # start_time = time.time()
-        monitor_number = wintypes.DWORD()
-        if not ctypes.windll.dxva2.GetNumberOfPhysicalMonitorsFromHMONITOR(
-            int(self.hMonitor), ctypes.byref(monitor_number)
-        ):
-            raise ctypes.WinError()
+        try:
+            # start_time = time.time()
+            monitor_number = wintypes.DWORD()
+            if not ctypes.windll.dxva2.GetNumberOfPhysicalMonitorsFromHMONITOR(
+                int(self.hMonitor), ctypes.byref(monitor_number)
+            ):
+                return None
 
-        physical_monitor_array = (_PHYSICAL_MONITOR * monitor_number.value)()
-        if not ctypes.windll.dxva2.GetPhysicalMonitorsFromHMONITOR(
-            int(self.hMonitor), monitor_number, physical_monitor_array
-        ):
-            raise ctypes.WinError()
+            physical_monitor_array = (_PHYSICAL_MONITOR * monitor_number.value)()
+            if not ctypes.windll.dxva2.GetPhysicalMonitorsFromHMONITOR(
+                int(self.hMonitor), monitor_number, physical_monitor_array
+            ):
+                return None
 
-        # logger.info(f"_get_physical_monitor_handle took {time.time() - start_time:.4f} seconds for hMonitor {self.hMonitor}")
-        return physical_monitor_array[0].hPhysicalMonitor  # Return first handle
+            # logger.info(f"_get_physical_monitor_handle took {time.time() - start_time:.4f} seconds for hMonitor {self.hMonitor}")
+            return physical_monitor_array[0].hPhysicalMonitor  # Return first handle
+        except Exception:
+            return None
 
     # MARK: _get_available_resolutions_and_refresh_rates()
     def _get_available_resolutions_and_refresh_rates(self):

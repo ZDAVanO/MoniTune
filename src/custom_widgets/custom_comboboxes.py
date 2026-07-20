@@ -26,7 +26,10 @@ class StyledComboBox(NoScrollComboBox):
     def __init__(self, parent, down_arrow: str, bg_color: str = None):
         super().__init__(parent)
         
-        absolute_icon_path = os.path.abspath(down_arrow).replace('\\', '/')
+        if down_arrow.startswith(':/'):
+            absolute_icon_path = down_arrow
+        else:
+            absolute_icon_path = os.path.abspath(down_arrow).replace('\\', '/')
         logger.debug(f"StyledComboBox down_arrow: {down_arrow}")
         logger.debug(f"StyledComboBox absolute_icon_path: {absolute_icon_path}")
 

@@ -52,6 +52,7 @@ from utils.utils import (
     check_github_update_available,
 )
 import config as cfg
+import resources_rc
 from config import tray_icons
 
 from pathlib import Path

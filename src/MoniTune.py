@@ -81,6 +81,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__) # debug, info, warning, error, critical
 
 import config as cfg
+import resources_rc
 
 import darkdetect
 
