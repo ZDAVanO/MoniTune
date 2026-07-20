@@ -24,6 +24,7 @@ from PySide6.QtCore import (
     Qt, 
     QTimer, 
     QTime,
+    QSize,
 )
 from PySide6.QtGui import QIcon
 
@@ -865,14 +866,18 @@ class SettingsWindow(QWidget):
 
         list_widget = QListWidget()
         list_widget.setFrameShape(QFrame.Shape.NoFrame)
-        height_map = {1: 27,
-                      2: 56,
-                      3: 84,
-                      4: 112}
-        list_widget.setFixedHeight(height_map.get(len(monitors_order), 111))
+        list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        item_height = 36
+        list_widget.setFixedHeight(len(monitors_order) * item_height)
         list_widget.setStyleSheet("""
+                                  QListWidget {
+                                      background: transparent;
+                                  }
                                   QListWidget::item {
-                                    padding: 5px;
+                                      padding: 0px;
+                                      border: none;
                                   }
                                   """)
         list_widget.setDragDropMode(QListWidget.DragDropMode.InternalMove)  # allow drag-and-drop
@@ -884,11 +889,11 @@ class SettingsWindow(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, serial)
 
             widget = QWidget()
-            # widget.setStyleSheet("background-color: red;")
+            widget.setFixedHeight(item_height)
             layout = QHBoxLayout(widget)
             # layout.setContentsMargins(2, 0, 2, 0)
             # layout.setContentsMargins(0, 0, 0, 0)
-            layout.setContentsMargins(3, 0, 3, 0)
+            layout.setContentsMargins(8, 0, 8, 0)
 
             icon = QLabel()
             icon.setPixmap(QIcon(cfg.icons["monitor"][self.theme]).pixmap(22, 22))
@@ -899,6 +904,7 @@ class SettingsWindow(QWidget):
             # label = QLabel(f"Monitor {serial}")
             layout.addWidget(label)
 
+            item.setSizeHint(QSize(0, item_height))
             list_widget.addItem(item)
             list_widget.setItemWidget(item, widget)
 
