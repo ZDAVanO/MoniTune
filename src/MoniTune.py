@@ -1064,7 +1064,7 @@ class MainWindow(QMainWindow):
                 available_resolutions = monitor.available_resolutions
                 formatted_resolutions = [f"{width}x{height}" for width, height in available_resolutions]
                 max_res_length = max(len(res) for res in formatted_resolutions)
-                res_combobox_width = 105 if (max_res_length <= 9) else 112 if (max_res_length == 10) else 120
+                res_combobox_width = 110 if (max_res_length <= 9) else 120 if (max_res_length == 10) else 130
                 rc_bg_color = (cfg.colors["combobox_bg"][self.theme] 
                                if not self.enable_fusion_theme else None)
                 
