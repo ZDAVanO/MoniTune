@@ -23,34 +23,14 @@ class NoScrollComboBox(QComboBox):
 
 
 class StyledComboBox(NoScrollComboBox):
-    def __init__(self, parent, down_arrow: str, bg_color: str = None):
+    def __init__(self, parent, down_arrow: str = None, bg_color: str = None):
         super().__init__(parent)
         
-        absolute_icon_path = os.path.abspath(down_arrow).replace('\\', '/')
-        logger.debug(f"StyledComboBox down_arrow: {down_arrow}")
-        logger.debug(f"StyledComboBox absolute_icon_path: {absolute_icon_path}")
-
-        self.setStyleSheet(f"""
-                            /* Basic QComboBox style */
-                            QComboBox {{
-                                font-size: 14px; font-weight: bold;
-                                padding-left: 7px;
-                                {f"background-color: {bg_color};" if bg_color else ""}
-                            }}
-                            /* Dropdown list style */
-                            QComboBox QAbstractItemView {{
-                                padding: 0px;
-                            }}
-                            QComboBox::drop-down {{
-                                border: 0px;
-                            }}
-                            QComboBox::down-arrow {{
-                                image: url('{absolute_icon_path}');
-                                width: 11px;
-                                height: 11px;
-                                margin-right: 10px;
-                                }}
-                            """)
+        font = self.font()
+        font.setPointSize(10)
+        font.setBold(True)
+        self.setFont(font)
+        
 
 
 

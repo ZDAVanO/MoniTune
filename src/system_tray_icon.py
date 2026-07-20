@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QSystemTrayIcon, QMenu
 
 from utils.reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 import config as cfg
+import resources_rc
 from config import tray_icons
 
 import darkdetect
@@ -28,28 +29,28 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.changeIcon(tray_icons[self.icon_name][self.icon_theme])
         self.setToolTip(f"{cfg.app_name} v{cfg.version}")
 
-        tray_menu = QMenu()
-        show_action = tray_menu.addAction("Quick Access \tLeft-click")
+        self.tray_menu = QMenu()
+        show_action = self.tray_menu.addAction("Quick Access \tLeft-click")
         show_action.triggered.connect(self.show_main_window)
         
-        settings_action = tray_menu.addAction("Settings")
+        settings_action = self.tray_menu.addAction("Settings")
         settings_action.triggered.connect(parent.openSettingsWindow)  # Connect to openSettingsWindow method
         
-        tray_menu.addSeparator()
+        self.tray_menu.addSeparator()
 
-        display_settings_action = tray_menu.addAction("Display Settings")  # New menu option
+        display_settings_action = self.tray_menu.addAction("Display Settings")  # New menu option
         display_settings_action.triggered.connect(self.open_display_settings)  # Connect to new method
 
-        night_light_settings_action = tray_menu.addAction("Night Light Settings")  # New menu option
+        night_light_settings_action = self.tray_menu.addAction("Night Light Settings")  # New menu option
         night_light_settings_action.triggered.connect(self.open_night_light_settings)  # Connect to new method
         
-        tray_menu.addSeparator()  # Add separator before Exit action
+        self.tray_menu.addSeparator()  # Add separator before Exit action
         
-        exit_action = tray_menu.addAction("Exit")
+        exit_action = self.tray_menu.addAction("Exit")
         # exit_action.triggered.connect(QGuiApplication.quit)
         exit_action.triggered.connect(parent.on_exit)  # Connect to close method of parent window
 
-        self.setContextMenu(tray_menu)
+        self.setContextMenu(self.tray_menu)
         self.activated.connect(self.trayIconClicked)
         self.show()
 

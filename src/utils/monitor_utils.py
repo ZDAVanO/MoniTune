@@ -113,21 +113,24 @@ class Monitor:
 
     # MARK: _get_physical_monitor_handle()
     def _get_physical_monitor_handle(self):
-        # start_time = time.time()
-        monitor_number = wintypes.DWORD()
-        if not ctypes.windll.dxva2.GetNumberOfPhysicalMonitorsFromHMONITOR(
-            int(self.hMonitor), ctypes.byref(monitor_number)
-        ):
-            raise ctypes.WinError()
+        try:
+            # start_time = time.time()
+            monitor_number = wintypes.DWORD()
+            if not ctypes.windll.dxva2.GetNumberOfPhysicalMonitorsFromHMONITOR(
+                int(self.hMonitor), ctypes.byref(monitor_number)
+            ):
+                return None
 
-        physical_monitor_array = (_PHYSICAL_MONITOR * monitor_number.value)()
-        if not ctypes.windll.dxva2.GetPhysicalMonitorsFromHMONITOR(
-            int(self.hMonitor), monitor_number, physical_monitor_array
-        ):
-            raise ctypes.WinError()
+            physical_monitor_array = (_PHYSICAL_MONITOR * monitor_number.value)()
+            if not ctypes.windll.dxva2.GetPhysicalMonitorsFromHMONITOR(
+                int(self.hMonitor), monitor_number, physical_monitor_array
+            ):
+                return None
 
-        # logger.info(f"_get_physical_monitor_handle took {time.time() - start_time:.4f} seconds for hMonitor {self.hMonitor}")
-        return physical_monitor_array[0].hPhysicalMonitor  # Return first handle
+            # logger.info(f"_get_physical_monitor_handle took {time.time() - start_time:.4f} seconds for hMonitor {self.hMonitor}")
+            return physical_monitor_array[0].hPhysicalMonitor  # Return first handle
+        except Exception:
+            return None
 
     # MARK: _get_available_resolutions_and_refresh_rates()
     def _get_available_resolutions_and_refresh_rates(self):
@@ -335,6 +338,33 @@ class Monitor:
             return False
 
 
+# MARK: find_sbc_info()
+def find_sbc_info(device_id, sbc_monitors):
+    """Matches a Win32 monitor DeviceID with screen_brightness_control monitor info."""
+    if not device_id:
+        return None
+    parts = device_id.upper().split('#')
+    if len(parts) < 3:
+        return None
+    instance_id = parts[2] # e.g. '5&19396927&1d&UID256'
+
+    # Try exact match on serial (WMI laptop monitors use instance_id as serial)
+    for sbc_item in sbc_monitors:
+        sbc_serial = (sbc_item.get('serial') or '').upper()
+        if sbc_serial == instance_id:
+            return sbc_item
+
+    # Try matching UID
+    for sbc_item in sbc_monitors:
+        sbc_uid = sbc_item.get('uid')
+        if sbc_uid:
+            uid_str = f"UID{sbc_uid}".upper()
+            if uid_str in instance_id:
+                return sbc_item
+
+    return None
+
+
 # MARK: get_monitors()
 def get_monitors():
     """Returns a list of Monitor objects for each detected monitor."""
@@ -349,7 +379,23 @@ def get_monitors():
             try:
                 # print(f"Processing monitor {index}: hMonitor={hMonitor}, hdcMonitor={hdcMonitor}, rect={rect}")
                 logger.debug(f"Processing monitor {index}: hMonitor={hMonitor}, hdcMonitor={hdcMonitor}, rect={rect}")
-                monitors_objects.append(Monitor(index, int(hMonitor), sbc_monitors_info[index]))
+                
+                # Get the DeviceID
+                win_monitor_info = win32api.GetMonitorInfo(hMonitor)
+                device_name = win_monitor_info.get("Device", None)
+                try:
+                    dev = win32api.EnumDisplayDevices(device_name, 0, 1)
+                    device_id = dev.DeviceID
+                except Exception as e:
+                    logger.warning(f"Failed to get DisplayDevices for {device_name}: {e}")
+                    device_id = ""
+
+                sbc_match = find_sbc_info(device_id, sbc_monitors_info)
+                if sbc_match is None:
+                    logger.warning(f"Monitor {device_name} (DeviceID: '{device_id}') has no matching SBC info, skipping.")
+                    continue
+
+                monitors_objects.append(Monitor(index, int(hMonitor), sbc_match))
             except Exception as e:
                 logger.error(f"Failed to create Monitor object for index {index}: {e}")
 
