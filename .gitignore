@@ -181,4 +181,11 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
+# Qt Resource Compiled files
+src/resources_rc.py
+
+# Allow spec files for PyInstaller builds
+!MoniTune.spec
+!MoniTune_console.spec
+
 # End of https://www.toptal.com/developers/gitignore/api/python

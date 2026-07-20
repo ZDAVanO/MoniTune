@@ -10,7 +10,7 @@ is_exe = getattr(sys, 'frozen', False)
 
 app_name = "MoniTune"
 
-version = "0.3.7"
+version = "0.3.8"
 
 timer_interval = 15  # seconds
 break_notification_interval = 30  # minutes

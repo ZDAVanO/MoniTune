@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 echo ===================================================
 echo [1/3] Generating QRC resource file...
 .venv\Scripts\python generate_qrc.py
