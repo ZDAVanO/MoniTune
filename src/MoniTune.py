@@ -60,6 +60,8 @@ from utils.monitor_utils import (
 from utils.reg_utils import (
     reg_write_bool, 
     reg_read_bool, 
+    reg_write_int,
+    reg_read_int,
     reg_write_list, 
     reg_read_list, 
     reg_write_dict, 
@@ -404,6 +406,15 @@ class MainWindow(QMainWindow):
         self.enable_break_reminders = reg_read_bool(cfg.REGISTRY_PATH, "EnableBreakReminders", False)
         logger.debug(f"enable_break_reminders: {self.enable_break_reminders}")
 
+        self.enable_idle_detection = reg_read_bool(cfg.REGISTRY_PATH, "EnableIdleDetection", cfg.enable_idle_detection)
+        logger.debug(f"enable_idle_detection: {self.enable_idle_detection}")
+
+        self.break_idle_threshold = reg_read_int(cfg.REGISTRY_PATH, "BreakIdleThreshold", cfg.break_idle_threshold)
+        logger.debug(f"break_idle_threshold: {self.break_idle_threshold}")
+
+        self.break_notification_interval = reg_read_int(cfg.REGISTRY_PATH, "BreakNotificationInterval", cfg.break_notification_interval)
+        logger.debug(f"break_notification_interval: {self.break_notification_interval}")
+
         self.hidden_displays = reg_read_list(cfg.REGISTRY_PATH, "HiddenDisplays")
         logger.debug(f"hidden_displays: {self.hidden_displays}")
 
@@ -577,18 +588,20 @@ class MainWindow(QMainWindow):
         
 
         # Calculate time_active, saved_time
-        if idle_time > (5 * 60):
-            logger.info(f"idle {5}min, reset time_active")
-            self.time_active = 0
-            self.saved_time = 0
-        elif idle_time < (cfg.timer_interval * 1.0):
-            self.time_active += cfg.timer_interval + self.saved_time
-            # self.time_active += self.saved_time
-            self.saved_time = 0
+        if self.enable_idle_detection:
+            if idle_time > (self.break_idle_threshold * 60):
+                logger.info(f"idle {self.break_idle_threshold}min, reset time_active")
+                self.time_active = 0
+                self.saved_time = 0
+            elif idle_time < (cfg.timer_interval * 1.0):
+                self.time_active += cfg.timer_interval + self.saved_time
+                self.saved_time = 0
+            else:
+                self.saved_time += cfg.timer_interval
         else:
-            self.saved_time += cfg.timer_interval
+            self.time_active += cfg.timer_interval
+            self.saved_time = 0
 
-        
         log_messages.append(
             f"idle: {idle_time:.2f}s, "
             f"timeout({power_type}): {timeout}s, "
@@ -641,7 +654,7 @@ class MainWindow(QMainWindow):
         
         # Check time active for break reminders
         if (self.enable_break_reminders and 
-            (self.time_active >= (cfg.break_notification_interval * 60)) and 
+            (self.time_active >= (self.break_notification_interval * 60)) and 
             (self.window_open == False)
         ):
             logger.info(f"show break notification, time_active: {self.time_active / 60} min")
@@ -651,6 +664,7 @@ class MainWindow(QMainWindow):
                 QIcon(cfg.icons["eye"][self.theme])
             )
             self.time_active = 0
+
         
         
         logger.info(" | ".join(log_messages))

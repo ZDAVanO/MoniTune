@@ -14,6 +14,8 @@ version = "0.3.8"
 
 timer_interval = 15  # seconds
 break_notification_interval = 30  # minutes
+break_idle_threshold = 10  # minutes
+enable_idle_detection = True
 
 REGISTRY_PATH = r"Software\MoniTune\Settings"
 

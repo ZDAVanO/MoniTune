@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QFileDialog,
     QApplication,
+    QSpinBox,
 )
 from PySide6.QtCore import (
     Qt, 
@@ -43,6 +44,8 @@ from utils.reg_utils import (
     create_reg_key, 
     reg_write_bool, 
     reg_read_bool, 
+    reg_write_int,
+    reg_read_int,
     reg_write_list, 
     reg_read_list, 
     reg_write_dict, 
@@ -308,8 +311,154 @@ class SettingButtonFrame(BaseSettingFrame):
                                QSizePolicy.Policy.Fixed)
         if callback:
             self.btn.clicked.connect(callback)
-
         self.title_layout.addWidget(self.btn, alignment=Qt.AlignmentFlag.AlignRight)
+
+
+# MARK: BreakReminderSettingFrame
+class BreakReminderSettingFrame(SettingFrame):
+    def __init__(self, main_window):
+        super().__init__(settings_window=main_window, 
+                         title="Eye Break Reminder", 
+                         descr="Get reminders to rest your eyes.")
+        self.main_window = main_window
+
+        self.enable_toggle = SettingToggleButton(
+            main_window=main_window,
+            tool_tip=None,
+            setting_name="enable_break_reminders",
+            reg_setting_name="EnableBreakReminders",
+            callback=self.on_enable_toggled
+        )
+        self.title_layout.addWidget(self.enable_toggle, alignment=Qt.AlignmentFlag.AlignRight)
+
+        self.sub_options_widget = QWidget()
+        sub_layout = QVBoxLayout(self.sub_options_widget)
+        sub_layout.setContentsMargins(0, 4, 0, 0)
+        sub_layout.setSpacing(8)
+
+        # 1) Idle Detection Sub-Row
+        row1 = QWidget()
+        r1_layout = QHBoxLayout(row1)
+        r1_layout.setContentsMargins(0, 0, 0, 0)
+        r1_layout.setSpacing(6)
+
+        r1_info = QWidget()
+        r1_info.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        r1_info_layout = QVBoxLayout(r1_info)
+        r1_info_layout.setContentsMargins(0, 0, 0, 0)
+        r1_info_layout.setSpacing(0)
+        r1_title = QLabel("Idle Detection")
+        r1_descr = QLabel("Pause and reset timer when idle. If disabled, reminders trigger at fixed intervals.")
+        r1_descr.setWordWrap(True)
+        fading_descr1 = FadingWidget(fade_opacity=0.75, duration=300)
+        fading_descr1.box_layout.addWidget(r1_descr)
+        r1_info_layout.addWidget(r1_title)
+        r1_info_layout.addWidget(fading_descr1)
+
+        self.idle_toggle = SettingToggleButton(
+            main_window=main_window,
+            tool_tip=None,
+            setting_name="enable_idle_detection",
+            reg_setting_name="EnableIdleDetection"
+        )
+        r1_layout.addWidget(r1_info)
+        r1_layout.addWidget(self.idle_toggle, alignment=Qt.AlignmentFlag.AlignRight)
+        r1_layout.setStretch(0, 1)
+        r1_layout.setStretch(1, 0)
+        sub_layout.addWidget(row1)
+
+        sub_layout.addWidget(SeparatorLine(color=cfg.colors["s_sep"][main_window.color_theme]))
+
+        # 2) Reminder Interval Sub-Row
+        row2 = QWidget()
+        r2_layout = QHBoxLayout(row2)
+        r2_layout.setContentsMargins(0, 0, 0, 0)
+        r2_layout.setSpacing(6)
+
+        r2_info = QWidget()
+        r2_info.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        r2_info_layout = QVBoxLayout(r2_info)
+        r2_info_layout.setContentsMargins(0, 0, 0, 0)
+        r2_info_layout.setSpacing(0)
+        r2_title = QLabel("Reminder Interval")
+        r2_descr = QLabel("Time interval between break reminders.")
+        r2_descr.setWordWrap(True)
+        fading_descr2 = FadingWidget(fade_opacity=0.75, duration=300)
+        fading_descr2.box_layout.addWidget(r2_descr)
+        r2_info_layout.addWidget(r2_title)
+        r2_info_layout.addWidget(fading_descr2)
+
+        self.interval_spinbox = QSpinBox()
+        self.interval_spinbox.setRange(1, 180)
+        self.interval_spinbox.setSuffix(" min")
+        self.interval_spinbox.setFixedWidth(115)
+        current_interval = reg_read_int(cfg.REGISTRY_PATH, "BreakNotificationInterval", cfg.break_notification_interval)
+        self.interval_spinbox.setValue(current_interval)
+        setattr(main_window, "break_notification_interval", current_interval)
+        self.interval_spinbox.valueChanged.connect(self.on_interval_changed)
+
+        r2_layout.addWidget(r2_info)
+        r2_layout.addWidget(self.interval_spinbox, alignment=Qt.AlignmentFlag.AlignRight)
+        r2_layout.setStretch(0, 1)
+        r2_layout.setStretch(1, 0)
+        sub_layout.addWidget(row2)
+
+        sub_layout.addWidget(SeparatorLine(color=cfg.colors["s_sep"][main_window.color_theme]))
+
+        # 3) Idle Reset Threshold Sub-Row
+        row3 = QWidget()
+        r3_layout = QHBoxLayout(row3)
+        r3_layout.setContentsMargins(0, 0, 0, 0)
+        r3_layout.setSpacing(6)
+
+        r3_info = QWidget()
+        r3_info.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        r3_info_layout = QVBoxLayout(r3_info)
+        r3_info_layout.setContentsMargins(0, 0, 0, 0)
+        r3_info_layout.setSpacing(0)
+        r3_title = QLabel("Idle Reset Threshold")
+        r3_descr = QLabel("Idle time required to reset the break timer.")
+        r3_descr.setWordWrap(True)
+        fading_descr3 = FadingWidget(fade_opacity=0.75, duration=300)
+        fading_descr3.box_layout.addWidget(r3_descr)
+        r3_info_layout.addWidget(r3_title)
+        r3_info_layout.addWidget(fading_descr3)
+
+        self.threshold_spinbox = QSpinBox()
+        self.threshold_spinbox.setRange(1, 60)
+        self.threshold_spinbox.setSuffix(" min")
+        self.threshold_spinbox.setFixedWidth(115)
+        current_threshold = reg_read_int(cfg.REGISTRY_PATH, "BreakIdleThreshold", cfg.break_idle_threshold)
+        self.threshold_spinbox.setValue(current_threshold)
+        setattr(main_window, "break_idle_threshold", current_threshold)
+        self.threshold_spinbox.valueChanged.connect(self.on_threshold_changed)
+
+        r3_layout.addWidget(r3_info)
+        r3_layout.addWidget(self.threshold_spinbox, alignment=Qt.AlignmentFlag.AlignRight)
+        r3_layout.setStretch(0, 1)
+        r3_layout.setStretch(1, 0)
+        sub_layout.addWidget(row3)
+
+
+        self.content_layout.addWidget(self.sub_options_widget)
+
+        initial_enabled = reg_read_bool(cfg.REGISTRY_PATH, "EnableBreakReminders", False)
+        self.sub_options_widget.setEnabled(initial_enabled)
+
+    def on_enable_toggled(self, enabled):
+        self.sub_options_widget.setEnabled(enabled)
+
+    def on_interval_changed(self, value):
+        reg_write_int(cfg.REGISTRY_PATH, "BreakNotificationInterval", value)
+        setattr(self.main_window, "break_notification_interval", value)
+        logger.info(f"Updated BreakNotificationInterval: {value}")
+
+    def on_threshold_changed(self, value):
+        reg_write_int(cfg.REGISTRY_PATH, "BreakIdleThreshold", value)
+        setattr(self.main_window, "break_idle_threshold", value)
+        logger.info(f"Updated BreakIdleThreshold: {value}")
+
+
 
 
 
@@ -764,11 +913,8 @@ class SettingsWindow(QWidget):
                                                            callback=None,
                                                            after_restart=True))
 
-        general_tab.layout_.addWidget(SettingToggleFrame(main_window=self.main_window, 
-                                                           title="Eye Break Reminder",
-                                                           descr="Get reminders every 30 minutes to rest your eyes.",
-                                                           setting_name="enable_break_reminders", 
-                                                           reg_setting_name="EnableBreakReminders"))
+        general_tab.layout_.addWidget(BreakReminderSettingFrame(self.main_window))
+
         
 
         tray_icon_selector = TrayIconSelector(self.main_window)
