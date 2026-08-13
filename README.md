@@ -13,3 +13,15 @@ Easily manage the brightness, resolution, and refresh rate of your monitors in W
 - Change monitor resolution and refresh rate from the system tray.
 - Eye break reminders.
 - Supports dynamic monitor configuration changes.
+
+## Build
+```bash
+uv run python generate_qrc.py
+uv run pyside6-rcc src/resources.qrc -o src/resources_rc.py
+uv run pyinstaller MoniTune.spec
+```
+
+## Update dependencies
+```bash
+uv pip install --upgrade -r requirements.txt
+```
