@@ -189,3 +189,4 @@ src/resources_rc.py
 !MoniTune_console.spec
 
 # End of https://www.toptal.com/developers/gitignore/api/python
+*.lnk

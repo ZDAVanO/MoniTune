@@ -3,9 +3,13 @@ import sys
 import logging
 
 logger = logging.getLogger()
-# logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.DEBUG)
+
+# Automatically disable logging for frozen/release builds without console
+if getattr(sys, "frozen", False) and sys.stdout is None:
+    logging.disable(logging.CRITICAL)
 # logging.disable(logging.CRITICAL + 1) # disable all logging
-logging.disable(logging.CRITICAL)
+# logging.disable(logging.CRITICAL)
 
 
 # Formats for logs

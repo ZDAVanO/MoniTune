@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QApplication,
     QSpinBox,
+    QProgressBar,
 )
 from PySide6.QtCore import (
     Qt, 
@@ -439,19 +440,107 @@ class BreakReminderSettingFrame(SettingFrame):
         r3_layout.setStretch(1, 0)
         sub_layout.addWidget(row3)
 
+        sub_layout.addWidget(SeparatorLine(color=cfg.colors["s_sep"][main_window.color_theme]))
+
+        # 4) Next Reminder Progress Sub-Row
+        row4 = QWidget()
+        r4_layout = QVBoxLayout(row4)
+        r4_layout.setContentsMargins(0, 0, 0, 0)
+        r4_layout.setSpacing(6)
+
+        r4_header = QWidget()
+        r4_header_layout = QHBoxLayout(r4_header)
+        r4_header_layout.setContentsMargins(0, 0, 0, 0)
+        r4_header_layout.setSpacing(6)
+
+        r4_title = QLabel("Next Reminder")
+        self.progress_label = QLabel()
+        fading_progress_label = FadingWidget(fade_opacity=0.75, duration=300)
+        fading_progress_label.box_layout.addWidget(self.progress_label)
+
+        r4_header_layout.addWidget(r4_title)
+        r4_header_layout.addWidget(fading_progress_label, alignment=Qt.AlignmentFlag.AlignRight)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedHeight(6)
+
+        is_dark = "Dark" in main_window.color_theme
+        bg_color = "#3c3c3c" if is_dark else "#e5e5e5"
+        self.progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {bg_color};
+                border: none;
+                border-radius: 3px;
+            }}
+            QProgressBar::chunk {{
+                background-color: palette(highlight);
+                border-radius: 3px;
+            }}
+        """)
+
+        r4_layout.addWidget(r4_header)
+        r4_layout.addWidget(self.progress_bar)
+        sub_layout.addWidget(row4)
 
         self.content_layout.addWidget(self.sub_options_widget)
 
         initial_enabled = reg_read_bool(cfg.REGISTRY_PATH, "EnableBreakReminders", False)
         self.sub_options_widget.setEnabled(initial_enabled)
 
+        # Timer for updating progress (active only when widget is visible)
+        self.update_timer = QTimer(self)
+        self.update_timer.setInterval(1000)
+        self.update_timer.timeout.connect(self.update_progress)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        logger.info("BreakReminderSettingFrame shown, starting update_timer")
+        self.update_progress()
+        if not self.update_timer.isActive():
+            self.update_timer.start()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        logger.info("BreakReminderSettingFrame hidden, stopping update_timer")
+        if self.update_timer.isActive():
+            self.update_timer.stop()
+
+    def update_progress(self):
+        interval_min = getattr(self.main_window, "break_notification_interval", cfg.break_notification_interval)
+        total_sec = max(1, interval_min * 60)
+        active_sec = getattr(self.main_window, "time_active", 0)
+        current_sec = min(active_sec, total_sec)
+
+        self.progress_bar.setRange(0, total_sec)
+        self.progress_bar.setValue(int(current_sec))
+
+        enabled = getattr(self.main_window, "enable_break_reminders", False)
+        if not enabled:
+            self.progress_label.setText("Disabled")
+            return
+
+        remaining_sec = max(0, total_sec - current_sec)
+        rem_min = int(remaining_sec // 60)
+        rem_sec = int(remaining_sec % 60)
+
+        if rem_min > 0:
+            if rem_sec > 0:
+                self.progress_label.setText(f"{rem_min}m {rem_sec:02d}s remaining")
+            else:
+                self.progress_label.setText(f"{rem_min} min remaining")
+        else:
+            self.progress_label.setText(f"{rem_sec}s remaining")
+
     def on_enable_toggled(self, enabled):
         self.sub_options_widget.setEnabled(enabled)
+        self.update_progress()
 
     def on_interval_changed(self, value):
         reg_write_int(cfg.REGISTRY_PATH, "BreakNotificationInterval", value)
         setattr(self.main_window, "break_notification_interval", value)
         logger.info(f"Updated BreakNotificationInterval: {value}")
+        self.update_progress()
 
     def on_threshold_changed(self, value):
         reg_write_int(cfg.REGISTRY_PATH, "BreakIdleThreshold", value)
