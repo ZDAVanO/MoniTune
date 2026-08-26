@@ -14,6 +14,12 @@ Easily manage the brightness, resolution, and refresh rate of your monitors in W
 - Eye break reminders.
 - Supports dynamic monitor configuration changes.
 
+
+## Run
+```bash
+uv run python -m PyInstaller MoniTune.spec
+```
+
 ## Build
 ```bash
 uv run python generate_qrc.py

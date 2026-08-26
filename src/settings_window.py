@@ -1002,6 +1002,13 @@ class SettingsWindow(QWidget):
                                                            callback=None,
                                                            after_restart=True))
 
+        general_tab.layout_.addWidget(SettingToggleFrame(main_window=self.main_window, 
+                                                           title="Enable Logging",
+                                                           descr="Save application logs to MoniTune.log file.",
+                                                           setting_name="enable_logging", 
+                                                           reg_setting_name="EnableLogging",
+                                                           callback=self.main_window.update_logging))
+
         general_tab.layout_.addWidget(BreakReminderSettingFrame(self.main_window))
 
         

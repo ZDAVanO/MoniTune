@@ -79,7 +79,7 @@ from utils.utils import (
 from utils.lock_detect import LockDetect
 from utils.active_process import ActiveProcessListener, get_active_process
 
-from utils.logger import get_logger
+from utils.logger import get_logger, set_file_logging
 logger = get_logger(__name__) # debug, info, warning, error, critical
 
 import config as cfg
@@ -402,6 +402,9 @@ class MainWindow(QMainWindow):
 
         self.enable_fusion_theme = reg_read_bool(cfg.REGISTRY_PATH, "EnableFusionTheme", False)
         logger.debug(f"enable_fusion_theme: {self.enable_fusion_theme}")
+
+        self.enable_logging = reg_read_bool(cfg.REGISTRY_PATH, "EnableLogging", False)
+        logger.debug(f"enable_logging: {self.enable_logging}")
 
         self.enable_break_reminders = reg_read_bool(cfg.REGISTRY_PATH, "EnableBreakReminders", False)
         logger.debug(f"enable_break_reminders: {self.enable_break_reminders}")
@@ -861,6 +864,12 @@ class MainWindow(QMainWindow):
         else:
             logger.info("Removing from startup")
             remove_from_startup(cfg.app_name)
+
+    # MARK: update_logging()
+    def update_logging(self, checked=None):
+        if checked is not None:
+            self.enable_logging = checked
+        set_file_logging(self.enable_logging)
 
 
     # MARK: _determine_theme()
