@@ -16,6 +16,7 @@ from PySide6.QtGui import (
     QIcon, 
     QGuiApplication, 
     QWheelEvent,
+    QCursor,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -1476,13 +1477,49 @@ class MainWindow(QMainWindow):
         logger.info(f"brightness_sync_onetime took {time.time() - start_time:.4f} seconds")
 
 
+    # MARK: get_screen_and_target_rect()
+    def get_screen_and_target_rect(self):
+        cursor_pos = QCursor.pos()
+        screen = QGuiApplication.screenAt(cursor_pos)
+        if screen is None:
+            screen = QGuiApplication.primaryScreen()
+
+        full_rect = screen.geometry()
+        work_rect = screen.availableGeometry()
+
+        win_w = self.width()
+        win_h = self.sizeHint().height()
+        offset = self.window_offset
+
+        # Detect taskbar edge by comparing work area to full screen
+        if work_rect.top() > full_rect.top():
+            taskbar_edge = "top"
+            target_x = work_rect.right() - win_w - offset + 1
+            target_y = work_rect.top() + offset
+        elif work_rect.left() > full_rect.left():
+            taskbar_edge = "left"
+            target_x = work_rect.left() + offset
+            target_y = work_rect.bottom() - win_h - offset + 1
+        elif work_rect.right() < full_rect.right():
+            taskbar_edge = "right"
+            target_x = work_rect.right() - win_w - offset + 1
+            target_y = work_rect.bottom() - win_h - offset + 1
+        else:
+            taskbar_edge = "bottom"
+            target_x = work_rect.right() - win_w - offset + 1
+            target_y = work_rect.bottom() - win_h - offset + 1
+
+        target_rect = QRect(target_x, target_y, win_w, win_h)
+        return screen, taskbar_edge, target_rect
+
     # MARK: showEvent()
     def showEvent(self, event):
         logger.info("showEvent")
 
-        # hide window to avoid flickering before opening animation (when close animation disabled)
-        screen_geometry = QGuiApplication.primaryScreen().geometry()
-        self.move(screen_geometry.width(), screen_geometry.height())
+        # hide window offscreen to avoid flickering before opening animation
+        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        full_rect = screen.geometry()
+        self.move(full_rect.right() + 100, full_rect.bottom() + 100)
 
         super().showEvent(event)
         self.window_open = True
@@ -1615,40 +1652,36 @@ class MainWindow(QMainWindow):
 
     # MARK: updateSizeAndPosition()
     def updateSizeAndPosition(self):
-        logger.info(f"current position: ({self.x()}, {self.y()})")
-        logger.info(f"current width: {self.width()}({self.sizeHint().width()}), height: {self.height()}({self.sizeHint().height()})")
+        screen, taskbar_edge, target_rect = self.get_screen_and_target_rect()
+        logger.info(f"taskbar_edge: {taskbar_edge}, target_rect: {target_rect}")
 
-        screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
-        logger.info(f"screen geometry: ({screen_geometry.x()}, {screen_geometry.y()}, {screen_geometry.width()}, {screen_geometry.height()})")
+        self.move(target_rect.x(), target_rect.y())
+        logger.info(f"move: ({target_rect.x()}, {target_rect.y()})")
 
-        new_x = screen_geometry.width() - self.width() - self.window_offset
-        new_y = screen_geometry.height() - self.sizeHint().height() - self.window_offset
-
-        self.move(new_x, new_y)
-        logger.info(f"move: ({new_x}, {new_y})")
-
-        self.resize(self.width(), self.sizeHint().height())
-        logger.info(f"resize: ({self.width()}, {self.sizeHint().height()})")
+        self.resize(target_rect.width(), target_rect.height())
+        logger.info(f"resize: ({target_rect.width()}, {target_rect.height()})")
 
 
 
     # MARK: animateWindowOpen()
     def animateWindowOpen(self):
-        screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
-        start_rect = QRect(screen_geometry.width(), 
-                           screen_geometry.height() - self.sizeHint().height() - self.window_offset, 
-                           self.width(), 
-                           self.sizeHint().height()
-                           )
-        end_rect = QRect(screen_geometry.width() - self.width() - self.window_offset, 
-                         screen_geometry.height() - self.sizeHint().height() - self.window_offset, 
-                         self.width(), 
-                         self.sizeHint().height()
-                         )
-        
-        logger.info(f"start_rect: {start_rect}, end_rect: {end_rect}")
+        screen, taskbar_edge, target_rect = self.get_screen_and_target_rect()
+        work_rect = screen.availableGeometry()
 
-        logger.debug(f"self.width() {self.width()}, self.sizeHint().height() {self.sizeHint().height()}")
+        if taskbar_edge in ("left", "right"):
+            start_rect = QRect(target_rect.x(), 
+                               work_rect.bottom() + 1, 
+                               target_rect.width(), 
+                               target_rect.height())
+        else:
+            start_rect = QRect(work_rect.right() + 1, 
+                               target_rect.y(), 
+                               target_rect.width(), 
+                               target_rect.height())
+        
+        end_rect = target_rect
+        
+        logger.info(f"taskbar_edge: {taskbar_edge}, start_rect: {start_rect}, end_rect: {end_rect}")
 
         self.open_animation = QPropertyAnimation(self, b"geometry") 
         self.open_animation.setStartValue(start_rect)
@@ -1677,13 +1710,20 @@ class MainWindow(QMainWindow):
 
     # MARK: animateWindowClose()
     def animateWindowClose(self):
-        screen_geometry = QGuiApplication.primaryScreen().availableGeometry()
+        screen, taskbar_edge, _ = self.get_screen_and_target_rect()
+        work_rect = screen.availableGeometry()
         current_rect = self.geometry()
-        end_rect = QRect(screen_geometry.width(), 
-                         screen_geometry.height() - self.sizeHint().height() - self.window_offset, 
-                         self.width(), 
-                         self.sizeHint().height()
-                         )
+        
+        if taskbar_edge in ("left", "right"):
+            end_rect = QRect(self.x(), 
+                             work_rect.bottom() + 1, 
+                             self.width(), 
+                             self.sizeHint().height())
+        else:
+            end_rect = QRect(work_rect.right() + 1, 
+                             self.y(), 
+                             self.width(), 
+                             self.sizeHint().height())
         
         logger.info(f"current_rect: {current_rect}, end_rect: {end_rect}")
         
