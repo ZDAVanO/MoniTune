@@ -31,3 +31,14 @@ uv run pyinstaller MoniTune.spec
 ```bash
 uv pip install --upgrade -r requirements.txt
 ```
+
+## Monitor Settings Migration (After Driver Reinstall)
+When reinstalling or updating GPU drivers (e.g. AMD), Windows may assign a new device instance ID to the laptop display or connected monitors. To automatically detect displays, transfer previous configurations (names, order, brightness schedules), and restart MoniTune:
+
+```bash
+# Preview proposed changes (Dry Run)
+uv run python migrate_monitors.py
+
+# Apply changes and restart MoniTune
+uv run python migrate_monitors.py --apply --restart
+```

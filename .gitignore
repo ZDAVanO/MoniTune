@@ -190,3 +190,4 @@ src/resources_rc.py
 
 # End of https://www.toptal.com/developers/gitignore/api/python
 *.lnk
+/backups
