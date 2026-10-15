@@ -842,10 +842,10 @@ class SettingsWindow(QWidget):
         self.profiles_data = {}
         self.profiles_frames = []
         self.ap_timer = None
+        
+        # self.serial_list = []
 
-        self.serial_list = []
-
-
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
     # MARK: showEvent()
     def showEvent(self, event):
@@ -860,9 +860,16 @@ class SettingsWindow(QWidget):
 
     # MARK: closeEvent()
     def closeEvent(self, event):
-        # logger.info("Settings window closed")
-        event.ignore()
-        self.hide() # hide instead of close to prevent app closing
+        logger.info("Settings window closed and unloaded")
+
+        if self.ap_timer and self.ap_timer.isActive():
+            self.ap_timer.stop()
+            logger.info("ap_timer stopped")
+
+        if self.main_window:
+            self.main_window.settings_window = None
+
+        super().closeEvent(event)
 
     # MARK: hideEvent()
     def hideEvent(self, event):

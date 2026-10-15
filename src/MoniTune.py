@@ -1777,6 +1777,7 @@ class MainWindow(QMainWindow):
 if __name__ == "__main__":
 
     app = QApplication([]) 
+    app.setQuitOnLastWindowClosed(False)
     app.setWindowIcon(QIcon(cfg.icons["monitune"]["Light"]))
 
     logger.info(f"Starting {cfg.app_name} (v{cfg.version})")
