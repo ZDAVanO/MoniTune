@@ -441,6 +441,9 @@ class MainWindow(QMainWindow):
         self.show_brightness_popup = reg_read_bool(cfg.REGISTRY_PATH, "ShowBrightnessPopup", False)
         logger.debug(f"show_brightness_popup: {self.show_brightness_popup}")
         
+        self.skip_popup_if_unchanged = reg_read_bool(cfg.REGISTRY_PATH, "SkipPopupIfUnchanged", True)
+        logger.debug(f"skip_popup_if_unchanged: {self.skip_popup_if_unchanged}")
+        
         self.brightness_values = reg_read_dict(cfg.REGISTRY_PATH, "BrightnessValues")
         logger.info(f"brightness_values: {self.brightness_values}")
         self.manual_brightness_values = reg_read_dict(cfg.REGISTRY_PATH, "ManualBrightnessValues")
@@ -1571,6 +1574,18 @@ class MainWindow(QMainWindow):
         self.bottom_frame.hide()
         self.updateMonitorsFrame(popup=True)  # Update frame contents each time the window is shown
         
+        # Suppress popup if enabled and all active monitors are already at target brightness
+        if self.skip_popup_if_unchanged:
+            all_matched = bool(self.br_frames) and all(
+                frame.slider.value() == self.brightness_values.get(serial)
+                for serial, frame in self.br_frames.items()
+                if serial in self.active_monitors_dict
+            )
+            if all_matched:
+                logger.info("show_popup: All monitors already match target brightness, suppressing popup")
+                threading.Thread(target=self.brightness_sync_onetime, daemon=True).start()
+                return
+
         self.show() # call showEvent()
         
         self.start_brightness_sync_thread(delay_msec=250)

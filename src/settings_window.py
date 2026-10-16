@@ -1268,11 +1268,30 @@ class SettingsWindow(QWidget):
                                                               setting_name="restore_last_brightness",
                                                               reg_setting_name="RestoreLastBrightness"))
         
-        brightness_tab.layout_.addWidget(SettingToggleFrame(main_window=self.main_window,
-                                                              title="Show Popup on background change",
-                                                              descr="Show app window when brightness changing in background.",
-                                                              setting_name="show_brightness_popup",
-                                                              reg_setting_name="ShowBrightnessPopup"))
+        # MARK: Popup Frame
+        popup_frame = SettingFrame(settings_window=self, 
+                                   title="Show Popup on background change", 
+                                   descr="Show app window when brightness changing in background.")
+
+        skip_popup_frame = SettingToggleFrame(main_window=self.main_window,
+                                              title="Skip Popup if brightness unchanged",
+                                              descr="Do not show popup if monitors already match the target brightness.",
+                                              setting_name="skip_popup_if_unchanged",
+                                              reg_setting_name="SkipPopupIfUnchanged")
+
+        def on_popup_toggled(checked):
+            skip_popup_frame.setEnabled(checked)
+
+        popup_toggle = SettingToggleButton(self.main_window,
+                                           tool_tip="Show app window when brightness changing in background.",
+                                           setting_name="show_brightness_popup",
+                                           reg_setting_name="ShowBrightnessPopup",
+                                           callback=on_popup_toggled)
+        popup_frame.title_layout.addWidget(popup_toggle, alignment=Qt.AlignmentFlag.AlignRight)
+
+        skip_popup_frame.setEnabled(self.main_window.show_brightness_popup)
+        popup_frame.content_layout.addWidget(skip_popup_frame)
+        brightness_tab.layout_.addWidget(popup_frame)
 
 
 
