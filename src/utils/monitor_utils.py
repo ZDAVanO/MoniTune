@@ -70,6 +70,7 @@ class Monitor:
         
         self.manufacturer = sbc_monitor_info["manufacturer"]
         self.manufacturer_id = sbc_monitor_info["manufacturer_id"]
+        self.sbc_index = sbc_monitor_info.get("index", 0)
 
         self.method = METHOD_MAP.get(sbc_monitor_info["method"], 
                                      sbc_monitor_info["method"]) # "VCP", "WMI"
@@ -189,19 +190,56 @@ class Monitor:
                 time.sleep(delay)
 
 
+    # MARK: _get_wmi_brightness_retry()
+    def _get_wmi_brightness_retry(self, retries=1, delay=0.02):
+        for attempt in range(retries):
+            try:
+                vals = sbc.windows.WMI.get_brightness(display=self.sbc_index)
+                if vals:
+                    return vals[0]
+            except Exception:
+                pass
+            try:
+                vals = sbc.get_brightness(display=self.serial, method="wmi")
+                if vals:
+                    return vals[0]
+            except Exception as e:
+                logger.debug(f"Attempt {attempt + 1} failed to get WMI brightness for display {self.serial}: {e}")
+                if attempt == retries - 1:
+                    logger.warning(f"Failed to get brightness for display {self.serial} (index {self.index}): {e}")
+                    return None
+            if attempt < retries - 1:
+                time.sleep(delay)
+        return None
+
+    # MARK: _set_wmi_brightness_retry()
+    def _set_wmi_brightness_retry(self, value, retries=1, delay=0.02):
+        for attempt in range(retries):
+            try:
+                sbc.windows.WMI.set_brightness(value, display=self.sbc_index)
+                return True
+            except Exception:
+                pass
+            try:
+                sbc.set_brightness(value, display=self.serial, method="wmi")
+                return True
+            except Exception as e:
+                logger.debug(f"Attempt {attempt + 1} failed to set WMI brightness for {self} to {value}: {e}")
+                if attempt == retries - 1:
+                    logger.warning(f"Failed to set brightness for display {self} to {value}: {e}")
+                    return False
+            if attempt < retries - 1:
+                time.sleep(delay)
+        return False
+
+
     # MARK: get_brightness()
     def get_brightness(self, retries=1):
         logger.debug(f"Getting brightness for {self}")
         if self.method == "VCP":
             return self._get_vcp_feature_retry(VCP_CODES["Luminance"], retries=retries)
         elif self.method == "WMI":
-            try:
-                # sbc.get_brightness returns a list, take the first element
-                # return sbc.get_brightness(display=self.index)[0] # Using index for WMI
-                return sbc.get_brightness(display=self.serial)[0]
-            except Exception as e:
-                logger.warning(f"Failed to get brightness for display {self.serial} (index {self.index}): {e}")
-                return None
+            return self._get_wmi_brightness_retry(retries=retries)
         logger.warning(f"Unknown method {self.method} for getting brightness of {self}")
         return None
 
@@ -212,13 +250,7 @@ class Monitor:
         if self.method == "VCP":
             return self._set_vcp_feature_retry(VCP_CODES["Luminance"], value, retries=retries)
         elif self.method == "WMI":
-            try:
-                # sbc.set_brightness(value, display=self.index) # Using index for WMI
-                sbc.set_brightness(value, display=self.serial)
-                return True
-            except Exception as e:
-                logger.warning(f"Failed to set brightness for display {self} to {value}: {e}")
-                return False
+            return self._set_wmi_brightness_retry(value, retries=retries)
         logger.warning(f"Unknown method {self.method} for setting brightness of {self}")
         return False
 
