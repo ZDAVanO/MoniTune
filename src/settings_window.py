@@ -36,6 +36,7 @@ from custom_widgets import (
     FadingWidget,
 )
 
+from services.settings_manager import get_settings
 from utils.monitor_utils import (
     get_monitors, 
 )
@@ -220,7 +221,7 @@ class SettingToggleButton(BaseToggleButton):
         if not self.after_restart:
             setattr(self.main_window, self.setting_name, checked)
 
-        reg_write_bool(cfg.REGISTRY_PATH, self.reg_setting_name, checked)
+        get_settings().set(self.setting_name, checked)
 
         if callable(self.callback):
             self.callback(checked)
@@ -393,7 +394,8 @@ class BreakReminderSettingFrame(SettingFrame):
         self.interval_spinbox.setRange(1, 180)
         self.interval_spinbox.setSuffix(" min")
         self.interval_spinbox.setFixedWidth(115)
-        current_interval = reg_read_int(cfg.REGISTRY_PATH, "BreakNotificationInterval", cfg.break_notification_interval)
+        settings = get_settings()
+        current_interval = settings.break_notification_interval
         self.interval_spinbox.setValue(current_interval)
         setattr(main_window, "break_notification_interval", current_interval)
         self.interval_spinbox.valueChanged.connect(self.on_interval_changed)
@@ -429,7 +431,7 @@ class BreakReminderSettingFrame(SettingFrame):
         self.threshold_spinbox.setRange(1, 60)
         self.threshold_spinbox.setSuffix(" min")
         self.threshold_spinbox.setFixedWidth(115)
-        current_threshold = reg_read_int(cfg.REGISTRY_PATH, "BreakIdleThreshold", cfg.break_idle_threshold)
+        current_threshold = settings.break_idle_threshold
         self.threshold_spinbox.setValue(current_threshold)
         setattr(main_window, "break_idle_threshold", current_threshold)
         self.threshold_spinbox.valueChanged.connect(self.on_threshold_changed)
@@ -485,7 +487,7 @@ class BreakReminderSettingFrame(SettingFrame):
 
         self.content_layout.addWidget(self.sub_options_widget)
 
-        initial_enabled = reg_read_bool(cfg.REGISTRY_PATH, "EnableBreakReminders", False)
+        initial_enabled = settings.enable_break_reminders
         self.sub_options_widget.setEnabled(initial_enabled)
 
         # Timer for updating progress (active only when widget is visible)
@@ -537,13 +539,13 @@ class BreakReminderSettingFrame(SettingFrame):
         self.update_progress()
 
     def on_interval_changed(self, value):
-        reg_write_int(cfg.REGISTRY_PATH, "BreakNotificationInterval", value)
+        get_settings().break_notification_interval = value
         setattr(self.main_window, "break_notification_interval", value)
         logger.info(f"Updated BreakNotificationInterval: {value}")
         self.update_progress()
 
     def on_threshold_changed(self, value):
-        reg_write_int(cfg.REGISTRY_PATH, "BreakIdleThreshold", value)
+        get_settings().break_idle_threshold = value
         setattr(self.main_window, "break_idle_threshold", value)
         logger.info(f"Updated BreakIdleThreshold: {value}")
 
@@ -582,7 +584,7 @@ class TrayIconSelector(BaseSettingFrame):
         logger.info(f"Selected icon: {icon_name}")
 
         self.main_window.tray_icon.changeIconName(icon_name)
-        reg_write_list(cfg.REGISTRY_PATH, "TrayIcon", [icon_name])
+        get_settings().tray_icon_name = icon_name
 
     # MARK: select_icon()
     def select_icon(self, icon_name):
@@ -809,6 +811,7 @@ class SettingsWindow(QWidget):
         super().__init__()
         
         self.main_window = main_window
+        self.settings = get_settings()
         self.theme = self.main_window.theme
         self.color_theme = self.main_window.color_theme
 
@@ -894,7 +897,7 @@ class SettingsWindow(QWidget):
         sorted_time_adjustment_data = dict(sorted(self.time_adjustment_data.items()))
 
         logger.info(f"Collected time adjustment data: {sorted_time_adjustment_data}")
-        reg_write_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData", sorted_time_adjustment_data)
+        self.settings.time_adjustment_data = sorted_time_adjustment_data
         self.main_window.time_adjustment_data = sorted_time_adjustment_data
 
 
@@ -912,7 +915,7 @@ class SettingsWindow(QWidget):
             self.profiles_data[resolved_path] = brightness_data
 
         logger.info(f"Collected profiles data: {self.profiles_data}")
-        reg_write_dict(cfg.REGISTRY_PATH, "ProfilesData", self.profiles_data)
+        self.settings.profiles_data = self.profiles_data
         self.main_window.profiles_data = self.profiles_data
 
 
@@ -958,12 +961,12 @@ class SettingsWindow(QWidget):
 
         # Створюємо словник, де ключ — серійний номер
         monitors_dict = {monitor.serial: monitor for monitor in monitors_info}
-        reg_order = reg_read_list(cfg.REGISTRY_PATH, "MonitorsOrder")
+        reg_order = self.settings.monitors_order
         # Сортуємо список моніторів відповідно до порядку з реєстру
         monitors_order = [serial for serial in reg_order if serial in monitors_dict]
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
         monitors_order += [monitor.serial for monitor in monitors_info if monitor.serial not in monitors_order]
-        custom_monitor_names = reg_read_dict(cfg.REGISTRY_PATH, "CustomMonitorNames")
+        custom_monitor_names = self.settings.custom_monitor_names
 
         display_names = {}
         short_display_names = {}
@@ -1021,15 +1024,15 @@ class SettingsWindow(QWidget):
         
 
         tray_icon_selector = TrayIconSelector(self.main_window)
-        tray_icon = reg_read_list(cfg.REGISTRY_PATH, "TrayIcon")
+        tray_icon = self.settings.tray_icon
         logger.info(f"tray_icon: {tray_icon}")
-        tray_icon_selector.select_icon(tray_icon[0] if tray_icon else "monitune")
+        tray_icon_selector.select_icon(tray_icon)
         general_tab.layout_.addWidget(tray_icon_selector)
 
 
         # MARK: Hide Displays
-        hidden_displays = reg_read_list(cfg.REGISTRY_PATH, "HiddenDisplays")
-        logger.info(f"Hidden displays (reg): {hidden_displays}")
+        hidden_displays = self.settings.hidden_displays
+        logger.info(f"Hidden displays (settings): {hidden_displays}")
 
         def update_hidden_displays(monitor_id, state):
             if state == 2: # 2 - checked
@@ -1042,7 +1045,7 @@ class SettingsWindow(QWidget):
                 #     hidden_displays.remove(monitor_id)
                 if monitor_id not in hidden_displays:
                     hidden_displays.append(monitor_id)
-            reg_write_list(cfg.REGISTRY_PATH, "HiddenDisplays", hidden_displays)
+            self.settings.hidden_displays = hidden_displays
             self.main_window.hidden_displays = hidden_displays
             logger.info(f"Updated hidden displays: {hidden_displays}")
 
@@ -1065,7 +1068,7 @@ class SettingsWindow(QWidget):
             logger.info(f"Updated names: {custom_monitor_names}")
             self.main_window.custom_monitor_names = custom_monitor_names
             # # self.show_main_window()
-            reg_write_dict(cfg.REGISTRY_PATH, "CustomMonitorNames", custom_monitor_names)
+            self.settings.custom_monitor_names = custom_monitor_names
 
         rename_monitors_frame = SettingFrame(self, "Rename Monitors")
         for serial in monitors_order:
@@ -1105,7 +1108,7 @@ class SettingsWindow(QWidget):
         def save_order():
             monitors_order = [list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(list_widget.count())]
             logger.info(f"New monitors_order: {monitors_order}")
-            reg_write_list(cfg.REGISTRY_PATH, "MonitorsOrder", monitors_order)
+            self.settings.monitors_order = monitors_order
             self.main_window.monitors_order = monitors_order
             # self.show_main_window()
 
@@ -1175,7 +1178,7 @@ class SettingsWindow(QWidget):
 
             reply = msg_box.exec()
             if reply == QMessageBox.StandardButton.Yes:
-                delete_reg_key(cfg.REGISTRY_PATH)
+                self.settings.reset_to_defaults()
 
         reset_settings_frame = SettingButtonFrame(title="Reset settings",
                                                   descr="Hit this button to clear config.",
@@ -1197,8 +1200,8 @@ class SettingsWindow(QWidget):
 
 
         # MARK: Exclude Refresh Rates
-        excluded_rates = reg_read_dict(cfg.REGISTRY_PATH, "ExcludedHzRates")
-        logger.info(f"Excluded refresh rates (reg): {excluded_rates}")
+        excluded_rates = self.settings.excluded_rates
+        logger.info(f"Excluded refresh rates: {excluded_rates}")
 
         # Function to update the excluded list
         def update_excluded_rates(state, rate, serial):
@@ -1215,7 +1218,7 @@ class SettingsWindow(QWidget):
                 if rate not in excluded_rates[serial]:
                     excluded_rates[serial].append(rate)
 
-            reg_write_dict(cfg.REGISTRY_PATH, "ExcludedHzRates", excluded_rates)
+            self.settings.excluded_rates = excluded_rates
             self.main_window.excluded_rates = excluded_rates
             logger.info(f"Updated excluded list: {excluded_rates}")
 
@@ -1339,8 +1342,8 @@ class SettingsWindow(QWidget):
         time_adjustment_frame.content_layout.addWidget(scroll_content)
         brightness_tab.layout_.addWidget(time_adjustment_frame)
 
-        # Restore TimeAdjustmentFrame widgets from registry
-        saved_data = reg_read_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData")
+        # Restore TimeAdjustmentFrame widgets from settings
+        saved_data = self.settings.time_adjustment_data
         # print("Saved data:", saved_data)
         for time_str, brightness_data in reversed(saved_data.items()):
             # print(f"Adding frame with time: {time_str}, brightness: {brightness_data}")
@@ -1422,8 +1425,8 @@ class SettingsWindow(QWidget):
 
         profiles_frame.content_layout.addWidget(center_widget)
 
-        # Restore ProfileFrame widgets from registry
-        profiles_data = reg_read_dict(cfg.REGISTRY_PATH, "ProfilesData")
+        # Restore ProfileFrame widgets from settings
+        profiles_data = self.settings.profiles_data
         for path, brightness_data in reversed(profiles_data.items()):
             add_profile_frame(path, brightness_data)
 

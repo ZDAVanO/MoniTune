@@ -1,6 +1,7 @@
 from PySide6.QtGui import QIcon, QGuiApplication
 from PySide6.QtWidgets import QSystemTrayIcon, QMenu
 
+from services.settings_manager import get_settings
 from utils.reg_utils import is_dark_theme, key_exists, create_reg_key, reg_write_bool, reg_read_bool, reg_write_list, reg_read_list, reg_write_dict, reg_read_dict
 import config as cfg
 import resources_rc
@@ -20,8 +21,9 @@ class SystemTrayIcon(QSystemTrayIcon):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        icon = reg_read_list(cfg.REGISTRY_PATH, "TrayIcon")
-        self.icon_name = icon[0] if icon else "monitune"
+        self.settings = get_settings()
+        self.icon_name = self.settings.tray_icon_name
+        self.settings.subscribe("tray_icon_name", self.changeIconName)
         logger.debug(f"icon_name: {self.icon_name}")
         
         self.icon_theme = darkdetect.theme()

@@ -53,6 +53,7 @@ from custom_widgets import (
     SeparatorLine,
 )
 
+from services.settings_manager import get_settings
 from utils.monitor_utils import (
     Monitor,
     get_monitors, 
@@ -389,88 +390,98 @@ class MainWindow(QMainWindow):
 
     # MARK: _load_reg_settings()
     def _load_reg_settings(self):
+        self.settings = get_settings()
+        self.settings.setting_changed.connect(self._on_setting_changed)
+
         # General settings
-        self.launch_on_startup = reg_read_bool(cfg.REGISTRY_PATH, "LaunchOnStartup", False)
+        self.launch_on_startup = self.settings.launch_on_startup
         logger.info(f"launch_on_startup: {self.launch_on_startup}")
         
-        self.enable_window_animation = reg_read_bool(cfg.REGISTRY_PATH, "EnableWindowAnimation", True)
+        self.enable_window_animation = self.settings.enable_window_animation
         
-        self.enable_rounded_corners = reg_read_bool(cfg.REGISTRY_PATH, "EnableRoundedCorners", False if self.win_release != "11" else True)
+        self.enable_rounded_corners = self.settings.enable_rounded_corners
         logger.debug(f"enable_rounded_corners: {self.enable_rounded_corners}")
 
-        self.show_resolution = reg_read_bool(cfg.REGISTRY_PATH, "ShowResolution")
+        self.show_resolution = self.settings.show_resolution
         logger.debug(f"show_resolution: {self.show_resolution}")
 
-        self.enable_fusion_theme = reg_read_bool(cfg.REGISTRY_PATH, "EnableFusionTheme", False)
+        self.enable_fusion_theme = self.settings.enable_fusion_theme
         logger.debug(f"enable_fusion_theme: {self.enable_fusion_theme}")
 
-        self.enable_logging = reg_read_bool(cfg.REGISTRY_PATH, "EnableLogging", False)
+        self.enable_logging = self.settings.enable_logging
         logger.debug(f"enable_logging: {self.enable_logging}")
 
-        self.enable_break_reminders = reg_read_bool(cfg.REGISTRY_PATH, "EnableBreakReminders", False)
+        self.enable_break_reminders = self.settings.enable_break_reminders
         logger.debug(f"enable_break_reminders: {self.enable_break_reminders}")
 
-        self.enable_idle_detection = reg_read_bool(cfg.REGISTRY_PATH, "EnableIdleDetection", cfg.enable_idle_detection)
+        self.enable_idle_detection = self.settings.enable_idle_detection
         logger.debug(f"enable_idle_detection: {self.enable_idle_detection}")
 
-        self.break_idle_threshold = reg_read_int(cfg.REGISTRY_PATH, "BreakIdleThreshold", cfg.break_idle_threshold)
+        self.break_idle_threshold = self.settings.break_idle_threshold
         logger.debug(f"break_idle_threshold: {self.break_idle_threshold}")
 
-        self.break_notification_interval = reg_read_int(cfg.REGISTRY_PATH, "BreakNotificationInterval", cfg.break_notification_interval)
+        self.break_notification_interval = self.settings.break_notification_interval
         logger.debug(f"break_notification_interval: {self.break_notification_interval}")
 
-        self.hidden_displays = reg_read_list(cfg.REGISTRY_PATH, "HiddenDisplays")
+        self.hidden_displays = self.settings.hidden_displays
         logger.debug(f"hidden_displays: {self.hidden_displays}")
 
-        self.custom_monitor_names = reg_read_dict(cfg.REGISTRY_PATH, "CustomMonitorNames")
+        self.custom_monitor_names = self.settings.custom_monitor_names
         logger.debug(f"custom_monitor_names: {self.custom_monitor_names}")
 
-        self.monitors_order = reg_read_list(cfg.REGISTRY_PATH, "MonitorsOrder")
+        self.monitors_order = self.settings.monitors_order
         logger.debug(f"monitors_order: {self.monitors_order}")
 
         # Refresh rate settings
-        self.show_refresh_rates = reg_read_bool(cfg.REGISTRY_PATH, "ShowRefreshRates")
+        self.show_refresh_rates = self.settings.show_refresh_rates
         logger.debug(f"show_refresh_rates: {self.show_refresh_rates}")
-        self.excluded_rates = reg_read_dict(cfg.REGISTRY_PATH, "ExcludedHzRates")
+        self.excluded_rates = self.settings.excluded_rates
         logger.debug(f"excluded_rates: {self.excluded_rates}")
 
         # Brightness settings
-        self.restore_last_brightness = reg_read_bool(cfg.REGISTRY_PATH, "RestoreLastBrightness")
+        self.restore_last_brightness = self.settings.restore_last_brightness
         logger.debug(f"restore_last_brightness: {self.restore_last_brightness}")
 
-        self.show_brightness_popup = reg_read_bool(cfg.REGISTRY_PATH, "ShowBrightnessPopup", False)
+        self.show_brightness_popup = self.settings.show_brightness_popup
         logger.debug(f"show_brightness_popup: {self.show_brightness_popup}")
         
-        self.skip_popup_if_unchanged = reg_read_bool(cfg.REGISTRY_PATH, "SkipPopupIfUnchanged", True)
+        self.skip_popup_if_unchanged = self.settings.skip_popup_if_unchanged
         logger.debug(f"skip_popup_if_unchanged: {self.skip_popup_if_unchanged}")
         
-        self.brightness_values = reg_read_dict(cfg.REGISTRY_PATH, "BrightnessValues")
+        self.brightness_values = self.settings.brightness_values
         logger.info(f"brightness_values: {self.brightness_values}")
-        self.manual_brightness_values = reg_read_dict(cfg.REGISTRY_PATH, "ManualBrightnessValues")
+        self.manual_brightness_values = self.settings.manual_brightness_values
         logger.info(f"manual_brightness_values: {self.manual_brightness_values}")
 
-        self.enable_time_adjustment = reg_read_bool(cfg.REGISTRY_PATH, "EnableTimeAdjustment", False)
-        self.time_adjustment_startup = reg_read_bool(cfg.REGISTRY_PATH, "TimeAdjustmentStartup")
+        self.enable_time_adjustment = self.settings.enable_time_adjustment
+        self.time_adjustment_startup = self.settings.time_adjustment_startup
         logger.debug(f"time_adjustment_startup: {self.time_adjustment_startup}")
-        self.time_adjustment_data = reg_read_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData")
-        # self.time_adjustment_data = {}
+        self.time_adjustment_data = self.settings.time_adjustment_data
         logger.debug(f"time_adjustment_data: {self.time_adjustment_data}")
 
         # DDC/CI settings
-        self.show_contrast_sliders = reg_read_bool(cfg.REGISTRY_PATH, "ShowContrastSliders", False)
+        self.show_contrast_sliders = self.settings.show_contrast_sliders
         logger.debug(f"show_contrast_sliders: {self.show_contrast_sliders}")
-        self.contrast_values = reg_read_dict(cfg.REGISTRY_PATH, "ContrastValues")
+        self.contrast_values = self.settings.contrast_values
         logger.info(f"contrast_values: {self.contrast_values}")
 
         # Profiles settings
-        self.enable_profiles = reg_read_bool(cfg.REGISTRY_PATH, "EnableProfiles", False)
+        self.enable_profiles = self.settings.enable_profiles
         logger.debug(f"enable_profiles: {self.enable_profiles}")
-        self.profiles_data = reg_read_dict(cfg.REGISTRY_PATH, "ProfilesData")
-        # self.profiles_data = {}
+        self.profiles_data = self.settings.profiles_data
         logger.debug(f"profiles_data: {self.profiles_data}")
 
-        self.link_brightness = reg_read_bool(cfg.REGISTRY_PATH, "LinkBrightness", False)
+        self.link_brightness = self.settings.link_brightness
         logger.debug(f"link_brightness: {self.link_brightness}")
+
+    def _on_setting_changed(self, name: str, value):
+        # Avoid overwriting the SystemTrayIcon widget or other UI components
+        if name in ("tray_icon", "tray_icon_name"):
+            return
+        if hasattr(self, name):
+            current = getattr(self, name)
+            if not isinstance(current, (QWidget, SystemTrayIcon)):
+                setattr(self, name, value)
 
 
     # MARK: _init_ui()
@@ -1249,7 +1260,7 @@ class MainWindow(QMainWindow):
     def toggle_link_brightness(self, checked):
         self.link_brightness = checked
         self.link_br_btn.setIcon(self.get_icon_for_toggle_state("link", self.link_brightness))
-        reg_write_bool(cfg.REGISTRY_PATH, "LinkBrightness", checked)
+        self.settings.link_brightness = checked
         logger.info(f"link_brightness - {checked}")
 
 
@@ -1370,7 +1381,7 @@ class MainWindow(QMainWindow):
 
         self.brightness_values[monitor_serial] = int(value)
         self.manual_brightness_values[monitor_serial] = int(value)
-        reg_write_dict(cfg.REGISTRY_PATH, "ManualBrightnessValues", self.manual_brightness_values)
+        self.settings.manual_brightness_values = self.manual_brightness_values
 
         self.reset_popup_timer()  # Reset the popup timer
 
@@ -1419,7 +1430,7 @@ class MainWindow(QMainWindow):
                         logger.info(f"brightness_sync set_brightness {monitor}: {brightness}")
 
                         previous_brightness_values[monitor_serial] = brightness
-                        reg_write_dict(cfg.REGISTRY_PATH, "BrightnessValues", self.brightness_values)
+                        self.settings.brightness_values = self.brightness_values
 
                     except Exception as e:
                         logger.error(f"Error: {e}")
@@ -1437,7 +1448,7 @@ class MainWindow(QMainWindow):
                             logger.info(f"brightness_sync set_contrast {monitor}: {contrast}")
 
                             previous_contrast_values[monitor_serial] = contrast
-                            reg_write_dict(cfg.REGISTRY_PATH, "ContrastValues", self.contrast_values)
+                            self.settings.contrast_values = self.contrast_values
 
                         except Exception as e:
                             logger.error(f"Error: {e}")
