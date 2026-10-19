@@ -217,7 +217,7 @@ class SettingsManager(QObject):
             return self._cache.get(spec.name, default)
         return default
 
-    def set(self, name: str, value: Any, save: bool = True) -> None:
+    def set(self, name: str, value: Any, save: bool = True, force: bool = False) -> None:
         """
         Update setting value, persist to registry, and notify subscribers.
 
@@ -225,13 +225,14 @@ class SettingsManager(QObject):
             name: Setting name (either Python attribute name or Registry key name).
             value: The new value.
             save: Whether to persist immediately to registry (defaults to True).
+            force: Persist and notify even if value equals old_value (useful for mutated dicts).
         """
         spec = _SPECS_BY_NAME.get(name) or _SPECS_BY_REG_NAME.get(name)
         if not spec:
             raise KeyError(f"Unknown setting '{name}'")
 
         old_value = self._cache.get(spec.name)
-        if old_value == value:
+        if not force and old_value == value:
             return
 
         # Store in cache
@@ -261,6 +262,19 @@ class SettingsManager(QObject):
         if not spec:
             raise KeyError(f"Unknown registry setting name '{reg_name}'")
         self.set(spec.name, value, save=save)
+
+    def save(self, name: str) -> None:
+        """
+        Explicitly persist current in-memory value of a setting to registry.
+        Useful when modifying mutable objects (e.g. dicts) in-place.
+        """
+        spec = _SPECS_BY_NAME.get(name) or _SPECS_BY_REG_NAME.get(name)
+        if not spec:
+            raise KeyError(f"Unknown setting '{name}'")
+        try:
+            self._write_spec_to_registry(spec, self._cache.get(spec.name))
+        except Exception as e:
+            logger.error(f"Failed to persist setting '{spec.name}' to registry: {e}")
 
     # MARK: Subscriptions
     def subscribe(self, name: str, callback: Callable[[Any], None]) -> Callable[[], None]:

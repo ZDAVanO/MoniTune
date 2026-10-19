@@ -898,7 +898,6 @@ class SettingsWindow(QWidget):
 
         logger.info(f"Collected time adjustment data: {sorted_time_adjustment_data}")
         self.settings.time_adjustment_data = sorted_time_adjustment_data
-        self.main_window.time_adjustment_data = sorted_time_adjustment_data
 
 
     # MARK: save_profiles_data()
@@ -916,7 +915,6 @@ class SettingsWindow(QWidget):
 
         logger.info(f"Collected profiles data: {self.profiles_data}")
         self.settings.profiles_data = self.profiles_data
-        self.main_window.profiles_data = self.profiles_data
 
 
 
@@ -1046,7 +1044,6 @@ class SettingsWindow(QWidget):
                 if monitor_id not in hidden_displays:
                     hidden_displays.append(monitor_id)
             self.settings.hidden_displays = hidden_displays
-            self.main_window.hidden_displays = hidden_displays
             logger.info(f"Updated hidden displays: {hidden_displays}")
 
         hide_displays_frame = SettingFrame(self, "Hide Displays")
@@ -1066,7 +1063,6 @@ class SettingsWindow(QWidget):
             elif len(new_name) == 0:
                 custom_monitor_names.pop(monitor_id, None)
             logger.info(f"Updated names: {custom_monitor_names}")
-            self.main_window.custom_monitor_names = custom_monitor_names
             # # self.show_main_window()
             self.settings.custom_monitor_names = custom_monitor_names
 
@@ -1109,7 +1105,6 @@ class SettingsWindow(QWidget):
             monitors_order = [list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(list_widget.count())]
             logger.info(f"New monitors_order: {monitors_order}")
             self.settings.monitors_order = monitors_order
-            self.main_window.monitors_order = monitors_order
             # self.show_main_window()
 
         reorder_monitors_frame = SettingFrame(self, "Reorder Monitors")
@@ -1219,7 +1214,6 @@ class SettingsWindow(QWidget):
                     excluded_rates[serial].append(rate)
 
             self.settings.excluded_rates = excluded_rates
-            self.main_window.excluded_rates = excluded_rates
             logger.info(f"Updated excluded list: {excluded_rates}")
 
         exclude_rr_frame = SettingFrame(self, "Exclude Refresh Rates")
@@ -1292,7 +1286,7 @@ class SettingsWindow(QWidget):
                                            callback=on_popup_toggled)
         popup_frame.title_layout.addWidget(popup_toggle, alignment=Qt.AlignmentFlag.AlignRight)
 
-        skip_popup_frame.setEnabled(self.main_window.show_brightness_popup)
+        skip_popup_frame.setEnabled(self.settings.show_brightness_popup)
         popup_frame.content_layout.addWidget(skip_popup_frame)
         brightness_tab.layout_.addWidget(popup_frame)
 
