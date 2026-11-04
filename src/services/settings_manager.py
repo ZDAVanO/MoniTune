@@ -116,6 +116,7 @@ _SPECS: List[SettingSpec] = [
     SettingSpec("restore_last_brightness", "RestoreLastBrightness", bool, lambda: True),
     SettingSpec("show_brightness_popup", "ShowBrightnessPopup", bool, lambda: False),
     SettingSpec("skip_popup_if_unchanged", "SkipPopupIfUnchanged", bool, lambda: True),
+    SettingSpec("popup_position", "PopupPosition", str, lambda: "bottom_right"),
     SettingSpec("brightness_values", "BrightnessValues", dict, dict),
     SettingSpec("manual_brightness_values", "ManualBrightnessValues", dict, dict),
     SettingSpec("enable_time_adjustment", "EnableTimeAdjustment", bool, lambda: False),

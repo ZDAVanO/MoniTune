@@ -666,6 +666,34 @@ class BaseBrightnessSlidersFrame(SettingFrame):
 
 
 
+# MARK: PopupPositionFrame
+class PopupPositionFrame(BaseSettingFrame):
+    def __init__(self, main_window):
+        super().__init__(title="Popup Position", 
+                         descr="Choose which screen corner the brightness popup appears in.")
+        self.main_window = main_window
+
+        self.combo = QComboBox()
+        self.combo.addItem("Bottom Right", "bottom_right")
+        self.combo.addItem("Top Right", "top_right")
+        self.combo.addItem("Bottom Left", "bottom_left")
+        self.combo.addItem("Top Left", "top_left")
+        self.combo.setMinimumWidth(180)
+
+        current_pos = getattr(main_window.settings, "popup_position", "bottom_right")
+        idx = self.combo.findData(current_pos)
+        if idx >= 0:
+            self.combo.setCurrentIndex(idx)
+
+        self.combo.currentIndexChanged.connect(self.on_position_changed)
+        self.title_layout.addWidget(self.combo, alignment=Qt.AlignmentFlag.AlignRight)
+
+    def on_position_changed(self, index):
+        pos = self.combo.currentData()
+        logger.info(f"Popup position changed to: {pos}")
+        get_settings().set("popup_position", pos)
+
+
 # MARK: PowerSavingModeFrame
 class PowerSavingModeFrame(BaseSettingFrame):
     def __init__(self, main_window):
@@ -1365,8 +1393,11 @@ class SettingsWindow(QWidget):
                                               setting_name="skip_popup_if_unchanged",
                                               reg_setting_name="SkipPopupIfUnchanged")
 
+        position_frame = PopupPositionFrame(main_window=self.main_window)
+
         def on_popup_toggled(checked):
             skip_popup_frame.setEnabled(checked)
+            position_frame.setEnabled(checked)
 
         popup_toggle = SettingToggleButton(self.main_window,
                                            tool_tip="Show app window when brightness changing in background.",
@@ -1376,7 +1407,9 @@ class SettingsWindow(QWidget):
         popup_frame.title_layout.addWidget(popup_toggle, alignment=Qt.AlignmentFlag.AlignRight)
 
         skip_popup_frame.setEnabled(self.settings.show_brightness_popup)
+        position_frame.setEnabled(self.settings.show_brightness_popup)
         popup_frame.content_layout.addWidget(skip_popup_frame)
+        popup_frame.content_layout.addWidget(position_frame)
         brightness_tab.layout_.addWidget(popup_frame)
 
 

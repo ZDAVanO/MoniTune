@@ -54,6 +54,7 @@ from custom_widgets import (
 
 from services.settings_manager import get_settings
 from services.brightness_coordinator import BrightnessCoordinator
+from services.window_positioner import calculate_window_rects
 from utils.monitor_utils import (
     Monitor,
     get_monitors, 
@@ -177,6 +178,7 @@ class MainWindow(QMainWindow):
 
         self.coordinator = BrightnessCoordinator()
         self.is_power_saving_active = False
+        self.is_popup = False
 
         self.is_energy_saver = is_energy_saver_active()
         logger.info(f"is_energy_saver on startup: {self.is_energy_saver}")
@@ -1453,26 +1455,19 @@ class MainWindow(QMainWindow):
         win_h = self.sizeHint().height()
         offset = self.window_offset
 
-        # Detect taskbar edge by comparing work area to full screen
-        if work_rect.top() > full_rect.top():
-            taskbar_edge = "top"
-            target_x = work_rect.right() - win_w - offset + 1
-            target_y = work_rect.top() + offset
-        elif work_rect.left() > full_rect.left():
-            taskbar_edge = "left"
-            target_x = work_rect.left() + offset
-            target_y = work_rect.bottom() - win_h - offset + 1
-        elif work_rect.right() < full_rect.right():
-            taskbar_edge = "right"
-            target_x = work_rect.right() - win_w - offset + 1
-            target_y = work_rect.bottom() - win_h - offset + 1
-        else:
-            taskbar_edge = "bottom"
-            target_x = work_rect.right() - win_w - offset + 1
-            target_y = work_rect.bottom() - win_h - offset + 1
+        is_popup = getattr(self, "is_popup", False)
+        popup_pos = getattr(self.settings, "popup_position", "bottom_right")
 
-        target_rect = QRect(target_x, target_y, win_w, win_h)
-        return screen, taskbar_edge, target_rect
+        taskbar_edge, target_rect, start_rect, end_rect = calculate_window_rects(
+            full_rect=full_rect,
+            work_rect=work_rect,
+            win_w=win_w,
+            win_h=win_h,
+            offset=offset,
+            is_popup=is_popup,
+            popup_position=popup_pos,
+        )
+        return screen, taskbar_edge, target_rect, start_rect, end_rect
 
     # MARK: showEvent()
     def showEvent(self, event):
@@ -1502,6 +1497,7 @@ class MainWindow(QMainWindow):
             logger.info("Window is already open")
             return
 
+        self.is_popup = False
         self.update_monitors_info()
 
         self.updateBottomFrame() # Update bottom frame contents each time the window is shown
@@ -1527,6 +1523,7 @@ class MainWindow(QMainWindow):
             logger.info("Window is already open")
             return
 
+        self.is_popup = True
         # self.update_monitors_info()
 
         self.updateBottomFrame() # Update bottom frame contents each time the window is shown
@@ -1626,7 +1623,7 @@ class MainWindow(QMainWindow):
 
     # MARK: updateSizeAndPosition()
     def updateSizeAndPosition(self):
-        screen, taskbar_edge, target_rect = self.get_screen_and_target_rect()
+        screen, taskbar_edge, target_rect, _, _ = self.get_screen_and_target_rect()
         logger.info(f"taskbar_edge: {taskbar_edge}, target_rect: {target_rect}")
 
         self.move(target_rect.x(), target_rect.y())
@@ -1639,20 +1636,7 @@ class MainWindow(QMainWindow):
 
     # MARK: animateWindowOpen()
     def animateWindowOpen(self):
-        screen, taskbar_edge, target_rect = self.get_screen_and_target_rect()
-        work_rect = screen.availableGeometry()
-
-        if taskbar_edge in ("left", "right"):
-            start_rect = QRect(target_rect.x(), 
-                               work_rect.bottom() + 1, 
-                               target_rect.width(), 
-                               target_rect.height())
-        else:
-            start_rect = QRect(work_rect.right() + 1, 
-                               target_rect.y(), 
-                               target_rect.width(), 
-                               target_rect.height())
-        
+        screen, taskbar_edge, target_rect, start_rect, _ = self.get_screen_and_target_rect()
         end_rect = target_rect
         
         logger.info(f"taskbar_edge: {taskbar_edge}, start_rect: {start_rect}, end_rect: {end_rect}")
@@ -1684,20 +1668,8 @@ class MainWindow(QMainWindow):
 
     # MARK: animateWindowClose()
     def animateWindowClose(self):
-        screen, taskbar_edge, _ = self.get_screen_and_target_rect()
-        work_rect = screen.availableGeometry()
+        screen, taskbar_edge, _, _, end_rect = self.get_screen_and_target_rect()
         current_rect = self.geometry()
-        
-        if taskbar_edge in ("left", "right"):
-            end_rect = QRect(self.x(), 
-                             work_rect.bottom() + 1, 
-                             self.width(), 
-                             self.sizeHint().height())
-        else:
-            end_rect = QRect(work_rect.right() + 1, 
-                             self.y(), 
-                             self.width(), 
-                             self.sizeHint().height())
         
         logger.info(f"current_rect: {current_rect}, end_rect: {end_rect}")
         

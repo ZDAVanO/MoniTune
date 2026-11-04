@@ -17,6 +17,7 @@ def test_settings_manager_defaults(qapp):
         assert settings.power_saving_manual_state is False
         assert settings.power_saving_limits == {}
         assert settings.brightness_values == {}
+        assert settings.popup_position == "bottom_right"
 
 
 def test_settings_manager_set_and_signal(qapp):
