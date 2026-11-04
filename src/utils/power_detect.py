@@ -2,10 +2,10 @@ import ctypes
 import winreg
 import win32api
 import win32event
-import logging
 import time
+from utils.logger import get_logger
 
-logger = logging.getLogger("logger")
+logger = get_logger(__name__)
 
 kernel32 = ctypes.windll.kernel32
 
