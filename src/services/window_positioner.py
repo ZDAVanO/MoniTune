@@ -96,3 +96,18 @@ def calculate_window_rects(
     end_rect = QRect(start_x, start_y, win_w, win_h)
 
     return taskbar_edge, target_rect, start_rect, end_rect
+
+
+def calculate_close_rect(target_rect: QRect, end_rect: QRect, current_rect: QRect) -> QRect:
+    """
+    Adjust end_rect to preserve the stationary axis of current_rect during slide-out animation.
+    Prevents diagonal drift or jumps if current geometry differs slightly from initial target.
+    """
+    if end_rect.x() != target_rect.x():
+        # Horizontal slide: lock vertical position and height to current geometry
+        return QRect(end_rect.x(), current_rect.y(), current_rect.width(), current_rect.height())
+    elif end_rect.y() != target_rect.y():
+        # Vertical slide: lock horizontal position and width to current geometry
+        return QRect(current_rect.x(), end_rect.y(), current_rect.width(), current_rect.height())
+    return end_rect
+

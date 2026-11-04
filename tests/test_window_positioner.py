@@ -1,6 +1,10 @@
 import pytest
 from PySide6.QtCore import QRect
-from services.window_positioner import detect_taskbar_edge, calculate_window_rects
+from services.window_positioner import (
+    detect_taskbar_edge,
+    calculate_window_rects,
+    calculate_close_rect,
+)
 
 
 def test_detect_taskbar_edge():
@@ -127,3 +131,37 @@ def test_popup_side_taskbars():
     # Slides from bottom
     assert start_bl.x() == target_bl.x()
     assert start_bl.y() == work_left.bottom() + 1
+
+
+def test_calculate_close_rect_horizontal():
+    target = QRect(1500, 600, 350, 400)
+    end = QRect(1921, 600, 350, 400)
+    current = QRect(1500, 630, 355, 410)
+
+    adjusted = calculate_close_rect(target, end, current)
+    assert adjusted.x() == 1921
+    assert adjusted.y() == 630
+    assert adjusted.width() == 355
+    assert adjusted.height() == 410
+
+
+def test_calculate_close_rect_vertical():
+    target = QRect(100, 600, 350, 400)
+    end = QRect(100, 1081, 350, 400)
+    current = QRect(120, 600, 360, 405)
+
+    adjusted = calculate_close_rect(target, end, current)
+    assert adjusted.x() == 120
+    assert adjusted.y() == 1081
+    assert adjusted.width() == 360
+    assert adjusted.height() == 405
+
+
+def test_calculate_close_rect_stationary():
+    target = QRect(100, 100, 200, 200)
+    end = QRect(100, 100, 200, 200)
+    current = QRect(100, 100, 200, 200)
+
+    adjusted = calculate_close_rect(target, end, current)
+    assert adjusted == end
+

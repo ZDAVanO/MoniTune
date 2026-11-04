@@ -54,7 +54,7 @@ from custom_widgets import (
 
 from services.settings_manager import get_settings
 from services.brightness_coordinator import BrightnessCoordinator
-from services.window_positioner import calculate_window_rects
+from services.window_positioner import calculate_window_rects, calculate_close_rect
 from utils.monitor_utils import (
     Monitor,
     get_monitors, 
@@ -179,6 +179,7 @@ class MainWindow(QMainWindow):
         self.coordinator = BrightnessCoordinator()
         self.is_power_saving_active = False
         self.is_popup = False
+        self.current_screen = None
 
         self.is_energy_saver = is_energy_saver_active()
         logger.info(f"is_energy_saver on startup: {self.is_energy_saver}")
@@ -1445,9 +1446,14 @@ class MainWindow(QMainWindow):
 
 
     # MARK: get_screen_and_target_rect()
-    def get_screen_and_target_rect(self):
-        cursor_pos = QCursor.pos()
-        screen = QGuiApplication.screenAt(cursor_pos)
+    def get_screen_and_target_rect(self, screen=None):
+        if screen is None:
+            screen = getattr(self, "current_screen", None)
+        if screen is None and self.isVisible():
+            screen = self.screen() or QGuiApplication.screenAt(self.geometry().center())
+        if screen is None:
+            cursor_pos = QCursor.pos()
+            screen = QGuiApplication.screenAt(cursor_pos)
         if screen is None:
             screen = QGuiApplication.primaryScreen()
 
@@ -1477,7 +1483,9 @@ class MainWindow(QMainWindow):
         logger.info("showEvent")
 
         # hide window offscreen to avoid flickering before opening animation
-        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        if getattr(self, "current_screen", None) is None:
+            self.current_screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        screen = self.current_screen
         full_rect = screen.geometry()
         self.move(full_rect.right() + 100, full_rect.bottom() + 100)
 
@@ -1500,6 +1508,7 @@ class MainWindow(QMainWindow):
             logger.info("Window is already open")
             return
 
+        self.current_screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
         self.is_popup = False
         self.update_monitors_info()
 
@@ -1526,6 +1535,7 @@ class MainWindow(QMainWindow):
             logger.info("Window is already open")
             return
 
+        self.current_screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
         self.is_popup = True
         # self.update_monitors_info()
 
@@ -1585,6 +1595,7 @@ class MainWindow(QMainWindow):
         logger.info("hideEvent")
 
         self.window_open = False
+        self.current_screen = None
         # self.stop_brightness_sync_thread()
 
         # QTimer.singleShot(2000, self.stop_brightness_sync_thread)  # Add 2-second delay
@@ -1671,8 +1682,9 @@ class MainWindow(QMainWindow):
 
     # MARK: animateWindowClose()
     def animateWindowClose(self):
-        screen, taskbar_edge, _, _, end_rect = self.get_screen_and_target_rect()
+        screen, taskbar_edge, target_rect, _, end_rect = self.get_screen_and_target_rect()
         current_rect = self.geometry()
+        end_rect = calculate_close_rect(target_rect, end_rect, current_rect)
         
         logger.info(f"current_rect: {current_rect}, end_rect: {end_rect}")
         
@@ -1701,6 +1713,7 @@ class MainWindow(QMainWindow):
     def on_close_animation_finished(self):
         logger.info("Close animation finished")
         self.hide()
+        self.current_screen = None
 
 
     # MARK: openSettingsWindow()
