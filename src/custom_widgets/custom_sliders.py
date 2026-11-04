@@ -134,17 +134,11 @@ class AnimatedSliderBS(QSlider):
         super().paintEvent(event)
         limit = getattr(self, "max_limit", 100)
         if limit < 100 and self.maximum() > self.minimum():
-            painter = QPainter(self)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
             opt = QStyleOptionSlider()
             self.initStyleOption(opt)
-            gr = self.style().subControlRect(QStyle.ComplexControl.CC_Slider, opt, QStyle.SubControl.SC_SliderGroove, self)
-            sr = self.style().subControlRect(QStyle.ComplexControl.CC_Slider, opt, QStyle.SubControl.SC_SliderHandle, self)
-
-            # Exclude the slider thumb/handle so it is never painted over
-            clip = QRegion(self.rect()).subtracted(QRegion(sr))
-            painter.setClipRegion(clip)
+            style = self.style()
+            sr = style.subControlRect(QStyle.ComplexControl.CC_Slider, opt, QStyle.SubControl.SC_SliderHandle, self)
+            gr = style.subControlRect(QStyle.ComplexControl.CC_Slider, opt, QStyle.SubControl.SC_SliderGroove, self)
 
             if self.orientation() == Qt.Orientation.Horizontal:
                 length = sr.width()
@@ -155,11 +149,24 @@ class AnimatedSliderBS(QSlider):
                 limit_x = min_pos + limit_pos + length // 2
 
                 notch_h = 20
-                notch_y = (self.height() - notch_h) / 2
-                painter.setPen(QPen(QColor(160, 160, 160, 220), 2.0))
-                painter.drawLine(limit_x, int(notch_y), limit_x, int(notch_y + notch_h))
+                notch_y = int((self.height() - notch_h) / 2)
+                notch_bottom = notch_y + notch_h
 
-            painter.end()
+                painter = QPainter(self)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                painter.setPen(QPen(QColor(160, 160, 160, 220), 2.0))
+
+                if sr.left() <= limit_x <= sr.right():
+                    # Handle covers limit_x; draw only tips outside the handle
+                    if notch_y < sr.top():
+                        painter.drawLine(limit_x, notch_y, limit_x, sr.top() - 1)
+                    if notch_bottom > sr.bottom():
+                        painter.drawLine(limit_x, sr.bottom() + 1, limit_x, notch_bottom)
+                else:
+                    # Handle is not over limit_x; draw clean full notch line
+                    painter.drawLine(limit_x, notch_y, limit_x, notch_bottom)
+
+                painter.end()
 
     def setValue(self, value: int):
         limit = getattr(self, "max_limit", 100)
