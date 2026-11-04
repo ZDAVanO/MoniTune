@@ -97,6 +97,33 @@ def reg_read_int(reg_path, dword_name, def_value=0):
 
 
 
+def reg_write_str(reg_path, value_name, value):
+    try:
+        if not key_exists(reg_path):
+            create_reg_key(reg_path)
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_WRITE) as key:
+            winreg.SetValueEx(key, value_name, 0, winreg.REG_SZ, str(value))
+    except Exception as e:
+        logger.error(f"Error writing string to registry: {e}")
+
+
+def reg_read_str(reg_path, value_name, def_value=""):
+    try:
+        if not key_exists(reg_path):
+            create_reg_key(reg_path)
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_READ) as key:
+            try:
+                value, _ = winreg.QueryValueEx(key, value_name)
+                return str(value)
+            except FileNotFoundError:
+                return def_value
+    except Exception as e:
+        logger.error(f"Error reading string from registry: {e}")
+        return def_value
+
+
 def reg_write_list(reg_path, dword_name, list):
     try:
         order_str = ",".join(map(str, list))

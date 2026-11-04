@@ -174,6 +174,9 @@ class MainWindow(QMainWindow):
         self.lock_listener = LockDetect(lambda state: self.lock_state_changed.emit(state)) # _on_lock_state_change
         threading.Thread(target=self.lock_listener.run, daemon=True).start()
 
+        self.pre_saving_brightness = {}
+        self.is_power_saving_active = False
+
         self.is_energy_saver = is_energy_saver_active()
         logger.info(f"is_energy_saver on startup: {self.is_energy_saver}")
         self.power_listener = PowerDetect(lambda state: self.energy_saver_changed.emit(state))
@@ -201,6 +204,8 @@ class MainWindow(QMainWindow):
         # if self.settings.enable_time_adjustment and self.settings.time_adjustment_startup:
         if self.settings.time_adjustment_startup:
             self.execute_recent_task()
+
+        self.apply_power_saving_state()
 
 
         # timer for hiding the popup window
@@ -298,8 +303,96 @@ class MainWindow(QMainWindow):
     def _on_energy_saver_change(self, is_active: bool):
         logger.info(f"Energy Saver state changed to: {is_active}")
         self.is_energy_saver = is_active
+        mode = getattr(self.settings, "power_saving_mode", "windows")
+        if mode == "windows":
+            self.apply_power_saving_state()
+        elif self.window_open:
+            self.updateBottomFrame()
+
+    # MARK: Power Saving Methods
+    def is_power_saving_effective(self) -> bool:
+        """Returns True if Power Saving limits should currently be enforced."""
+        if not getattr(self.settings, "enable_power_saving_limits", True):
+            return False
+        mode = getattr(self.settings, "power_saving_mode", "windows")
+        if mode == "manual":
+            return bool(getattr(self.settings, "power_saving_manual_state", False))
+        else:
+            return is_energy_saver_active()
+
+    def apply_power_saving_state(self, force=False):
+        """Enforces or releases power saving brightness limits on all monitors."""
+        effective = self.is_power_saving_effective()
+        if (effective == self.is_power_saving_active) and not force:
+            return
+
+        self.is_power_saving_active = effective
+        logger.info(f"apply_power_saving_state: active={effective}")
+
+        limits = getattr(self.settings, "power_saving_limits", {}) or {}
+
+        if effective:
+            # Entering power saving: clamp to limit
+            for serial, frame in self.br_frames.items():
+                if serial not in self.pre_saving_brightness:
+                    self.pre_saving_brightness[serial] = frame.slider.value()
+
+                limit = limits.get(serial, 100)
+                frame.slider.setMaximum(limit)
+                current_val = frame.slider.value()
+                if current_val > limit:
+                    frame.setValueBS(limit)
+                    self.settings.brightness_values[serial] = limit
+
+            self.start_brightness_sync_thread(delay_msec=50)
+        else:
+            # Exiting power saving: release limit and restore brightness
+            for serial, frame in self.br_frames.items():
+                frame.slider.setMaximum(100)
+
+            if self.profile_active:
+                logger.info("Exited power saving: maintaining active profile brightness")
+            elif self.settings.enable_time_adjustment:
+                logger.info("Exited power saving: executing recent schedule task")
+                self.execute_recent_task()
+            else:
+                logger.info(f"Exited power saving: restoring pre-saving brightness {self.pre_saving_brightness}")
+                for serial, val in self.pre_saving_brightness.items():
+                    if serial in self.br_frames:
+                        self.br_frames[serial].setValueBS(val)
+                        self.settings.brightness_values[serial] = val
+                        self.settings.manual_brightness_values[serial] = val
+                self.settings.save("manual_brightness_values")
+                self.start_brightness_sync_thread(delay_msec=50)
+
+            self.pre_saving_brightness.clear()
+
         if self.window_open:
             self.updateBottomFrame()
+
+    def toggle_manual_power_saving(self, checked: bool):
+        self.settings.power_saving_manual_state = checked
+        self.settings.save("power_saving_manual_state")
+        if hasattr(self, "power_saving_btn"):
+            self.power_saving_btn.setIcon(self.get_icon_for_toggle_state("leaf", checked))
+        logger.info(f"power_saving_manual_state toggled: {checked}")
+        self.apply_power_saving_state()
+
+    def on_power_saving_mode_changed(self, mode: str):
+        logger.info(f"on_power_saving_mode_changed: {mode}")
+        self.apply_power_saving_state(force=True)
+        if self.window_open:
+            self.updateBottomFrame()
+
+    def on_power_saving_enabled_toggled(self, enabled: bool):
+        logger.info(f"on_power_saving_enabled_toggled: {enabled}")
+        self.apply_power_saving_state(force=True)
+        if self.window_open:
+            self.updateBottomFrame()
+
+    def update_power_saving_limits(self):
+        if self.is_power_saving_effective():
+            self.apply_power_saving_state(force=True)
 
     # MARK: _on_lock_state_change()
     def _on_lock_state_change(self, state: str):
@@ -482,7 +575,15 @@ class MainWindow(QMainWindow):
     # MARK: apply_brightness()
     def apply_brightness(self, brightness_data, delay=0):
         logger.info(f"apply_brightness: {brightness_data}, delay: {delay / 1000} sec")
-        
+
+        if self.is_power_saving_effective():
+            limits = getattr(self.settings, "power_saving_limits", {}) or {}
+            brightness_data = dict(brightness_data)
+            for s in list(brightness_data.keys()):
+                lim = limits.get(s, 100)
+                if brightness_data[s] > lim:
+                    brightness_data[s] = lim
+
         self.update_monitors_info()
         for serial in self.active_monitors_dict:
             if serial in brightness_data:
@@ -925,6 +1026,11 @@ class MainWindow(QMainWindow):
                 disabled=brightness_failed,
             )
             self.br_frames[monitor.serial] = br_frame  # Store frame in dictionary
+            if self.is_power_saving_effective():
+                limit = (self.settings.power_saving_limits or {}).get(monitor.serial, 100)
+                br_frame.slider.setMaximum(limit)
+                if br_frame.slider.value() > limit:
+                    br_frame.setValueBS(limit)
             monitor_vbox.addWidget(br_frame)
 
 
@@ -988,14 +1094,31 @@ class MainWindow(QMainWindow):
 
         self.is_energy_saver = is_energy_saver_active()
         logger.info(f"updateBottomFrame is_energy_saver: {self.is_energy_saver}")
-        if self.is_energy_saver:
-            self.energy_saver_btn = QPushButton()
-            self.energy_saver_btn.setFixedSize(41, 39)
-            self.energy_saver_btn.setIcon(QIcon(cfg.icons["leaf"][self.theme]))
-            self.energy_saver_btn.setIconSize(QSize(21, 21))
-            self.energy_saver_btn.setToolTip("Energy Saver is active")
-            self.energy_saver_btn.clicked.connect(lambda: webbrowser.open("ms-settings:powersleep"))
-            self.bottom_frame_hbox.addWidget(self.energy_saver_btn)
+
+        mode = getattr(self.settings, "power_saving_mode", "windows")
+        limits_enabled = getattr(self.settings, "enable_power_saving_limits", True)
+
+        if limits_enabled:
+            if mode == "windows":
+                if self.is_energy_saver:
+                    self.energy_saver_indicator = QLabel()
+                    self.energy_saver_indicator.setPixmap(QIcon(cfg.icons["leaf"][self.theme]).pixmap(21, 21))
+                    self.energy_saver_indicator.setFixedSize(28, 39)
+                    self.energy_saver_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.energy_saver_indicator.setToolTip("Energy Saver is active (Following Windows. Switch to manual in Settings)")
+                    self.energy_saver_indicator.setStyleSheet("background: transparent; border: none;")
+                    self.bottom_frame_hbox.addWidget(self.energy_saver_indicator)
+            else:
+                self.power_saving_btn = QPushButton()
+                self.power_saving_btn.setCheckable(True)
+                manual_state = bool(getattr(self.settings, "power_saving_manual_state", False))
+                self.power_saving_btn.setChecked(manual_state)
+                self.power_saving_btn.setFixedSize(41, 39)
+                self.power_saving_btn.setIcon(self.get_icon_for_toggle_state("leaf", manual_state))
+                self.power_saving_btn.setIconSize(QSize(21, 21))
+                self.power_saving_btn.setToolTip("Power Saving (Manual mode)")
+                self.power_saving_btn.toggled.connect(self.toggle_manual_power_saving)
+                self.bottom_frame_hbox.addWidget(self.power_saving_btn)
 
         if len(self.active_monitors_dict) > 1:
             self.link_br_btn = QPushButton()
@@ -1132,16 +1255,18 @@ class MainWindow(QMainWindow):
 
                     # use prev_value to preserve the offset between sliders
                     prev_value = self.settings.brightness_values.get(serial, 0)
-                    new_value = max(0, min(100, (prev_value + change)))
+                    new_value = max(0, min(slider.maximum(), (prev_value + change)))
 
                     frame.setValueBS(int(new_value))
 
                     self.settings.brightness_values[serial] = int(new_value)
-                    self.settings.manual_brightness_values[serial] = int(new_value)
+                    if not self.is_power_saving_effective():
+                        self.settings.manual_brightness_values[serial] = int(new_value)
 
         self.settings.brightness_values[monitor_serial] = int(value)
-        self.settings.manual_brightness_values[monitor_serial] = int(value)
-        self.settings.save("manual_brightness_values")
+        if not self.is_power_saving_effective():
+            self.settings.manual_brightness_values[monitor_serial] = int(value)
+            self.settings.save("manual_brightness_values")
 
         self.reset_popup_timer()  # Reset the popup timer
 

@@ -666,6 +666,96 @@ class BaseBrightnessSlidersFrame(SettingFrame):
 
 
 
+# MARK: PowerSavingModeFrame
+class PowerSavingModeFrame(BaseSettingFrame):
+    def __init__(self, main_window):
+        super().__init__(title="Activation Mode", 
+                         descr="Choose whether to follow Windows 11 Energy Saver or toggle manually in MoniTune.")
+        self.main_window = main_window
+
+        self.combo = QComboBox()
+        self.combo.addItem("Follow Windows 11 Energy Saver", "windows")
+        self.combo.addItem("Manual control in MoniTune", "manual")
+        self.combo.setMinimumWidth(240)
+        self.combo.setStyleSheet("padding: 5px 10px;")
+
+        current_mode = getattr(main_window.settings, "power_saving_mode", "windows")
+        idx = self.combo.findData(current_mode)
+        if idx >= 0:
+            self.combo.setCurrentIndex(idx)
+
+        self.combo.currentIndexChanged.connect(self.on_mode_changed)
+        self.title_layout.addWidget(self.combo, alignment=Qt.AlignmentFlag.AlignRight)
+
+    def on_mode_changed(self, index):
+        mode = self.combo.currentData()
+        logger.info(f"Power Saving mode changed to: {mode}")
+        get_settings().set("power_saving_mode", mode)
+        if hasattr(self.main_window, "on_power_saving_mode_changed"):
+            self.main_window.on_power_saving_mode_changed(mode)
+
+
+# MARK: PowerSavingLimitsFrame
+class PowerSavingLimitsFrame(SettingFrame):
+    def __init__(self, settings_window, monitors_order, display_names):
+        super().__init__(settings_window, 
+                         title="Monitor Brightness Limits",
+                         descr="Set the maximum brightness allowed during Power Saving. Set to 100% for no limit.")
+        self.settings_window = settings_window
+        self.monitors_order = monitors_order
+        self.display_names = display_names
+        self.sliders = {}
+
+        limits_data = self.settings_window.settings.power_saving_limits or {}
+
+        sliders_container = QHBoxLayout()
+        sliders_container.setContentsMargins(9, 6, 9, 6)
+        sliders_container.setSpacing(0)
+
+        names_layout = QVBoxLayout()
+        sliders_layout = QVBoxLayout()
+        sliders_container.addLayout(names_layout)
+        sliders_container.addItem(QSpacerItem(12, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        sliders_container.addLayout(sliders_layout)
+
+        for serial in monitors_order:
+            label = QLabel(display_names.get(serial, serial))
+            names_layout.addWidget(label)
+
+            slider_layout = QHBoxLayout()
+            slider = NoScrollSlider(Qt.Orientation.Horizontal)
+            slider.setRange(0, 100)
+            initial_val = int(limits_data.get(serial, 100))
+            slider.setValue(initial_val)
+            self.sliders[serial] = slider
+
+            spacer = QSpacerItem(6, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+
+            value_label = QLabel("No limit" if initial_val == 100 else f"{initial_val}%")
+            value_label.setFixedWidth(55)
+            value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            def make_handler(s, lbl):
+                return lambda val: self.on_slider_changed(s, val, lbl)
+
+            slider.valueChanged.connect(make_handler(serial, value_label))
+
+            slider_layout.addWidget(slider)
+            slider_layout.addItem(spacer)
+            slider_layout.addWidget(value_label)
+            sliders_layout.addLayout(slider_layout)
+
+        self.content_layout.addLayout(sliders_container)
+
+    def on_slider_changed(self, serial, value, label):
+        label.setText("No limit" if value == 100 else f"{value}%")
+        current_limits = dict(self.settings_window.settings.power_saving_limits or {})
+        current_limits[serial] = int(value)
+        self.settings_window.settings.set("power_saving_limits", current_limits)
+        if hasattr(self.settings_window.main_window, "update_power_saving_limits"):
+            self.settings_window.main_window.update_power_saving_limits()
+
+
 # MARK: TimeAdjustmentFrame
 class TimeAdjustmentFrame(BaseBrightnessSlidersFrame):
     def __init__(self, 
@@ -1344,6 +1434,25 @@ class SettingsWindow(QWidget):
             add_time_adjustment_frame(time_str, brightness_data)
 
 
+
+        # MARK: Power Saving Tab
+        power_saving_tab = ScrollableTab()
+        self.tab_widget.addTab(power_saving_tab, "Power Saving")
+
+        power_saving_tab.layout_.addWidget(SettingToggleFrame(
+            main_window=self.main_window,
+            title="Enable Power Saving Limits",
+            descr="Limit maximum brightness on configured monitors when power saving is active.",
+            setting_name="enable_power_saving_limits",
+            reg_setting_name="EnablePowerSavingLimits",
+            callback=self.main_window.on_power_saving_enabled_toggled
+        ))
+
+        power_saving_tab.layout_.addWidget(PowerSavingModeFrame(self.main_window))
+
+        power_saving_tab.layout_.addWidget(PowerSavingLimitsFrame(
+            self, monitors_order, display_names
+        ))
 
         # MARK: Profiles Tab
         profiles_tab = ScrollableTab()

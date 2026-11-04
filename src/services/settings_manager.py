@@ -19,6 +19,8 @@ try:
         reg_write_dict,
         reg_write_int,
         reg_write_list,
+        reg_read_str,
+        reg_write_str,
     )
 except ImportError:
     from src import config as cfg
@@ -32,6 +34,8 @@ except ImportError:
         reg_write_dict,
         reg_write_int,
         reg_write_list,
+        reg_read_str,
+        reg_write_str,
     )
 
 logger = logging.getLogger(__name__)
@@ -126,6 +130,12 @@ _SPECS: List[SettingSpec] = [
     # Profiles tab
     SettingSpec("enable_profiles", "EnableProfiles", bool, lambda: False),
     SettingSpec("profiles_data", "ProfilesData", dict, dict),
+
+    # Power Saving tab
+    SettingSpec("enable_power_saving_limits", "EnablePowerSavingLimits", bool, lambda: True),
+    SettingSpec("power_saving_mode", "PowerSavingMode", str, lambda: "windows"),
+    SettingSpec("power_saving_manual_state", "PowerSavingManualState", bool, lambda: False),
+    SettingSpec("power_saving_limits", "PowerSavingLimits", dict, dict),
 ]
 
 _SPECS_BY_NAME: Dict[str, SettingSpec] = {spec.name: spec for spec in _SPECS}
@@ -176,6 +186,8 @@ class SettingsManager(QObject):
         elif spec.val_type is dict:
             val = reg_read_dict(self._reg_path, spec.reg_name)
             return val if val else default_val
+        elif spec.val_type is str:
+            return reg_read_str(self._reg_path, spec.reg_name, default_val)
         return default_val
 
     def _write_spec_to_registry(self, spec: SettingSpec, value: Any) -> None:
@@ -191,6 +203,8 @@ class SettingsManager(QObject):
             reg_write_list(self._reg_path, spec.reg_name, list(value))
         elif spec.val_type is dict:
             reg_write_dict(self._reg_path, spec.reg_name, dict(value))
+        elif spec.val_type is str:
+            reg_write_str(self._reg_path, spec.reg_name, str(value))
 
     def _load_all(self) -> None:
         """Load all configured settings from registry into cache."""
