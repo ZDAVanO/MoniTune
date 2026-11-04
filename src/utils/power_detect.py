@@ -1,5 +1,4 @@
 import ctypes
-from ctypes import wintypes
 import winreg
 import win32api
 import win32event
@@ -48,34 +47,11 @@ def is_energy_saver_active() -> bool:
     return False
 
 
-def get_power_status() -> dict:
-    """Returns detailed power status: AC status, battery percent, and energy saver state."""
-    on_battery = False
-    ac_line = 1
-    battery_pct = None
-    try:
-        status = SYSTEM_POWER_STATUS()
-        if kernel32.GetSystemPowerStatus(ctypes.byref(status)):
-            on_battery = (status.ACLineStatus == 0)
-            ac_line = status.ACLineStatus
-            if status.BatteryLifePercent <= 100:
-                battery_pct = status.BatteryLifePercent
-    except Exception:
-        pass
-
-    return {
-        "on_battery": on_battery,
-        "ac_line_status": ac_line,
-        "battery_percent": battery_pct,
-        "energy_saver": is_energy_saver_active()
-    }
-
-
 class PowerDetect:
     """
     Background listener that continuously monitors Energy Saver changes:
     - Uses RegNotifyChangeKeyValue on the Power registry key to detect changes instantly.
-    - Also polls every 1 second as a fail-safe fallback.
+    - Re-registers only upon event signal to avoid kernel registration accumulation.
     - Calls callback(is_active: bool) whenever the state changes.
     """
     def __init__(self, callback):
@@ -86,6 +62,7 @@ class PowerDetect:
     def run(self):
         reg_key = None
         event = None
+        registered = False
         try:
             reg_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Power")
             event = win32event.CreateEvent(None, 0, 0, None)
@@ -95,11 +72,15 @@ class PowerDetect:
         while self._running:
             try:
                 if reg_key and event:
-                    win32api.RegNotifyChangeKeyValue(
-                        reg_key, False, win32api.REG_NOTIFY_CHANGE_LAST_SET, event, True
-                    )
-                    # Wait up to 1000ms for event or timeout
-                    win32event.WaitForSingleObject(event, 1000)
+                    if not registered:
+                        win32api.RegNotifyChangeKeyValue(
+                            reg_key, False, win32api.REG_NOTIFY_CHANGE_LAST_SET, event, True
+                        )
+                        registered = True
+
+                    wait_res = win32event.WaitForSingleObject(event, 1000)
+                    if wait_res == win32event.WAIT_OBJECT_0:
+                        registered = False  # Re-arm on next loop
                 else:
                     time.sleep(1.0)
 
@@ -113,6 +94,7 @@ class PowerDetect:
                         logger.error(f"Error in PowerDetect callback: {cb_err}")
             except Exception as e:
                 logger.error(f"Error in PowerDetect watcher loop: {e}")
+                registered = False
                 time.sleep(1.0)
 
         if event:
