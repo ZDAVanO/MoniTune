@@ -732,6 +732,7 @@ class PowerSavingLimitsFrame(SettingFrame):
         self.monitors_order = monitors_order
         self.display_names = display_names
         self.sliders = {}
+        self._debounce_timers = {}
 
         limits_data = self.settings_window.settings.power_saving_limits or {}
 
@@ -756,16 +757,24 @@ class PowerSavingLimitsFrame(SettingFrame):
             slider.setValue(initial_val)
             self.sliders[serial] = slider
 
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(300)
+            timer.timeout.connect(lambda s=serial, sl=slider: self.commit_limit(s, sl.value()))
+            self._debounce_timers[serial] = timer
+
             spacer = QSpacerItem(6, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
             value_label = QLabel("No limit" if initial_val == 100 else f"{initial_val}%")
             value_label.setFixedWidth(55)
             value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-            def make_handler(s, lbl):
-                return lambda val: self.on_slider_changed(s, val, lbl)
-
-            slider.valueChanged.connect(make_handler(serial, value_label))
+            slider.valueChanged.connect(
+                lambda val, s=serial, lbl=value_label, sl=slider: self.on_slider_value_changed(s, val, lbl, sl)
+            )
+            slider.sliderReleased.connect(
+                lambda s=serial, sl=slider: self.on_slider_released(s, sl)
+            )
 
             slider_layout.addWidget(slider)
             slider_layout.addItem(spacer)
@@ -774,13 +783,37 @@ class PowerSavingLimitsFrame(SettingFrame):
 
         self.content_layout.addLayout(sliders_container)
 
-    def on_slider_changed(self, serial, value, label):
+    def on_slider_value_changed(self, serial, value, label, slider):
         label.setText("No limit" if value == 100 else f"{value}%")
+        if slider.isSliderDown():
+            # Actively dragging with mouse: update label only, don't spam hardware
+            timer = self._debounce_timers.get(serial)
+            if timer and timer.isActive():
+                timer.stop()
+        else:
+            # Changed without dragging (e.g. keyboard navigation): debounce commit
+            timer = self._debounce_timers.get(serial)
+            if timer:
+                timer.start(300)
+
+    def on_slider_released(self, serial, slider):
+        timer = self._debounce_timers.get(serial)
+        if timer and timer.isActive():
+            timer.stop()
+        self.commit_limit(serial, slider.value())
+
+    def commit_limit(self, serial, value):
         current_limits = dict(self.settings_window.settings.power_saving_limits or {})
+        if current_limits.get(serial) == int(value):
+            return
         current_limits[serial] = int(value)
         self.settings_window.settings.set("power_saving_limits", current_limits)
         if hasattr(self.settings_window.main_window, "update_power_saving_limits"):
             self.settings_window.main_window.update_power_saving_limits()
+
+    def on_slider_changed(self, serial, value, label):
+        label.setText("No limit" if value == 100 else f"{value}%")
+        self.commit_limit(serial, value)
 
 
 # MARK: TimeAdjustmentFrame

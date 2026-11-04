@@ -147,3 +147,41 @@ def test_slider_frame_animation_down_and_up(qapp):
     assert frame.slider.value() == 40
     assert frame.label.text() == "40"
     assert any(15 < v < 40 for v in emitted_up)
+
+
+def test_power_saving_limits_frame_drag_does_not_spam_hardware(qapp):
+    from unittest.mock import MagicMock
+    from settings_window import PowerSavingLimitsFrame
+
+    mock_settings = MagicMock()
+    mock_settings.power_saving_limits = {"mon1": 100}
+    mock_main_window = MagicMock()
+
+    mock_settings_window = MagicMock()
+    mock_settings_window.settings = mock_settings
+    mock_settings_window.main_window = mock_main_window
+    mock_settings_window.theme = "Dark"
+    mock_settings_window.color_theme = "Dark"
+
+    frame = PowerSavingLimitsFrame(
+        settings_window=mock_settings_window,
+        monitors_order=["mon1"],
+        display_names={"mon1": "Main Display"},
+    )
+    slider = frame.sliders["mon1"]
+
+    # Start dragging: value changes should update UI without committing to hardware
+    slider.setSliderDown(True)
+    slider.setValue(40)
+    assert not mock_settings.set.called
+    assert not mock_main_window.update_power_saving_limits.called
+
+    slider.setValue(25)
+    assert not mock_settings.set.called
+    assert not mock_main_window.update_power_saving_limits.called
+
+    # Release mouse: commit to settings and hardware once
+    slider.setSliderDown(False)
+
+    mock_settings.set.assert_called_once_with("power_saving_limits", {"mon1": 25})
+    mock_main_window.update_power_saving_limits.assert_called_once()
