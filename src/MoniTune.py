@@ -1295,34 +1295,39 @@ class MainWindow(QMainWindow):
     # MARK: on_brightness_change()
     def on_brightness_change(self, value, monitor_serial):
         # logger.info(f"on_brightness_change: {value}, {monitor_serial}")
-        if self.is_power_saving_effective():
-            limit = (self.settings.power_saving_limits or {}).get(monitor_serial, 100)
-            if value > limit:
-                value = limit
+        is_ps = self.is_power_saving_effective()
+        limits = self.settings.power_saving_limits or {}
 
         if self.settings.link_brightness and not self._linking_suspended:
-            previous_value = self.settings.brightness_values.get(monitor_serial, 0)
-            change = value - previous_value
-            # print(f"Brightness change for {monitor_serial}: {change}")
+            new_values = self.coordinator.calculate_linked_change(
+                master_serial=monitor_serial,
+                new_master_value=value,
+                current_values=self.settings.brightness_values,
+                limits=limits,
+                is_power_saving=is_ps,
+            )
+            for serial, new_val in new_values.items():
+                if serial != monitor_serial and serial in self.br_frames:
+                    if self.br_frames[serial].slider.isEnabled():
+                        self.br_frames[serial].setValueBS(new_val)
+                self.settings.brightness_values[serial] = new_val
+                if not is_ps:
+                    self.settings.manual_brightness_values[serial] = new_val
+        else:
+            clamped_val = self.coordinator.resolve_brightness(
+                enable_profiles=False,
+                profile_value=None,
+                enable_schedule=False,
+                schedule_value=None,
+                manual_value=value,
+                is_power_saving=is_ps,
+                power_saving_limit=limits.get(monitor_serial, 100),
+            )
+            self.settings.brightness_values[monitor_serial] = clamped_val
+            if not is_ps:
+                self.settings.manual_brightness_values[monitor_serial] = clamped_val
 
-            for serial, frame in self.br_frames.items():
-                slider = frame.slider
-                
-                if (serial != monitor_serial) and slider.isEnabled():
-
-                    # use prev_value to preserve the offset between sliders
-                    prev_value = self.settings.brightness_values.get(serial, 0)
-                    new_value = max(0, min(slider.maximum(), (prev_value + change)))
-
-                    frame.setValueBS(int(new_value))
-
-                    self.settings.brightness_values[serial] = int(new_value)
-                    if not self.is_power_saving_effective():
-                        self.settings.manual_brightness_values[serial] = int(new_value)
-
-        self.settings.brightness_values[monitor_serial] = int(value)
-        if not self.is_power_saving_effective():
-            self.settings.manual_brightness_values[monitor_serial] = int(value)
+        if not is_ps:
             self.settings.save("manual_brightness_values")
 
         self.reset_popup_timer()  # Reset the popup timer
