@@ -53,6 +53,7 @@ from custom_widgets import (
 )
 
 from services.settings_manager import get_settings
+from services.brightness_coordinator import BrightnessCoordinator
 from utils.monitor_utils import (
     Monitor,
     get_monitors, 
@@ -174,6 +175,7 @@ class MainWindow(QMainWindow):
         self.lock_listener = LockDetect(lambda state: self.lock_state_changed.emit(state)) # _on_lock_state_change
         threading.Thread(target=self.lock_listener.run, daemon=True).start()
 
+        self.coordinator = BrightnessCoordinator()
         self.pre_saving_brightness = {}
         self.is_power_saving_active = False
 
@@ -313,13 +315,12 @@ class MainWindow(QMainWindow):
     # MARK: Power Saving Methods
     def is_power_saving_effective(self) -> bool:
         """Returns True if Power Saving limits should currently be enforced."""
-        if not getattr(self.settings, "enable_power_saving_limits", True):
-            return False
-        mode = getattr(self.settings, "power_saving_mode", "windows")
-        if mode == "manual":
-            return bool(getattr(self.settings, "power_saving_manual_state", False))
-        else:
-            return bool(getattr(self, "is_energy_saver", False))
+        return self.coordinator.is_power_saving_effective(
+            enable_limits=getattr(self.settings, "enable_power_saving_limits", True),
+            mode=getattr(self.settings, "power_saving_mode", "windows"),
+            manual_state=getattr(self.settings, "power_saving_manual_state", False),
+            is_windows_energy_saver=getattr(self, "is_energy_saver", False),
+        )
 
     def apply_power_saving_state(self, force=False):
         """Enforces or releases power saving brightness limits on all monitors."""
