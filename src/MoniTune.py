@@ -1101,12 +1101,18 @@ class MainWindow(QMainWindow):
         if limits_enabled:
             if mode == "windows":
                 if self.is_energy_saver:
-                    self.energy_saver_indicator = QLabel()
-                    self.energy_saver_indicator.setPixmap(QIcon(cfg.icons["leaf"][self.theme]).pixmap(21, 21))
-                    self.energy_saver_indicator.setFixedSize(28, 39)
-                    self.energy_saver_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.energy_saver_indicator = QPushButton()
+                    self.energy_saver_indicator.setFixedSize(30, 39)
+                    self.energy_saver_indicator.setIcon(QIcon(cfg.icons["leaf"][self.theme]))
+                    self.energy_saver_indicator.setIconSize(QSize(21, 21))
+                    self.energy_saver_indicator.setFlat(True)
                     self.energy_saver_indicator.setToolTip("Energy Saver is active (Following Windows. Switch to manual in Settings)")
-                    self.energy_saver_indicator.setStyleSheet("background: transparent; border: none;")
+                    self.energy_saver_indicator.setStyleSheet("""
+                        QPushButton {
+                            background: transparent;
+                            border: none;
+                        }
+                    """)
                     self.bottom_frame_hbox.addWidget(self.energy_saver_indicator)
             else:
                 self.power_saving_btn = QPushButton()
@@ -1242,6 +1248,10 @@ class MainWindow(QMainWindow):
     # MARK: on_brightness_change()
     def on_brightness_change(self, value, monitor_serial):
         # logger.info(f"on_brightness_change: {value}, {monitor_serial}")
+        if self.is_power_saving_effective():
+            limit = (self.settings.power_saving_limits or {}).get(monitor_serial, 100)
+            if value > limit:
+                value = limit
 
         if self.settings.link_brightness and not self._linking_suspended:
             previous_value = self.settings.brightness_values.get(monitor_serial, 0)
@@ -1286,7 +1296,7 @@ class MainWindow(QMainWindow):
             for frame in self.br_frames.values():
                 slider = frame.slider
                 if slider.isEnabled():
-                    new_value = max(0, min(100, slider.value() + (1 if delta > 0 else -1)))
+                    new_value = max(0, min(slider.maximum(), slider.value() + (1 if delta > 0 else -1)))
                     slider.setValue(new_value)
         finally:
             self._linking_suspended = False
@@ -1304,6 +1314,12 @@ class MainWindow(QMainWindow):
             
             brightness_values_copy = self.settings.brightness_values.copy()
             for monitor_serial, brightness in brightness_values_copy.items():
+                if self.is_power_saving_effective():
+                    limit = (self.settings.power_saving_limits or {}).get(monitor_serial, 100)
+                    if brightness > limit:
+                        brightness = limit
+                        self.settings.brightness_values[monitor_serial] = limit
+
                 if (monitor_serial in self.active_monitors_dict) and ( # check if monitor is connected
                     previous_brightness_values.get(monitor_serial) != brightness # check if brightness changed
                 ):
@@ -1350,6 +1366,11 @@ class MainWindow(QMainWindow):
         brightness_values_copy = self.settings.brightness_values.copy()
         for monitor_serial, brightness in brightness_values_copy.items():
             if monitor_serial in self.active_monitors_dict:  # Check if monitor is connected
+                if self.is_power_saving_effective():
+                    limit = (self.settings.power_saving_limits or {}).get(monitor_serial, 100)
+                    if brightness > limit:
+                        brightness = limit
+                        self.settings.brightness_values[monitor_serial] = limit
                 try:
                     monitor: Monitor = self.active_monitors_dict[monitor_serial]
                     if not monitor.set_brightness(brightness, retries=7):

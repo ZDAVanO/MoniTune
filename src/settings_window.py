@@ -670,14 +670,13 @@ class BaseBrightnessSlidersFrame(SettingFrame):
 class PowerSavingModeFrame(BaseSettingFrame):
     def __init__(self, main_window):
         super().__init__(title="Activation Mode", 
-                         descr="Choose whether to follow Windows 11 Energy Saver or toggle manually in MoniTune.")
+                         descr="Choose whether to follow Windows Energy Saver or toggle manually in MoniTune.")
         self.main_window = main_window
 
         self.combo = QComboBox()
-        self.combo.addItem("Follow Windows 11 Energy Saver", "windows")
+        self.combo.addItem("Follow Windows Energy Saver", "windows")
         self.combo.addItem("Manual control in MoniTune", "manual")
         self.combo.setMinimumWidth(240)
-        self.combo.setStyleSheet("padding: 5px 10px;")
 
         current_mode = getattr(main_window.settings, "power_saving_mode", "windows")
         idx = self.combo.findData(current_mode)
@@ -908,8 +907,8 @@ class SettingsWindow(QWidget):
         self.setWindowTitle(f"{cfg.app_name} Settings")
         self.setWindowIcon(QIcon(cfg.icons["monitune"]["Light"]))
         
-        self.resize(475, 600)
-        self.setMinimumWidth(450)
+        self.resize(520, 620)
+        self.setMinimumWidth(520)
         self.setMinimumHeight(400)
 
         settings_layout = QVBoxLayout(self)
