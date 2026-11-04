@@ -361,9 +361,10 @@ class MainWindow(QMainWindow):
                         target_val = target_values.get(serial, self.settings.brightness_values.get(serial, 50))
                         frame = self.br_frames[serial]
                         frame.slider.blockSignals(True)
-                        frame.slider.setMaximum(limit)
+                        frame.set_max_limit(limit, snap=not self.window_open)
                         frame.slider.blockSignals(False)
-                        frame.setValueBS(target_val)
+                        if not self.window_open:
+                            frame.setValueBS(target_val)
 
                 self.apply_brightness(target_values)
 
@@ -376,9 +377,10 @@ class MainWindow(QMainWindow):
                         target_val = restored_values.get(serial, self.settings.brightness_values.get(serial, 50))
                         frame = self.br_frames[serial]
                         frame.slider.blockSignals(True)
-                        frame.slider.setMaximum(100)
+                        frame.set_max_limit(100)
                         frame.slider.blockSignals(False)
-                        frame.setValueBS(target_val)
+                        if not self.window_open:
+                            frame.setValueBS(target_val)
 
                 if self.profile_active:
                     logger.info("Exited power saving: re-applying active profile brightness")
@@ -1066,7 +1068,7 @@ class MainWindow(QMainWindow):
             self.br_frames[monitor.serial] = br_frame  # Store frame in dictionary
             if self.is_power_saving_effective():
                 limit = (self.settings.power_saving_limits or {}).get(monitor.serial, 100)
-                br_frame.slider.setMaximum(limit)
+                br_frame.set_max_limit(limit)
                 if br_level > limit:
                     if monitor.serial not in self.pre_saving_brightness:
                         self.pre_saving_brightness[monitor.serial] = br_level
@@ -1343,7 +1345,8 @@ class MainWindow(QMainWindow):
             for frame in self.br_frames.values():
                 slider = frame.slider
                 if slider.isEnabled():
-                    new_value = max(0, min(slider.maximum(), slider.value() + (1 if delta > 0 else -1)))
+                    limit = getattr(slider, "max_limit", slider.maximum())
+                    new_value = max(0, min(limit, slider.value() + (1 if delta > 0 else -1)))
                     slider.setValue(new_value)
         finally:
             self._linking_suspended = False

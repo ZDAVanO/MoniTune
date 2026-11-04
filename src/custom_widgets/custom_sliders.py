@@ -1,3 +1,4 @@
+from typing import Optional
 from PySide6.QtWidgets import (
     QApplication, 
     QMainWindow, 
@@ -94,13 +95,48 @@ class AnimatedSliderBS(QSlider):
 
         # self.setRange(0, 100)
         self.scrollStep = scrollStep
+        self.max_limit: int = 100
 
         self.animation = QPropertyAnimation(self, b"value")
         self.animation.finished.connect(lambda: self.blockSignals(False))
 
+    def set_max_limit(self, limit: Optional[int] = None, snap: bool = True):
+        self.max_limit = 100 if limit is None else max(0, min(100, int(limit)))
+        if self.animation.state() == QPropertyAnimation.State.Running:
+            if self.animation.endValue() > self.max_limit:
+                self.stop_animation()
+                if snap and self.value() > self.max_limit:
+                    self.setValue(self.max_limit)
+        elif snap and self.value() > self.max_limit:
+            self.setValue(self.max_limit)
+
+    def setValue(self, value: int):
+        limit = getattr(self, "max_limit", 100)
+        if self.animation.state() == QPropertyAnimation.State.Running and self.animation.endValue() <= limit:
+            super().setValue(int(value))
+        else:
+            super().setValue(min(int(value), limit))
+
+    def setSliderPosition(self, position: int):
+        limit = getattr(self, "max_limit", 100)
+        super().setSliderPosition(min(int(position), limit))
+
+    def sliderChange(self, change):
+        if change == QSlider.SliderChange.SliderValueChange:
+            limit = getattr(self, "max_limit", 100)
+            if self.animation.state() == QPropertyAnimation.State.Running and self.animation.endValue() <= limit:
+                pass
+            elif self.value() > limit:
+                self.setValue(limit)
+                return
+        super().sliderChange(change)
+
 
     def animate_to(self, target_value, duration=1000, easing_curve=QEasingCurve.Type.OutCubic):
         # print(f"AnimatedSliderBS animate_to {self.value()}-{target_value}")
+
+        limit = getattr(self, "max_limit", 100)
+        target_value = min(int(target_value), limit)
 
         if self.animation.state() == QPropertyAnimation.State.Running:
             # logger.info("Animation is running, stopping it before starting a new one.")
@@ -135,28 +171,70 @@ class AnimatedSliderBS(QSlider):
 
     # Stop animation when user interacts with the slider
     def wheelEvent(self, event: QWheelEvent):
-        if event.angleDelta().y() > 0:
-            self.setValue(self.value() + self.scrollStep)
-        else:
-            self.setValue(self.value() - self.scrollStep)
-
-        if (self.animation.state() == QPropertyAnimation.State.Running):
+        if self.animation.state() == QPropertyAnimation.State.Running:
             self.stop_animation()
-            self.valueChanged.emit(self.value())
+
+        limit = getattr(self, "max_limit", 100)
+        step = self.scrollStep if event.angleDelta().y() > 0 else -self.scrollStep
+        new_val = max(0, min(limit, self.value() + step))
+        self.setValue(new_val)
 
     def mousePressEvent(self, event):
-        super().mousePressEvent(event)
-        if event.button() == Qt.MouseButton.LeftButton:
-            # print("AnimatedSliderBS LeftButton pressed")
-            if (self.animation.state() == QPropertyAnimation.State.Running):
-                self.stop_animation()
+        if self.animation.state() == QPropertyAnimation.State.Running:
+            self.stop_animation()
+
+        limit = getattr(self, "max_limit", 100)
+        if limit < 100:
+            self.blockSignals(True)
+            super().mousePressEvent(event)
+            self.blockSignals(False)
+            if self.value() > limit:
+                self.setValue(limit)
+                self.setSliderPosition(limit)
+            else:
                 self.valueChanged.emit(self.value())
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self.animation.state() == QPropertyAnimation.State.Running:
+            self.stop_animation()
+
+        limit = getattr(self, "max_limit", 100)
+        if limit < 100:
+            prev_val = self.value()
+            self.blockSignals(True)
+            super().mouseMoveEvent(event)
+            self.blockSignals(False)
+            if self.value() > limit:
+                self.setSliderPosition(limit)
+                if prev_val == limit:
+                    self.blockSignals(True)
+                    self.setValue(limit)
+                    self.blockSignals(False)
+                else:
+                    self.setValue(limit)
+            else:
+                self.valueChanged.emit(self.value())
+        else:
+            super().mouseMoveEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent):
-        super().keyPressEvent(event)
-        if (self.animation.state() == QPropertyAnimation.State.Running):
+        if self.animation.state() == QPropertyAnimation.State.Running:
             self.stop_animation()
-            self.valueChanged.emit(self.value())
+
+        limit = getattr(self, "max_limit", 100)
+        if limit < 100:
+            self.blockSignals(True)
+            super().keyPressEvent(event)
+            self.blockSignals(False)
+            if self.value() > limit:
+                self.setValue(limit)
+                self.setSliderPosition(limit)
+            else:
+                self.valueChanged.emit(self.value())
+        else:
+            super().keyPressEvent(event)
 
 
 

@@ -80,23 +80,38 @@ class SliderFrame(QFrame):
         self.hbox.addItem(QSpacerItem(3, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
         self.hbox.addWidget(self.label)
 
-        if self.slider_callback:
-            self.slider.valueChanged.connect(self.slider_callback)
-        self.slider.valueChanged.connect(lambda value, lbl=self.label: lbl.setText(str(value)))
-        self.slider.valueChanged.connect(lambda value, ico=self.icon: ico.animate_to(value))
+        self.slider.valueChanged.connect(self._on_slider_value_changed)
         self.slider.animation.valueChanged.connect(self.update_ui_elements)
 
         if disabled:
             self.setDisabled(True)
 
+    def _on_slider_value_changed(self, value):
+        limit = getattr(self.slider, "max_limit", 100)
+        clamped = min(int(value), limit)
+        self.label.setText(str(clamped))
+        self.icon.animate_to(clamped)
+        if self.slider_callback:
+            self.slider_callback(clamped)
+
     def update_ui_elements(self, value):
         self.label.setText(str(value))
         self.icon.set_value(value)
 
+    def set_max_limit(self, limit: Optional[int] = None, snap: bool = True):
+        if hasattr(self.slider, "set_max_limit"):
+            self.slider.set_max_limit(limit, snap=snap)
+        if snap and self.slider.animation.state() != QPropertyAnimation.State.Running:
+            actual_val = self.slider.value()
+            self.label.setText(str(actual_val))
+            self.icon.set_value(actual_val)
+
     def animate_to(self, target_value, duration=1000, easing_curve=QEasingCurve.Type.OutCubic):
-        logger.info(f"SliderFrame animate_to {self.slider.value()}-{target_value}")
+        limit = getattr(self.slider, "max_limit", 100)
+        clamped_target = min(int(target_value), limit)
+        logger.info(f"SliderFrame animate_to {self.slider.value()}-{clamped_target}")
         self.icon.stop_animation()  # Stop any ongoing animation in the icon
-        self.slider.animate_to(target_value, duration, easing_curve)
+        self.slider.animate_to(clamped_target, duration, easing_curve)
 
     def setValueBS(self, value):
         if self.slider.animation.state() == QPropertyAnimation.State.Running:
@@ -106,8 +121,9 @@ class SliderFrame(QFrame):
         self.slider.setValue(value)
         self.slider.blockSignals(False)  # Unblock signals after setting value
 
-        self.label.setText(str(value))
-        self.icon.animate_to(value)
+        actual_val = self.slider.value()
+        self.label.setText(str(actual_val))
+        self.icon.animate_to(actual_val)
 
     # def enterEvent(self, event):
     #     logger.info("SliderFrame enterEvent")
@@ -123,8 +139,9 @@ class SliderFrame(QFrame):
         delta = event.angleDelta().y()
         step = 1
         
+        limit = getattr(self.slider, "max_limit", self.slider.maximum())
         if delta > 0:
-            new_value = min(self.slider.value() + step, self.slider.maximum())
+            new_value = min(self.slider.value() + step, limit)
         else:
             new_value = max(self.slider.value() - step, self.slider.minimum())
 

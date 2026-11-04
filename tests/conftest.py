@@ -1,7 +1,7 @@
 import sys
 import os
 import pytest
-from PySide6.QtCore import QCoreApplication
+from PySide6.QtWidgets import QApplication
 
 # Ensure src is in sys.path
 src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -11,8 +11,8 @@ if src_dir not in sys.path:
 
 @pytest.fixture(scope="session")
 def qapp():
-    """Ensure a QCoreApplication exists for Qt signals and event loops."""
-    app = QCoreApplication.instance()
+    """Ensure a QApplication exists for Qt widgets, signals, and event loops."""
+    app = QApplication.instance()
     if app is None:
-        app = QCoreApplication(sys.argv)
+        app = QApplication(sys.argv)
     yield app
