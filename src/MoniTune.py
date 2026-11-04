@@ -78,6 +78,7 @@ from utils.utils import (
     check_github_update_available,
 )
 from utils.lock_detect import LockDetect
+from utils.power_detect import PowerDetect, is_energy_saver_active
 from utils.active_process import ActiveProcessListener, get_active_process
 
 from utils.logger import get_logger, set_file_logging
@@ -108,6 +109,7 @@ class MainWindow(QMainWindow):
     theme_changed = Signal(str)
     lock_state_changed = Signal(str)
     active_process_changed = Signal(dict)
+    energy_saver_changed = Signal(bool)
 
     def __init__(self):
         super().__init__()
@@ -115,6 +117,7 @@ class MainWindow(QMainWindow):
         self.theme_changed.connect(self._apply_theme)
         self.lock_state_changed.connect(self._on_lock_state_change)
         self.active_process_changed.connect(self._on_active_process_change)
+        self.energy_saver_changed.connect(self._on_energy_saver_change)
 
         self.win_release = platform.release()
         logger.info(f"win_release: {self.win_release}")
@@ -170,6 +173,11 @@ class MainWindow(QMainWindow):
         # Run lock state listener in a separate thread
         self.lock_listener = LockDetect(lambda state: self.lock_state_changed.emit(state)) # _on_lock_state_change
         threading.Thread(target=self.lock_listener.run, daemon=True).start()
+
+        self.is_energy_saver = is_energy_saver_active()
+        logger.info(f"is_energy_saver on startup: {self.is_energy_saver}")
+        self.power_listener = PowerDetect(lambda state: self.energy_saver_changed.emit(state))
+        threading.Thread(target=self.power_listener.run, daemon=True).start()
 
         self.process_listener = ActiveProcessListener(lambda pi: self.active_process_changed.emit(pi))
         self.process_listener_thread = None
@@ -286,6 +294,13 @@ class MainWindow(QMainWindow):
             )
 
 
+    # MARK: _on_energy_saver_change()
+    def _on_energy_saver_change(self, is_active: bool):
+        logger.info(f"Energy Saver state changed to: {is_active}")
+        self.is_energy_saver = is_active
+        if self.window_open:
+            self.updateBottomFrame()
+
     # MARK: _on_lock_state_change()
     def _on_lock_state_change(self, state: str):
         logger.info(f"Screen state changed to: {state}")
@@ -329,6 +344,10 @@ class MainWindow(QMainWindow):
         idle_time = get_idle_time()
         can_change_br = True
 
+
+        current_energy_saver = is_energy_saver_active()
+        if current_energy_saver != self.is_energy_saver:
+            self.energy_saver_changed.emit(current_energy_saver)
 
         timeout = self.display_timeout_ac
         power_type = "AC" # AC - plugged, DC - battery
@@ -966,6 +985,17 @@ class MainWindow(QMainWindow):
 
                                  """) # padding-left: 5px; background-color: blue;
         self.bottom_frame_hbox.addWidget(bf_label)
+
+        self.is_energy_saver = is_energy_saver_active()
+        logger.info(f"updateBottomFrame is_energy_saver: {self.is_energy_saver}")
+        if self.is_energy_saver:
+            self.energy_saver_btn = QPushButton()
+            self.energy_saver_btn.setFixedSize(41, 39)
+            self.energy_saver_btn.setIcon(QIcon(cfg.icons["leaf"][self.theme]))
+            self.energy_saver_btn.setIconSize(QSize(21, 21))
+            self.energy_saver_btn.setToolTip("Energy Saver is active")
+            self.energy_saver_btn.clicked.connect(lambda: webbrowser.open("ms-settings:powersleep"))
+            self.bottom_frame_hbox.addWidget(self.energy_saver_btn)
 
         if len(self.active_monitors_dict) > 1:
             self.link_br_btn = QPushButton()

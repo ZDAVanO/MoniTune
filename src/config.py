@@ -136,6 +136,10 @@ icons = {
     "shutdown": {
         "Light": get_icon_path('icons/shutdown_light.png'), # src/assets/icons/shutdown_light.png
         "Dark": get_icon_path('icons/shutdown_dark.png') # src/assets/icons/shutdown_dark.png
+    },
+    "leaf": {
+        "Light": get_icon_path('icons/leaf_light.png'), # src/assets/icons/leaf_light.png
+        "Dark": get_icon_path('icons/leaf_dark.png') # src/assets/icons/leaf_dark.png
     }
 }
 
