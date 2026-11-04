@@ -149,11 +149,11 @@ class BrightnessCoordinator:
         self.pre_saving_brightness.clear()
         return restored
 
-    def clamp_value(self, serial: str, value: int) -> int:
-        """Clamps a brightness value to the monitor's active limit if power saving is active."""
-        if self.is_power_saving:
-            limit = self.active_limits.get(serial, 100)
-            return max(0, min(limit, int(value)))
+    def clamp_value(self, serial: str, value: int, limit: Optional[int] = None) -> int:
+        """Clamps a brightness value to the monitor's limit if power saving is active."""
+        if self.is_power_saving or limit is not None:
+            active_limit = limit if limit is not None else self.active_limits.get(serial, 100)
+            return max(0, min(active_limit, int(value)))
         return max(0, min(100, int(value)))
 
     def get_active_limit(self, serial: str) -> int:

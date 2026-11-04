@@ -176,7 +176,6 @@ class MainWindow(QMainWindow):
         threading.Thread(target=self.lock_listener.run, daemon=True).start()
 
         self.coordinator = BrightnessCoordinator()
-        self.pre_saving_brightness = {}
         self.is_power_saving_active = False
 
         self.is_energy_saver = is_energy_saver_active()
@@ -313,6 +312,10 @@ class MainWindow(QMainWindow):
             self.updateBottomFrame()
 
     # MARK: Power Saving Methods
+    @property
+    def pre_saving_brightness(self):
+        return self.coordinator.pre_saving_brightness
+
     def is_power_saving_effective(self) -> bool:
         """Returns True if Power Saving limits should currently be enforced."""
         return self.coordinator.is_power_saving_effective(
@@ -344,16 +347,16 @@ class MainWindow(QMainWindow):
         try:
             if effective:
                 # Entering or updating power saving: clamp to limit
+                current_map = {}
                 for serial in monitors_to_process:
                     manual_val = self.settings.manual_brightness_values.get(serial)
-                    current_val = manual_val if manual_val is not None else self.settings.brightness_values.get(serial, 50)
-                    if serial not in self.pre_saving_brightness:
-                        self.pre_saving_brightness[serial] = current_val
+                    current_map[serial] = manual_val if manual_val is not None else self.settings.brightness_values.get(serial, 50)
 
+                target_values = self.coordinator.enter_power_saving(current_map, limits)
+
+                for serial, target_val in target_values.items():
                     limit = limits.get(serial, 100)
-                    target_val = min(self.pre_saving_brightness[serial], limit)
                     self.settings.brightness_values[serial] = target_val
-
                     if serial in self.br_frames:
                         frame = self.br_frames[serial]
                         frame.slider.blockSignals(True)
@@ -376,6 +379,8 @@ class MainWindow(QMainWindow):
                         frame.slider.setMaximum(100)
                         frame.slider.blockSignals(False)
 
+                restored_values = self.coordinator.exit_power_saving()
+
                 if self.profile_active:
                     logger.info("Exited power saving: re-applying active profile brightness")
                     proc = getattr(self, "prev_active_process", None) or getattr(self, "active_process", None)
@@ -386,8 +391,8 @@ class MainWindow(QMainWindow):
                     logger.info("Exited power saving: executing recent schedule task")
                     self.execute_recent_task()
                 else:
-                    logger.info(f"Exited power saving: restoring pre-saving brightness {self.pre_saving_brightness}")
-                    for serial, val in self.pre_saving_brightness.items():
+                    logger.info(f"Exited power saving: restoring pre-saving brightness {restored_values}")
+                    for serial, val in restored_values.items():
                         self.settings.brightness_values[serial] = val
                         self.settings.manual_brightness_values[serial] = val
                         if serial in self.br_frames:
@@ -398,8 +403,6 @@ class MainWindow(QMainWindow):
                         self.start_brightness_sync_thread(delay_msec=50)
                     else:
                         threading.Timer(0.05, self.brightness_sync_onetime).start()
-
-                self.pre_saving_brightness.clear()
         finally:
             self._linking_suspended = False
 
@@ -621,11 +624,10 @@ class MainWindow(QMainWindow):
 
         if self.is_power_saving_effective():
             limits = getattr(self.settings, "power_saving_limits", {}) or {}
-            brightness_data = dict(brightness_data)
-            for s in list(brightness_data.keys()):
-                lim = limits.get(s, 100)
-                if brightness_data[s] > lim:
-                    brightness_data[s] = lim
+            brightness_data = {
+                s: self.coordinator.clamp_value(s, val, limit=limits.get(s, 100))
+                for s, val in brightness_data.items()
+            }
 
         self.update_monitors_info()
         for serial in self.active_monitors_dict:
@@ -1368,9 +1370,8 @@ class MainWindow(QMainWindow):
             for monitor_serial, brightness in brightness_values_copy.items():
                 if self.is_power_saving_effective():
                     limit = (self.settings.power_saving_limits or {}).get(monitor_serial, 100)
-                    if brightness > limit:
-                        brightness = limit
-                        self.settings.brightness_values[monitor_serial] = limit
+                    brightness = self.coordinator.clamp_value(monitor_serial, brightness, limit=limit)
+                    self.settings.brightness_values[monitor_serial] = brightness
 
                 if (monitor_serial in self.active_monitors_dict) and ( # check if monitor is connected
                     previous_brightness_values.get(monitor_serial) != brightness # check if brightness changed
@@ -1420,9 +1421,8 @@ class MainWindow(QMainWindow):
             if monitor_serial in self.active_monitors_dict:  # Check if monitor is connected
                 if self.is_power_saving_effective():
                     limit = (self.settings.power_saving_limits or {}).get(monitor_serial, 100)
-                    if brightness > limit:
-                        brightness = limit
-                        self.settings.brightness_values[monitor_serial] = limit
+                    brightness = self.coordinator.clamp_value(monitor_serial, brightness, limit=limit)
+                    self.settings.brightness_values[monitor_serial] = brightness
                 try:
                     monitor: Monitor = self.active_monitors_dict[monitor_serial]
                     if not monitor.set_brightness(brightness, retries=7):
