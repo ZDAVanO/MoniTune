@@ -353,32 +353,30 @@ class MainWindow(QMainWindow):
                     limits=limits,
                 )
 
-                for serial, target_val in target_values.items():
-                    limit = limits.get(serial, 100)
-                    self.settings.brightness_values[serial] = target_val
+                for serial in monitors_to_process:
                     if serial in self.br_frames:
+                        limit = limits.get(serial, 100)
+                        target_val = target_values.get(serial, self.settings.brightness_values.get(serial, 50))
                         frame = self.br_frames[serial]
                         frame.slider.blockSignals(True)
                         frame.slider.setMaximum(limit)
                         frame.slider.blockSignals(False)
                         frame.setValueBS(target_val)
 
-                # Sync with hardware (works both when GUI is open and minimized in tray)
-                if self.window_open:
-                    self.start_brightness_sync_thread(delay_msec=50)
-                else:
-                    threading.Timer(0.05, self.brightness_sync_onetime).start()
+                self.apply_brightness(target_values)
 
             else:
                 # Exiting power saving: release limit and restore brightness
+                restored_values = self.coordinator.exit_power_saving()
+
                 for serial in monitors_to_process:
                     if serial in self.br_frames:
+                        target_val = restored_values.get(serial, self.settings.brightness_values.get(serial, 50))
                         frame = self.br_frames[serial]
                         frame.slider.blockSignals(True)
                         frame.slider.setMaximum(100)
                         frame.slider.blockSignals(False)
-
-                restored_values = self.coordinator.exit_power_saving()
+                        frame.setValueBS(target_val)
 
                 if self.profile_active:
                     logger.info("Exited power saving: re-applying active profile brightness")
@@ -392,16 +390,9 @@ class MainWindow(QMainWindow):
                 else:
                     logger.info(f"Exited power saving: restoring pre-saving brightness {restored_values}")
                     for serial, val in restored_values.items():
-                        self.settings.brightness_values[serial] = val
                         self.settings.manual_brightness_values[serial] = val
-                        if serial in self.br_frames:
-                            self.br_frames[serial].setValueBS(val)
                     self.settings.save("manual_brightness_values")
-
-                    if self.window_open:
-                        self.start_brightness_sync_thread(delay_msec=50)
-                    else:
-                        threading.Timer(0.05, self.brightness_sync_onetime).start()
+                    self.apply_brightness(restored_values)
         finally:
             self._linking_suspended = False
 
@@ -1069,6 +1060,7 @@ class MainWindow(QMainWindow):
                 slider_callback=lambda value, ms=monitor_serial: self.on_brightness_change(value, ms),
                 disabled=brightness_failed,
             )
+            br_frame.hardware_brightness = br_level
             self.br_frames[monitor.serial] = br_frame  # Store frame in dictionary
             if self.is_power_saving_effective():
                 limit = (self.settings.power_saving_limits or {}).get(monitor.serial, 100)
@@ -1529,7 +1521,7 @@ class MainWindow(QMainWindow):
 
     # MARK: show_popup()
     def show_popup(self):
-        logger.info(f"show_popup")
+        logger.info("show_popup")
         
         if self.window_open:
             logger.info("Window is already open")
@@ -1544,7 +1536,7 @@ class MainWindow(QMainWindow):
         # Suppress popup if enabled and all active monitors are already at target brightness
         if self.settings.skip_popup_if_unchanged:
             all_matched = bool(self.br_frames) and all(
-                frame.slider.value() == self.settings.brightness_values.get(serial)
+                getattr(frame, "hardware_brightness", frame.slider.value()) == self.settings.brightness_values.get(serial)
                 for serial, frame in self.br_frames.items()
                 if serial in self.active_monitors_dict
             )
