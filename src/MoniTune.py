@@ -347,12 +347,11 @@ class MainWindow(QMainWindow):
         try:
             if effective:
                 # Entering or updating power saving: clamp to limit
-                current_map = {}
-                for serial in monitors_to_process:
-                    manual_val = self.settings.manual_brightness_values.get(serial)
-                    current_map[serial] = manual_val if manual_val is not None else self.settings.brightness_values.get(serial, 50)
-
-                target_values = self.coordinator.enter_power_saving(current_map, limits)
+                target_values = self.coordinator.enter_power_saving(
+                    live_brightness=self.settings.brightness_values,
+                    fallback_brightness=self.settings.manual_brightness_values,
+                    limits=limits,
+                )
 
                 for serial, target_val in target_values.items():
                     limit = limits.get(serial, 100)

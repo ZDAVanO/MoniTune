@@ -211,3 +211,32 @@ def test_power_saving_lifecycle_preservation():
     # 4. Вихід із режиму збереження без активного профілю і без розкладу
     restored = coordinator.exit_power_saving()
     assert restored[serial] == 85, "Має відновитися первинна яскравість 85%"
+
+
+def test_enter_power_saving_prefers_live_over_stale_manual():
+    """
+    Користувацький кейс:
+    Жива яскравість задана розкладом (Display 1 = 65%, Samsung = 50%).
+    Старі ручні значення в реєстрі випадково збереглися як 22% і 11%.
+    Ліміти: Samsung = 15%, Display 1 = 100% (без обмежень).
+
+    Очікування:
+    - Samsung отримує min(50, 15) = 15% (а не 11!).
+    - Display 1 отримує min(65, 100) = 65% (а не 22!).
+    - pre_saving зберігає 50% і 65%.
+    """
+    coordinator = BrightnessCoordinator()
+    live = {"DISPLAY1": 65, "SAMSUNG": 50}
+    manual = {"DISPLAY1": 22, "SAMSUNG": 11}
+    limits = {"SAMSUNG": 15}
+
+    targets = coordinator.enter_power_saving(
+        live_brightness=live,
+        fallback_brightness=manual,
+        limits=limits,
+    )
+
+    assert targets["DISPLAY1"] == 65, "DISPLAY1 не має ліміту, повинен залишитися 65"
+    assert targets["SAMSUNG"] == 15, "SAMSUNG має зрізатися до 15, а не брати застарілі 11"
+    assert coordinator.get_pre_saving_brightness("SAMSUNG") == 50
+    assert coordinator.get_pre_saving_brightness("DISPLAY1") == 65

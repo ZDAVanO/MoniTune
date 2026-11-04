@@ -120,22 +120,36 @@ class BrightnessCoordinator:
     # MARK: Power Saving Lifecycle Management
     def enter_power_saving(
         self,
-        current_brightness: Dict[str, int],
-        limits: Dict[str, int],
+        current_brightness: Optional[Dict[str, int]] = None,
+        limits: Optional[Dict[str, int]] = None,
+        fallback_brightness: Optional[Dict[str, int]] = None,
+        live_brightness: Optional[Dict[str, int]] = None,
     ) -> Dict[str, int]:
         """
         Enters power saving state: preserves initial brightness and clamps targets.
+        Prefers live active brightness over stale manual/saved brightness.
         Returns the new clamped brightness values for each monitor.
         """
         self.is_power_saving = True
+        limits = limits or {}
         self.active_limits = dict(limits)
+
+        # live brightness can be passed as live_brightness or current_brightness
+        live = live_brightness if live_brightness is not None else (current_brightness or {})
+        fallback = fallback_brightness or {}
         target_values: Dict[str, int] = {}
 
-        for serial, val in current_brightness.items():
+        all_serials = set(live.keys()) | set(limits.keys()) | set(fallback.keys())
+        for serial in all_serials:
+            val = live.get(serial)
+            if val is None:
+                val = fallback.get(serial, 50)
+
             if serial not in self.pre_saving_brightness:
                 self.pre_saving_brightness[serial] = val
+
             limit = limits.get(serial, 100)
-            target_values[serial] = min(val, limit)
+            target_values[serial] = min(self.pre_saving_brightness[serial], limit)
 
         return target_values
 
