@@ -7,16 +7,23 @@ from PySide6.QtWidgets import (
     QVBoxLayout, 
     QWidget, 
     QLabel,
+    QStyle,
+    QStyleOptionSlider,
 )
 from PySide6.QtCore import (
     Qt, 
     QPropertyAnimation, 
     QEasingCurve, 
     QTimer,
+    QRectF,
 )
 from PySide6.QtGui import (
     QWheelEvent, 
     QKeyEvent,
+    QPainter,
+    QColor,
+    QPen,
+    QRegion,
 )
 
 import time
@@ -96,12 +103,24 @@ class AnimatedSliderBS(QSlider):
         # self.setRange(0, 100)
         self.scrollStep = scrollStep
         self.max_limit: int = 100
+        self.setFixedHeight(24)
 
         self.animation = QPropertyAnimation(self, b"value")
         self.animation.finished.connect(lambda: self.blockSignals(False))
 
+    def initStyleOption(self, option: QStyleOptionSlider):
+        super().initStyleOption(option)
+        if self.orientation() == Qt.Orientation.Horizontal and option.rect.height() > 16:
+            y_offset = (option.rect.height() - 16) // 2
+            option.rect.setY(y_offset)
+            option.rect.setHeight(16)
+
     def set_max_limit(self, limit: Optional[int] = None, snap: bool = True):
         self.max_limit = 100 if limit is None else max(0, min(100, int(limit)))
+        if self.max_limit < 100:
+            self.setToolTip(f"Power Saving Limit: max {self.max_limit}%")
+        else:
+            self.setToolTip("")
         if self.animation.state() == QPropertyAnimation.State.Running:
             if self.animation.endValue() > self.max_limit:
                 self.stop_animation()
@@ -109,6 +128,38 @@ class AnimatedSliderBS(QSlider):
                     self.setValue(self.max_limit)
         elif snap and self.value() > self.max_limit:
             self.setValue(self.max_limit)
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        limit = getattr(self, "max_limit", 100)
+        if limit < 100 and self.maximum() > self.minimum():
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+            opt = QStyleOptionSlider()
+            self.initStyleOption(opt)
+            gr = self.style().subControlRect(QStyle.ComplexControl.CC_Slider, opt, QStyle.SubControl.SC_SliderGroove, self)
+            sr = self.style().subControlRect(QStyle.ComplexControl.CC_Slider, opt, QStyle.SubControl.SC_SliderHandle, self)
+
+            # Exclude the slider thumb/handle so it is never painted over
+            clip = QRegion(self.rect()).subtracted(QRegion(sr))
+            painter.setClipRegion(clip)
+
+            if self.orientation() == Qt.Orientation.Horizontal:
+                length = sr.width()
+                min_pos = gr.x()
+                max_pos = gr.right() - length + 1
+                span = max_pos - min_pos
+                limit_pos = QStyle.sliderPositionFromValue(self.minimum(), self.maximum(), limit, span, opt.upsideDown)
+                limit_x = min_pos + limit_pos + length // 2
+
+                notch_h = 20
+                notch_y = (self.height() - notch_h) / 2
+                painter.setPen(QPen(QColor(160, 160, 160, 220), 2.0))
+                painter.drawLine(limit_x, int(notch_y), limit_x, int(notch_y + notch_h))
+
+            painter.end()
 
     def setValue(self, value: int):
         limit = getattr(self, "max_limit", 100)
