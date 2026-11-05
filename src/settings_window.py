@@ -1641,6 +1641,7 @@ class SettingsWindow(QWidget):
         delay_layout = QHBoxLayout(delay_row)
         delay_label = QLabel("Switch delay:")
         delay_layout.addWidget(delay_label)
+        delay_layout.addStretch()
 
         delay_spinbox = QSpinBox()
         delay_spinbox.setRange(0, 2000)
@@ -1651,9 +1652,24 @@ class SettingsWindow(QWidget):
         delay_spinbox.setToolTip("Wait time before applying profile or restoring brightness on window focus change.\nPrevents flicker when Alt-Tabbing rapidly or clicking the taskbar/tray.")
         delay_spinbox.valueChanged.connect(lambda val: setattr(self.settings, "profile_switch_delay_ms", val))
         delay_layout.addWidget(delay_spinbox)
-        delay_layout.addStretch()
 
         profiles_frame.content_layout.addWidget(delay_row)
+
+        # Profile path matching guide / examples
+        hint_frame = QWidget()
+        hint_layout = QVBoxLayout(hint_frame)
+        hint_layout.setContentsMargins(4, 2, 4, 4)
+        hint_label = QLabel(
+            "<b>Path matching examples:</b><br>"
+            "• <b>Exact executable:</b> <code>C:\\Games\\Cyberpunk 2077\\bin\\x64\\Cyberpunk2077.exe</code><br>"
+            "• <b>Folder for all games inside:</b> <code>D:\\Games</code> or <code>C:\\SteamLibrary\\steamapps\\common</code><br>"
+            "• <b>Priority:</b> More specific (deeper) folder paths always win over general parent directories."
+        )
+        hint_label.setWordWrap(True)
+        fading_hint = FadingWidget(fade_opacity=0.75, duration=300)
+        fading_hint.box_layout.addWidget(hint_label)
+        hint_layout.addWidget(fading_hint)
+        profiles_frame.content_layout.addWidget(hint_frame)
 
         # profiles frames
         add_frame_btn = QPushButton("Add profile")
