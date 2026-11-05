@@ -349,9 +349,10 @@ class MainWindow(QMainWindow):
                         target_val = target_values.get(serial, self.settings.brightness_values.get(serial, 50))
                         frame = self.br_frames[serial]
                         frame.slider.blockSignals(True)
-                        frame.set_max_limit(limit, snap=not self.window_open)
+                        snap = not (self.window_open or self.settings.show_brightness_popup)
+                        frame.set_max_limit(limit, snap=snap)
                         frame.slider.blockSignals(False)
-                        if not self.window_open:
+                        if snap:
                             frame.setValueBS(target_val)
 
                 self.apply_brightness(target_values)
@@ -367,7 +368,7 @@ class MainWindow(QMainWindow):
                         frame.slider.blockSignals(True)
                         frame.set_max_limit(100)
                         frame.slider.blockSignals(False)
-                        if not self.window_open:
+                        if not (self.window_open or self.settings.show_brightness_popup):
                             frame.setValueBS(target_val)
 
                 if restored_values:
@@ -1077,11 +1078,12 @@ class MainWindow(QMainWindow):
             self.br_frames[monitor.serial] = br_frame  # Store frame in dictionary
             if self.is_power_saving_effective():
                 limit = (self.settings.power_saving_limits or {}).get(monitor.serial, 100)
-                br_frame.set_max_limit(limit)
+                br_frame.set_max_limit(limit, snap=not popup)
                 if br_level > limit:
                     self.coordinator.record_pre_saving_brightness(monitor.serial, br_level)
-                    br_frame.setValueBS(limit)
-                    self.settings.brightness_values[monitor.serial] = limit
+                    if not popup:
+                        br_frame.setValueBS(limit)
+                        self.settings.brightness_values[monitor.serial] = limit
                     needs_sync = True
             monitor_vbox.addWidget(br_frame)
 
