@@ -208,11 +208,10 @@ class MainWindow(QMainWindow):
         self.previous_monitor_list = get_monitor_device_names()
         self.update_monitors_info()
         self.start_checking(interval=(cfg.timer_interval * 1000))  # Start self.timer
-        # if self.settings.enable_time_adjustment and self.settings.time_adjustment_startup:
+        self.apply_power_saving_state()
+
         if self.settings.time_adjustment_startup:
             self.execute_recent_task()
-
-        self.apply_power_saving_state()
 
 
         # timer for hiding the popup window

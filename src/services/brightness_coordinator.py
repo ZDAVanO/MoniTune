@@ -109,39 +109,6 @@ class BrightnessCoordinator:
 
         return result
 
-    # MARK: Startup Resolution
-    @staticmethod
-    def resolve_startup_brightness(
-        restore_last_brightness: bool,
-        time_adjustment_startup: bool,
-        schedule_value: Optional[int],
-        saved_manual_value: Optional[int],
-        is_power_saving: bool,
-        power_saving_limit: Optional[int] = 100,
-    ) -> Optional[int]:
-        """
-        Resolves target brightness on application launch according to priority:
-        1. Current schedule slot (if time_adjustment_startup=True and schedule_value is not None)
-        2. Saved manual brightness (if restore_last_brightness=True and saved_manual_value is not None)
-        3. Untouched (returns None if no target exists; monitor is left as-is)
-        Final: Clamped by Power Saving limit (if is_power_saving=True)
-
-        Returns:
-            Target brightness int (0-100) or None if display should not be modified.
-        """
-        if time_adjustment_startup and schedule_value is not None:
-            val = schedule_value
-        elif restore_last_brightness and saved_manual_value is not None:
-            val = saved_manual_value
-        else:
-            return None
-
-        if is_power_saving:
-            limit = power_saving_limit if power_saving_limit is not None else 100
-            val = min(val, limit)
-
-        return max(0, min(100, int(val)))
-
     # MARK: Power Saving Lifecycle Management
     def enter_power_saving(
         self,

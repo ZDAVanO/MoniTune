@@ -197,16 +197,23 @@ def test_linked_monitors_matrix(
 def test_startup_brightness_matrix(
     restore_last, time_adj_startup, schedule_val, saved_manual, is_blackout, limit, expected_startup
 ):
-    coordinator = BrightnessCoordinator()
-    result = coordinator.resolve_startup_brightness(
+    schedule = {"MON1": schedule_val} if schedule_val is not None else {}
+    manual = {"MON1": saved_manual} if saved_manual is not None else {}
+    limits = {"MON1": limit}
+
+    result = BrightnessCoordinator.resolve_brightness(
+        active_serials=["MON1"],
+        schedule_data=schedule,
+        manual_data=manual,
+        enable_schedule=time_adj_startup,
         restore_last_brightness=restore_last,
-        time_adjustment_startup=time_adj_startup,
-        schedule_value=schedule_val,
-        saved_manual_value=saved_manual,
         is_power_saving=is_blackout,
-        power_saving_limit=limit,
+        limits=limits,
     )
-    assert result == expected_startup
+    if expected_startup is None:
+        assert "MON1" not in result
+    else:
+        assert result.get("MON1") == expected_startup
 
 
 # ==============================================================================
