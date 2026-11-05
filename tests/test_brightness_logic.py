@@ -261,3 +261,18 @@ def test_remove_monitor_cleans_up():
     coordinator.remove_monitor("MON1")
     assert coordinator.get_pre_saving_brightness("MON1") is None
     assert coordinator.get_active_limit("MON1") == 100  # defaults to 100 when absent
+
+
+@pytest.mark.parametrize("task_times,current_time,expected", [
+    ([], "12:00", None),
+    (["08:00", "14:00", "20:00"], "14:00", "14:00"),  # Exact match
+    (["08:00", "14:00", "20:00"], "15:30", "14:00"),  # Between tasks
+    (["08:00", "14:00", "20:00"], "07:59", "20:00"),  # Before earliest -> wrap to previous day latest
+    (["08:00", "14:00", "20:00"], "00:00", "20:00"),  # Midnight wrap
+    (["08:00", "14:00", "20:00"], "23:59", "20:00"),  # After latest
+    (["12:00"], "11:59", "12:00"),                     # Single slot wrap
+    (["12:00"], "12:01", "12:00"),                     # Single slot past
+])
+def test_get_recent_task_time(task_times, current_time, expected):
+    result = BrightnessCoordinator.get_recent_task_time(task_times, current_time)
+    assert result == expected

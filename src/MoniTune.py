@@ -604,13 +604,8 @@ class MainWindow(QMainWindow):
     # MARK: get_recent_task_time()
     def get_recent_task_time(self, current_time: str):
         """Returns the most recent task time from time_adjustment_data."""
-        if not self.settings.time_adjustment_data:
-            return None
-
-        past_tasks = [time for time in self.settings.time_adjustment_data.keys() if time <= current_time]
-        if past_tasks:
-            return max(past_tasks)
-        return max(self.settings.time_adjustment_data.keys())  # previous day task
+        task_data = getattr(self.settings, "time_adjustment_data", {}) or {}
+        return self.coordinator.get_recent_task_time(task_data.keys(), current_time)
 
 
     # MARK: apply_brightness()

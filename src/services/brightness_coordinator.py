@@ -6,7 +6,7 @@ It evaluates inputs on-demand, resolving target brightness values and enforcing 
 with 0% idle CPU overhead.
 """
 
-from typing import Dict, Optional
+from typing import Dict, Iterable, Optional
 
 
 class BrightnessCoordinator:
@@ -187,3 +187,17 @@ class BrightnessCoordinator:
         """Cleans up internal state when a monitor is disconnected."""
         self.pre_saving_brightness.pop(serial, None)
         self.active_limits.pop(serial, None)
+
+    @staticmethod
+    def get_recent_task_time(task_times: Iterable[str], current_time: str) -> Optional[str]:
+        """
+        Finds the most recent schedule slot matching current_time ("HH:mm").
+        If current_time is earlier than all slots, wraps around to the latest slot of the previous day.
+        """
+        times = [t for t in task_times if t]
+        if not times:
+            return None
+        past = [t for t in times if t <= current_time]
+        if past:
+            return max(past)
+        return max(times)
