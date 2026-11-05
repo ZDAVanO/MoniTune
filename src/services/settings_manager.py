@@ -131,6 +131,8 @@ _SPECS: List[SettingSpec] = [
     # Profiles tab
     SettingSpec("enable_profiles", "EnableProfiles", bool, lambda: False),
     SettingSpec("profiles_data", "ProfilesData", dict, dict),
+    SettingSpec("ignored_processes", "IgnoredProcesses", list, lambda: ["EarTrumpet.exe"]),
+    SettingSpec("profile_switch_delay_ms", "ProfileSwitchDelayMs", int, lambda: 350),
 
     # Power Saving tab
     SettingSpec("enable_power_saving_limits", "EnablePowerSavingLimits", bool, lambda: True),
@@ -182,8 +184,8 @@ class SettingsManager(QObject):
         elif spec.val_type is int:
             return reg_read_int(self._reg_path, spec.reg_name, default_val)
         elif spec.val_type is list:
-            val = reg_read_list(self._reg_path, spec.reg_name)
-            return val if val else default_val
+            val = reg_read_list(self._reg_path, spec.reg_name, default=default_val)
+            return val if val is not None else default_val
         elif spec.val_type is dict:
             val = reg_read_dict(self._reg_path, spec.reg_name)
             return val if val else default_val

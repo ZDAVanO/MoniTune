@@ -55,7 +55,7 @@ from custom_widgets import (
 from services.settings_manager import get_settings
 from services.brightness_coordinator import BrightnessCoordinator
 from services.window_positioner import calculate_window_rects, calculate_close_rect
-from services.profile_matcher import match_profile
+from services.profile_matcher import match_profile, is_ignored_process
 from utils.monitor_utils import (
     Monitor,
     get_monitors, 
@@ -221,6 +221,11 @@ class MainWindow(QMainWindow):
         self.popup_timer = QTimer(singleShot=True)
         # self.popup_timer.timeout.connect(self.animateWindowClose)
         self.popup_timer.timeout.connect(self.hide_window)
+        # Debounce timer for active process profile changes
+        self._process_debounce_timer = QTimer(self)
+        self._process_debounce_timer.setSingleShot(True)
+        self._process_debounce_timer.timeout.connect(self._apply_pending_process_change)
+        self._pending_process_info = None
 
 
         self.check_for_updates()
@@ -690,6 +695,10 @@ class MainWindow(QMainWindow):
             self.process_listener_thread.join()
             logger.info(f"process_listener_thread.is_alive(): {self.process_listener_thread.is_alive()}")
             
+        if hasattr(self, "_process_debounce_timer") and self._process_debounce_timer.isActive():
+            self._process_debounce_timer.stop()
+            self._pending_process_info = None
+
         self.profile_active = False
         self.active_profile_data = None
         self.execute_recent_task()
@@ -704,19 +713,57 @@ class MainWindow(QMainWindow):
 
     # MARK: _on_active_process_change()
     def _on_active_process_change(self, process_info):
-        exe_path = process_info["exe_path"]
-        self.active_process = exe_path # using for settings window
-        logger.info(f"Active process changed: {exe_path}")
-        # hwnd, pid, p_name, p_path = get_active_process()
+        if not process_info or not process_info.get("exe_path"):
+            return
 
-        # # close window if focus lost
-        # if self.window_open and (exe_path != self.exe_path):
-        #     logger.info(f"window_open and exe_path != self.exe_path, closing window")
-        #     # self.animateWindowClose()
-        #     self.hide_window()
-        
-        if (exe_path == self.prev_active_process):
-            logger.info(f"exe_path == prev_active_process, skip")
+        exe_path = process_info["exe_path"]
+        self.active_process = exe_path  # using for settings window
+        logger.info(f"Active process changed: {exe_path}")
+
+        # If user switches to an ignored process:
+        # Cancel any pending switch (e.g. transient explorer.exe focus from clicking tray/taskbar)
+        # and preserve the currently active profile.
+        if self.settings.enable_profiles and is_ignored_process(self.settings.ignored_processes, exe_path):
+            if hasattr(self, "_process_debounce_timer") and self._process_debounce_timer.isActive():
+                pending_exe = self._pending_process_info.get("exe_path") if self._pending_process_info else "unknown"
+                logger.info(f"Ignored process focused ({exe_path}); cancelling pending switch to {pending_exe}")
+                self._process_debounce_timer.stop()
+                self._pending_process_info = None
+            else:
+                logger.info(f"Active process is in ignored list, preserving current profile state: {exe_path}")
+            return
+
+        # If user returned to the previously applied active process, cancel any pending change
+        if exe_path == self.prev_active_process:
+            if hasattr(self, "_process_debounce_timer") and self._process_debounce_timer.isActive():
+                logger.info(f"Returned to previous process ({exe_path}); cancelling pending switch")
+                self._process_debounce_timer.stop()
+                self._pending_process_info = None
+            else:
+                logger.info(f"exe_path == prev_active_process, skip")
+            return
+
+        # Schedule debounced process evaluation to coalesce fast window switching
+        self._pending_process_info = process_info
+        delay_ms = getattr(self.settings, "profile_switch_delay_ms", 350)
+        if delay_ms <= 0:
+            self._apply_pending_process_change()
+        else:
+            self._process_debounce_timer.start(delay_ms)
+
+    def _apply_pending_process_change(self):
+        if not self._pending_process_info:
+            return
+
+        process_info = self._pending_process_info
+        self._pending_process_info = None
+        exe_path = process_info.get("exe_path")
+
+        if not exe_path or exe_path == self.prev_active_process:
+            return
+
+        if self.settings.enable_profiles and is_ignored_process(self.settings.ignored_processes, exe_path):
+            logger.info(f"Debounced process is in ignored list, keeping current profile state: {exe_path}")
             return
 
         profile_key, profile = match_profile(self.settings.profiles_data, exe_path)
@@ -738,7 +785,7 @@ class MainWindow(QMainWindow):
                 self.execute_recent_task()
             else: # reduce br changes when moving between processes outside profiles_data
                 logger.info(f"No active profile, skip")
-                
+
         self.prev_active_process = exe_path
 
 

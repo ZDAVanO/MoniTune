@@ -931,6 +931,26 @@ class ProfileFrame(BaseBrightnessSlidersFrame):
             self.entry.setText(file_path)
 
 
+# MARK: IgnoredProcessRow
+class IgnoredProcessRow(QWidget):
+    def __init__(self, settings_window, pattern: str):
+        super().__init__()
+        self.settings_window = settings_window
+        self.pattern = pattern
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 2, 0, 2)
+
+        self.entry = QLineEdit(pattern)
+        self.entry.setReadOnly(True)
+        layout.addWidget(self.entry, stretch=1)
+
+        self.delete_button = QPushButton("Delete")
+        self.delete_button.setStyleSheet("padding: 4px 10px;")
+        self.delete_button.clicked.connect(lambda: self.settings_window.remove_ignored_process(self.pattern))
+        layout.addWidget(self.delete_button)
+
+
 
 # MARK: ScrollableTab
 class ScrollableTab(QWidget):
@@ -1065,6 +1085,40 @@ class SettingsWindow(QWidget):
 
         logger.info(f"Collected profiles data: {self.profiles_data}")
         self.settings.profiles_data = self.profiles_data
+
+    # MARK: Ignored processes helpers
+    def add_ignored_process(self, pattern: str):
+        if not pattern:
+            return
+        cleaned = pattern.strip().strip('"').strip("'")
+        if not cleaned:
+            return
+        current = list(self.settings.ignored_processes)
+        if any(p.lower() == cleaned.lower() for p in current):
+            logger.info(f"Process already in ignored list: {cleaned}")
+            return
+        current.append(cleaned)
+        self.settings.ignored_processes = current
+        self.populate_ignored_processes()
+
+    def remove_ignored_process(self, pattern: str):
+        cleaned = pattern.strip().strip('"').strip("'")
+        current = [p for p in self.settings.ignored_processes if p.lower() != cleaned.lower()]
+        self.settings.ignored_processes = current
+        self.populate_ignored_processes()
+
+    def populate_ignored_processes(self):
+        if not hasattr(self, "ignored_list_layout"):
+            return
+        while self.ignored_list_layout.count():
+            item = self.ignored_list_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        for pattern in self.settings.ignored_processes:
+            row = IgnoredProcessRow(self, pattern)
+            self.ignored_list_layout.addWidget(row)
 
 
 
@@ -1570,12 +1624,36 @@ class SettingsWindow(QWidget):
         ap_add_btn.clicked.connect(lambda: (add_profile_frame(path=ap_line_edit.text(), highlight=True), 
                                             self.save_profiles_data()))
         ap_frame_layout.addWidget(ap_add_btn)
+        ap_ignore_btn = QPushButton("Ignore")
+        ap_ignore_btn.setStyleSheet("padding: 4px 10px;")
+        ap_ignore_btn.setToolTip("Add the active app to the ignored processes list")
+        ap_ignore_btn.clicked.connect(lambda: self.add_ignored_process(ap_line_edit.text()))
+        ap_frame_layout.addWidget(ap_ignore_btn)
 
         self.ap_timer = QTimer()
         self.ap_timer.timeout.connect(update_ap_line_edit)
         self.ap_timer.start(1000)
 
         profiles_frame.content_layout.addWidget(ap_frame)
+
+        # Debounce / Switch delay row
+        delay_row = QFrame(frameShape=QFrame.Shape.StyledPanel)
+        delay_layout = QHBoxLayout(delay_row)
+        delay_label = QLabel("Switch delay:")
+        delay_layout.addWidget(delay_label)
+
+        delay_spinbox = QSpinBox()
+        delay_spinbox.setRange(0, 2000)
+        delay_spinbox.setSingleStep(50)
+        delay_spinbox.setSuffix(" ms")
+        delay_spinbox.setFixedWidth(100)
+        delay_spinbox.setValue(self.settings.profile_switch_delay_ms)
+        delay_spinbox.setToolTip("Wait time before applying profile or restoring brightness on window focus change.\nPrevents flicker when Alt-Tabbing rapidly or clicking the taskbar/tray.")
+        delay_spinbox.valueChanged.connect(lambda val: setattr(self.settings, "profile_switch_delay_ms", val))
+        delay_layout.addWidget(delay_spinbox)
+        delay_layout.addStretch()
+
+        profiles_frame.content_layout.addWidget(delay_row)
 
         # profiles frames
         add_frame_btn = QPushButton("Add profile")
@@ -1599,6 +1677,55 @@ class SettingsWindow(QWidget):
             add_profile_frame(path, brightness_data)
 
         profiles_tab.layout_.addWidget(profiles_frame)
+
+        # MARK: Ignored Processes Frame
+        ignored_frame = SettingFrame(
+            self,
+            "Ignored Processes",
+            "Processes that won't deactivate the active profile when focused (e.g. tray apps, overlays, volume mixers)."
+        )
+
+        add_ignored_row = QWidget()
+        add_ignored_layout = QHBoxLayout(add_ignored_row)
+        add_ignored_layout.setContentsMargins(0, 0, 0, 0)
+
+        ignored_input = QLineEdit()
+        ignored_input.setPlaceholderText("e.g. EarTrumpet.exe, C:\\Path\\App.exe, or folder")
+        add_ignored_layout.addWidget(ignored_input, stretch=1)
+
+        def choose_ignored_exe():
+            file_path, _ = QFileDialog.getOpenFileName(
+                self, "Select executable to ignore", "", "EXE Files (*.exe);;All Files (*)"
+            )
+            if file_path:
+                ignored_input.setText(file_path)
+
+        ignored_select_btn = QPushButton("Select")
+        ignored_select_btn.setStyleSheet("padding: 4px 10px;")
+        ignored_select_btn.clicked.connect(choose_ignored_exe)
+        add_ignored_layout.addWidget(ignored_select_btn)
+
+        def on_add_ignored():
+            text = ignored_input.text()
+            if text:
+                self.add_ignored_process(text)
+                ignored_input.clear()
+
+        ignored_add_btn = QPushButton("Add")
+        ignored_add_btn.setStyleSheet("padding: 4px 10px;")
+        ignored_add_btn.clicked.connect(on_add_ignored)
+        add_ignored_layout.addWidget(ignored_add_btn)
+
+        ignored_frame.content_layout.addWidget(add_ignored_row)
+
+        ignored_list_container = QWidget()
+        self.ignored_list_layout = QVBoxLayout(ignored_list_container)
+        self.ignored_list_layout.setContentsMargins(0, 0, 0, 0)
+        ignored_frame.content_layout.addWidget(ignored_list_container)
+
+        self.populate_ignored_processes()
+
+        profiles_tab.layout_.addWidget(ignored_frame)
 
 
 

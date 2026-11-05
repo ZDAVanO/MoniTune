@@ -139,7 +139,7 @@ def reg_write_list(reg_path, dword_name, list):
 
 
 
-def reg_read_list(reg_path, dword_name):
+def reg_read_list(reg_path, dword_name, default=None):
     try:
         if not key_exists(reg_path):
             create_reg_key(reg_path)
@@ -148,24 +148,24 @@ def reg_read_list(reg_path, dword_name):
         
         try:
             value, _ = winreg.QueryValueEx(key, dword_name)
-            raw_list = value.split(",")  # Розбиваємо рядок на список
+            raw_list = value.split(",")
             
-            filtered_list = []  # Створюємо порожній список для відфільтрованих значень
+            filtered_list = []
             for item in raw_list:
-                cleaned_item = item.strip()  # Видаляємо зайві пробіли
-                if cleaned_item:  # Перевіряємо, чи не порожнє значення
+                cleaned_item = item.strip()
+                if cleaned_item:
                     filtered_list.append(cleaned_item)
+
+            winreg.CloseKey(key)
+            return filtered_list
             
         except FileNotFoundError:
-            filtered_list = []
-
-        winreg.CloseKey(key)
-
-        return filtered_list
+            winreg.CloseKey(key)
+            return list(default) if default is not None else []
     
     except Exception as e:
         logger.error(f"Error reading from registry: {e}")
-        return []
+        return list(default) if default is not None else []
 
 
 

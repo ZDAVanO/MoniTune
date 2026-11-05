@@ -1,12 +1,13 @@
 """
 Profile matching service for MoniTune.
 Resolves active process executable paths against configured profiles
-(exact executable match or deepest parent directory match).
+(exact executable match or deepest parent directory match) and checks
+for ignored processes (transient/tray apps that shouldn't deactivate profiles).
 """
 
 import os
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -56,3 +57,51 @@ def match_profile(
         return best_match_key, profiles_data[best_match_key]
 
     return None, None
+
+
+def is_ignored_process(
+    ignored_patterns: Optional[Iterable[str]],
+    exe_path: Optional[str]
+) -> bool:
+    """
+    Checks if an executable path matches any pattern in ignored_patterns.
+
+    Matching strategy:
+    1. Filename / base process name match (e.g. 'EarTrumpet.exe' or 'EarTrumpet').
+    2. Exact normalized path match.
+    3. Parent directory match (e.g. 'C:\\Program Files\\WindowsApps').
+
+    Returns:
+        True if exe_path matches any ignored pattern, False otherwise.
+    """
+    if not ignored_patterns or not exe_path:
+        return False
+
+    exe_path_norm = os.path.normcase(os.path.normpath(exe_path))
+    exe_name = os.path.basename(exe_path_norm)
+
+    for pattern in ignored_patterns:
+        if not pattern:
+            continue
+        cleaned = pattern.strip().strip('"').strip("'")
+        if not cleaned:
+            continue
+
+        # Single filename / process name without directory separators
+        if os.sep not in cleaned and "/" not in cleaned:
+            pat_norm = os.path.normcase(cleaned)
+            if pat_norm == exe_name or f"{pat_norm}.exe" == exe_name:
+                return True
+            continue
+
+        # Full path or directory path
+        pat_norm = os.path.normcase(os.path.normpath(cleaned))
+        if pat_norm == exe_path_norm:
+            return True
+
+        folder = pat_norm if pat_norm.endswith(os.sep) else pat_norm + os.sep
+        if exe_path_norm.startswith(folder):
+            return True
+
+    return False
+
