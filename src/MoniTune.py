@@ -160,7 +160,12 @@ class MainWindow(QMainWindow):
 
         self.is_energy_saver = is_energy_saver_active()
         logger.info(f"is_energy_saver on startup: {self.is_energy_saver}")
-        self.is_power_saving_active = self.is_power_saving_effective()
+        self.is_power_saving_active = self.coordinator.is_power_saving_effective(
+            enable_limits=getattr(self.settings, "enable_power_saving_limits", True),
+            sync_windows=getattr(self.settings, "sync_windows_energy_saver", True),
+            manual_state=getattr(self.settings, "power_saving_manual_state", False),
+            is_windows_energy_saver=self.is_energy_saver,
+        )
         
         self.is_popup = False
         self.current_screen = None
@@ -295,9 +300,8 @@ class MainWindow(QMainWindow):
     def _on_energy_saver_change(self, is_active: bool):
         logger.info(f"Energy Saver state changed to: {is_active}")
         self.is_energy_saver = is_active
-        mode = getattr(self.settings, "power_saving_mode", "windows")
-        if mode == "windows":
-            self.apply_power_saving_state()
+        if getattr(self.settings, "sync_windows_energy_saver", True):
+            self.set_power_saving_state(is_active)
         elif self.window_open:
             self.updateBottomFrame()
 
@@ -308,11 +312,9 @@ class MainWindow(QMainWindow):
 
     def is_power_saving_effective(self) -> bool:
         """Returns True if Power Saving limits should currently be enforced."""
-        return self.coordinator.is_power_saving_effective(
-            enable_limits=getattr(self.settings, "enable_power_saving_limits", True),
-            mode=getattr(self.settings, "power_saving_mode", "windows"),
-            manual_state=getattr(self.settings, "power_saving_manual_state", False),
-            is_windows_energy_saver=getattr(self, "is_energy_saver", False),
+        return bool(
+            getattr(self.settings, "enable_power_saving_limits", True)
+            and getattr(self, "is_power_saving_active", False)
         )
 
     def apply_power_saving_state(self, force=False):
@@ -387,23 +389,47 @@ class MainWindow(QMainWindow):
         if self.window_open:
             self.updateBottomFrame()
 
-    def toggle_manual_power_saving(self, checked: bool):
-        self.settings.power_saving_manual_state = checked
-        self.settings.save("power_saving_manual_state")
-        if hasattr(self, "power_saving_btn"):
-            self.power_saving_btn.setIcon(self.get_icon_for_toggle_state("leaf", checked))
-        logger.info(f"power_saving_manual_state toggled: {checked}")
-        self.apply_power_saving_state()
+    def set_power_saving_state(self, active: bool, force: bool = False):
+        """Activates or deactivates power saving state and updates UI and hardware."""
+        if not getattr(self.settings, "enable_power_saving_limits", True):
+            active = False
+        if (active == self.is_power_saving_active) and not force:
+            return
 
-    def on_power_saving_mode_changed(self, mode: str):
-        logger.info(f"on_power_saving_mode_changed: {mode}")
+        self.is_power_saving_active = active
+        self.settings.power_saving_manual_state = active
+        self.settings.save("power_saving_manual_state")
+        logger.info(f"Power saving state changed: active={active}")
+
+        if hasattr(self, "power_saving_btn"):
+            self.power_saving_btn.blockSignals(True)
+            self.power_saving_btn.setChecked(active)
+            self.power_saving_btn.setIcon(self.get_icon_for_toggle_state("leaf", active))
+            self.power_saving_btn.blockSignals(False)
+
         self.apply_power_saving_state(force=True)
-        if self.window_open:
-            self.updateBottomFrame()
+
+    def toggle_manual_power_saving(self, checked: bool):
+        logger.info(f"Manual power saving toggled: {checked}")
+        self.set_power_saving_state(checked)
+
+    def on_sync_windows_energy_saver_toggled(self, enabled: bool):
+        logger.info(f"on_sync_windows_energy_saver_toggled: {enabled}")
+        if enabled and self.is_energy_saver:
+            self.set_power_saving_state(True)
 
     def on_power_saving_enabled_toggled(self, enabled: bool):
         logger.info(f"on_power_saving_enabled_toggled: {enabled}")
-        self.apply_power_saving_state(force=True)
+        if not enabled:
+            self.set_power_saving_state(False, force=True)
+        else:
+            sync = getattr(self.settings, "sync_windows_energy_saver", True)
+            if sync and self.is_energy_saver:
+                self.set_power_saving_state(True, force=True)
+            elif getattr(self.settings, "power_saving_manual_state", False):
+                self.set_power_saving_state(True, force=True)
+            else:
+                self.apply_power_saving_state(force=True)
         if self.window_open:
             self.updateBottomFrame()
 
@@ -1152,36 +1178,17 @@ class MainWindow(QMainWindow):
         self.is_energy_saver = is_energy_saver_active()
         logger.info(f"updateBottomFrame is_energy_saver: {self.is_energy_saver}")
 
-        mode = getattr(self.settings, "power_saving_mode", "windows")
         limits_enabled = getattr(self.settings, "enable_power_saving_limits", True)
-
         if limits_enabled:
-            if mode == "windows":
-                if self.is_energy_saver:
-                    self.energy_saver_indicator = QPushButton()
-                    self.energy_saver_indicator.setFixedSize(30, 39)
-                    self.energy_saver_indicator.setIcon(QIcon(cfg.icons["leaf"][self.theme]))
-                    self.energy_saver_indicator.setIconSize(QSize(21, 21))
-                    self.energy_saver_indicator.setFlat(True)
-                    self.energy_saver_indicator.setToolTip("Energy Saver is active (Following Windows. Switch to manual in Settings)")
-                    self.energy_saver_indicator.setStyleSheet("""
-                        QPushButton {
-                            background: transparent;
-                            border: none;
-                        }
-                    """)
-                    self.bottom_frame_hbox.addWidget(self.energy_saver_indicator)
-            else:
-                self.power_saving_btn = QPushButton()
-                self.power_saving_btn.setCheckable(True)
-                manual_state = bool(getattr(self.settings, "power_saving_manual_state", False))
-                self.power_saving_btn.setChecked(manual_state)
-                self.power_saving_btn.setFixedSize(41, 39)
-                self.power_saving_btn.setIcon(self.get_icon_for_toggle_state("leaf", manual_state))
-                self.power_saving_btn.setIconSize(QSize(21, 21))
-                self.power_saving_btn.setToolTip("Power Saving (Manual mode)")
-                self.power_saving_btn.toggled.connect(self.toggle_manual_power_saving)
-                self.bottom_frame_hbox.addWidget(self.power_saving_btn)
+            self.power_saving_btn = QPushButton()
+            self.power_saving_btn.setCheckable(True)
+            self.power_saving_btn.setChecked(self.is_power_saving_active)
+            self.power_saving_btn.setFixedSize(41, 39)
+            self.power_saving_btn.setIcon(self.get_icon_for_toggle_state("leaf", self.is_power_saving_active))
+            self.power_saving_btn.setIconSize(QSize(21, 21))
+            self.power_saving_btn.setToolTip("Toggle Power Saving limits")
+            self.power_saving_btn.toggled.connect(self.toggle_manual_power_saving)
+            self.bottom_frame_hbox.addWidget(self.power_saving_btn)
 
         if len(self.active_monitors_dict) > 1:
             self.link_br_btn = QPushButton()

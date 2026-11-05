@@ -13,6 +13,7 @@ def test_settings_manager_defaults(qapp):
         settings = SettingsManager(reg_path=r"Software\TestMoniTune")
         
         assert settings.enable_power_saving_limits is True
+        assert settings.sync_windows_energy_saver is True
         assert settings.power_saving_mode == "windows"
         assert settings.power_saving_manual_state is False
         assert settings.power_saving_limits == {}

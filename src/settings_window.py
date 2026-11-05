@@ -679,34 +679,6 @@ class PopupPositionFrame(BaseSettingFrame):
         get_settings().set("popup_position", pos)
 
 
-# MARK: PowerSavingModeFrame
-class PowerSavingModeFrame(BaseSettingFrame):
-    def __init__(self, main_window):
-        super().__init__(title="Activation Mode", 
-                         descr="Choose whether to follow Windows Energy Saver or toggle manually in MoniTune.")
-        self.main_window = main_window
-
-        self.combo = QComboBox()
-        self.combo.addItem("Follow Windows Energy Saver", "windows")
-        self.combo.addItem("Manual control in MoniTune", "manual")
-        self.combo.setMinimumWidth(240)
-
-        current_mode = getattr(main_window.settings, "power_saving_mode", "windows")
-        idx = self.combo.findData(current_mode)
-        if idx >= 0:
-            self.combo.setCurrentIndex(idx)
-
-        self.combo.currentIndexChanged.connect(self.on_mode_changed)
-        self.title_layout.addWidget(self.combo, alignment=Qt.AlignmentFlag.AlignRight)
-
-    def on_mode_changed(self, index):
-        mode = self.combo.currentData()
-        logger.info(f"Power Saving mode changed to: {mode}")
-        get_settings().set("power_saving_mode", mode)
-        if hasattr(self.main_window, "on_power_saving_mode_changed"):
-            self.main_window.on_power_saving_mode_changed(mode)
-
-
 # MARK: PowerSavingLimitsFrame
 class PowerSavingLimitsFrame(SettingFrame):
     def __init__(self, settings_window, monitors_order, display_names):
@@ -1560,16 +1532,30 @@ class SettingsWindow(QWidget):
         power_saving_tab = ScrollableTab()
         self.tab_widget.addTab(power_saving_tab, "Power Saving")
 
+        sync_windows_frame = SettingToggleFrame(
+            main_window=self.main_window,
+            title="Follow Windows Energy Saver",
+            descr="Automatically activate power saving limits when Windows Energy Saver turns on, and deactivate when it turns off.",
+            setting_name="sync_windows_energy_saver",
+            reg_setting_name="SyncWindowsEnergySaver",
+            callback=self.main_window.on_sync_windows_energy_saver_toggled
+        )
+        sync_windows_frame.setEnabled(self.settings.enable_power_saving_limits)
+
+        def on_limits_enabled(checked):
+            sync_windows_frame.setEnabled(checked)
+            self.main_window.on_power_saving_enabled_toggled(checked)
+
         power_saving_tab.layout_.addWidget(SettingToggleFrame(
             main_window=self.main_window,
             title="Enable Power Saving Limits",
             descr="Limit maximum brightness on configured monitors when power saving is active.",
             setting_name="enable_power_saving_limits",
             reg_setting_name="EnablePowerSavingLimits",
-            callback=self.main_window.on_power_saving_enabled_toggled
+            callback=on_limits_enabled
         ))
 
-        power_saving_tab.layout_.addWidget(PowerSavingModeFrame(self.main_window))
+        power_saving_tab.layout_.addWidget(sync_windows_frame)
 
         power_saving_tab.layout_.addWidget(PowerSavingLimitsFrame(
             self, monitors_order, display_names

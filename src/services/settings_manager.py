@@ -136,6 +136,7 @@ _SPECS: List[SettingSpec] = [
 
     # Power Saving tab
     SettingSpec("enable_power_saving_limits", "EnablePowerSavingLimits", bool, lambda: True),
+    SettingSpec("sync_windows_energy_saver", "SyncWindowsEnergySaver", bool, lambda: True),
     SettingSpec("power_saving_mode", "PowerSavingMode", str, lambda: "windows"),
     SettingSpec("power_saving_manual_state", "PowerSavingManualState", bool, lambda: False),
     SettingSpec("power_saving_limits", "PowerSavingLimits", dict, dict),

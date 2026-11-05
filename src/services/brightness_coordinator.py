@@ -19,16 +19,21 @@ class BrightnessCoordinator:
     @staticmethod
     def is_power_saving_effective(
         enable_limits: bool,
-        mode: str,
-        manual_state: bool,
-        is_windows_energy_saver: bool,
+        mode: Optional[str] = None,
+        manual_state: bool = False,
+        is_windows_energy_saver: bool = False,
+        sync_windows: bool = True,
     ) -> bool:
         """Determines whether power saving brightness limits should be enforced."""
         if not enable_limits:
             return False
         if mode == "manual":
             return bool(manual_state)
-        return bool(is_windows_energy_saver)
+        if mode == "windows":
+            return bool(is_windows_energy_saver)
+        if sync_windows and is_windows_energy_saver:
+            return True
+        return bool(manual_state)
 
     # MARK: Priority Resolution
     @staticmethod

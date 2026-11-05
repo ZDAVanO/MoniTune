@@ -374,3 +374,19 @@ def test_resolve_brightness_partial_profile():
     )
     assert res == {"MON1": 95, "MON2": 65}
 
+def test_hybrid_power_saving_evaluation():
+    """Verify new hybrid mode where Windows sync and manual toggle coexist."""
+    coordinator = BrightnessCoordinator()
+
+    # Disabled master toggle -> always False
+    assert coordinator.is_power_saving_effective(enable_limits=False, sync_windows=True, is_windows_energy_saver=True) is False
+
+    # Sync enabled and Windows Energy Saver active -> True
+    assert coordinator.is_power_saving_effective(enable_limits=True, sync_windows=True, is_windows_energy_saver=True) is True
+
+    # Sync enabled but Windows inactive, manual active -> True
+    assert coordinator.is_power_saving_effective(enable_limits=True, sync_windows=True, manual_state=True, is_windows_energy_saver=False) is True
+
+    # Sync disabled, Windows active, manual inactive -> False
+    assert coordinator.is_power_saving_effective(enable_limits=True, sync_windows=False, manual_state=False, is_windows_energy_saver=True) is False
+
