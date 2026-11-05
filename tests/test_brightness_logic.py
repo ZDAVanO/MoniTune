@@ -384,9 +384,10 @@ def test_hybrid_power_saving_evaluation():
     # Sync enabled and Windows Energy Saver active -> True
     assert coordinator.is_power_saving_effective(enable_limits=True, sync_windows=True, is_windows_energy_saver=True) is True
 
-    # Sync enabled but Windows inactive, manual active -> True
-    assert coordinator.is_power_saving_effective(enable_limits=True, sync_windows=True, manual_state=True, is_windows_energy_saver=False) is True
+    # Sync enabled and Windows inactive -> False (never pollutes cold start from manual_state)
+    assert coordinator.is_power_saving_effective(enable_limits=True, sync_windows=True, manual_state=True, is_windows_energy_saver=False) is False
 
-    # Sync disabled, Windows active, manual inactive -> False
+    # Sync disabled -> strictly uses manual_state
+    assert coordinator.is_power_saving_effective(enable_limits=True, sync_windows=False, manual_state=True, is_windows_energy_saver=False) is True
     assert coordinator.is_power_saving_effective(enable_limits=True, sync_windows=False, manual_state=False, is_windows_energy_saver=True) is False
 

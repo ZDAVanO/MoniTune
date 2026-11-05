@@ -301,7 +301,7 @@ class MainWindow(QMainWindow):
         logger.info(f"Energy Saver state changed to: {is_active}")
         self.is_energy_saver = is_active
         if getattr(self.settings, "sync_windows_energy_saver", True):
-            self.set_power_saving_state(is_active)
+            self.set_power_saving_state(is_active, save_as_manual=False)
         elif self.window_open:
             self.updateBottomFrame()
 
@@ -389,7 +389,7 @@ class MainWindow(QMainWindow):
         if self.window_open:
             self.updateBottomFrame()
 
-    def set_power_saving_state(self, active: bool, force: bool = False):
+    def set_power_saving_state(self, active: bool, force: bool = False, save_as_manual: bool = False):
         """Activates or deactivates power saving state and updates UI and hardware."""
         if not getattr(self.settings, "enable_power_saving_limits", True):
             active = False
@@ -397,9 +397,10 @@ class MainWindow(QMainWindow):
             return
 
         self.is_power_saving_active = active
-        self.settings.power_saving_manual_state = active
-        self.settings.save("power_saving_manual_state")
-        logger.info(f"Power saving state changed: active={active}")
+        if save_as_manual:
+            self.settings.power_saving_manual_state = active
+            self.settings.save("power_saving_manual_state")
+        logger.info(f"Power saving state changed: active={active}, save_as_manual={save_as_manual}")
 
         if hasattr(self, "power_saving_btn"):
             self.power_saving_btn.blockSignals(True)
@@ -411,25 +412,31 @@ class MainWindow(QMainWindow):
 
     def toggle_manual_power_saving(self, checked: bool):
         logger.info(f"Manual power saving toggled: {checked}")
-        self.set_power_saving_state(checked)
+        sync = getattr(self.settings, "sync_windows_energy_saver", True)
+        self.set_power_saving_state(checked, save_as_manual=(not sync))
 
     def on_sync_windows_energy_saver_toggled(self, enabled: bool):
         logger.info(f"on_sync_windows_energy_saver_toggled: {enabled}")
-        if enabled and self.is_energy_saver:
-            self.set_power_saving_state(True)
+        target_state = self.coordinator.is_power_saving_effective(
+            enable_limits=getattr(self.settings, "enable_power_saving_limits", True),
+            sync_windows=enabled,
+            manual_state=getattr(self.settings, "power_saving_manual_state", False),
+            is_windows_energy_saver=getattr(self, "is_energy_saver", False),
+        )
+        self.set_power_saving_state(target_state, force=True, save_as_manual=False)
 
     def on_power_saving_enabled_toggled(self, enabled: bool):
         logger.info(f"on_power_saving_enabled_toggled: {enabled}")
         if not enabled:
-            self.set_power_saving_state(False, force=True)
+            self.set_power_saving_state(False, force=True, save_as_manual=False)
         else:
-            sync = getattr(self.settings, "sync_windows_energy_saver", True)
-            if sync and self.is_energy_saver:
-                self.set_power_saving_state(True, force=True)
-            elif getattr(self.settings, "power_saving_manual_state", False):
-                self.set_power_saving_state(True, force=True)
-            else:
-                self.apply_power_saving_state(force=True)
+            target_state = self.coordinator.is_power_saving_effective(
+                enable_limits=True,
+                sync_windows=getattr(self.settings, "sync_windows_energy_saver", True),
+                manual_state=getattr(self.settings, "power_saving_manual_state", False),
+                is_windows_energy_saver=getattr(self, "is_energy_saver", False),
+            )
+            self.set_power_saving_state(target_state, force=True, save_as_manual=False)
         if self.window_open:
             self.updateBottomFrame()
 

@@ -14,7 +14,6 @@ def test_settings_manager_defaults(qapp):
         
         assert settings.enable_power_saving_limits is True
         assert settings.sync_windows_energy_saver is True
-        assert settings.power_saving_mode == "windows"
         assert settings.power_saving_manual_state is False
         assert settings.power_saving_limits == {}
         assert settings.brightness_values == {}
@@ -29,18 +28,18 @@ def test_settings_manager_set_and_signal(qapp):
          patch("services.settings_manager.reg_read_dict", return_value={}), \
          patch("services.settings_manager.reg_read_list", return_value=[]), \
          patch("services.settings_manager.reg_read_str", side_effect=lambda path, name, default: default), \
-         patch("services.settings_manager.reg_write_str") as mock_write_str:
+         patch("services.settings_manager.reg_write_bool") as mock_write_bool:
 
         settings = SettingsManager(reg_path=r"Software\TestMoniTune")
 
         received_signals = []
         settings.setting_changed.connect(lambda name, val: received_signals.append((name, val)))
 
-        settings.power_saving_mode = "manual"
+        settings.sync_windows_energy_saver = False
 
-        assert settings.power_saving_mode == "manual"
-        mock_write_str.assert_called_once_with(r"Software\TestMoniTune", "PowerSavingMode", "manual")
-        assert received_signals == [("power_saving_mode", "manual")]
+        assert settings.sync_windows_energy_saver is False
+        mock_write_bool.assert_called_once_with(r"Software\TestMoniTune", "SyncWindowsEnergySaver", False)
+        assert received_signals == [("sync_windows_energy_saver", False)]
 
 
 def test_settings_manager_subscribe(qapp):
