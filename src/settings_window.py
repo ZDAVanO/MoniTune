@@ -877,16 +877,18 @@ class ProfileFrame(BaseBrightnessSlidersFrame):
                  monitors_order, 
                  display_names, 
                  process=None, 
-                 brightness_data=None
+                 brightness_data=None,
+                 enabled=True
                  ):
         super().__init__(settings_window, 
                          monitors_order, 
                          display_names, 
                          brightness_data)
 
-        self.toggle_bth = BaseToggleButton(initial_state=True)
-        # self.toggle_bth.setStyleSheet("padding: 4px 10px;")
-        # self.toggle_bth.clicked.connect(self.choose_exe_dialog)
+        self.toggle_bth = BaseToggleButton(
+            initial_state=enabled,
+            callback=self.on_toggle_state
+        )
         self.title_layout.addWidget(self.toggle_bth)
 
         self.entry = QLineEdit()
@@ -906,6 +908,16 @@ class ProfileFrame(BaseBrightnessSlidersFrame):
         self.delete_button.clicked.connect(self.delete_frame)
         self.title_layout.addWidget(self.delete_button)
 
+        self.update_ui_state(enabled)
+
+    def on_toggle_state(self, checked):
+        self.update_ui_state(checked)
+        self.save_data()
+
+    def update_ui_state(self, enabled):
+        for slider in self.sliders.values():
+            slider.setEnabled(enabled)
+
     def save_data(self): # using in BaseBrightnessSlidersFrame
         self.settings_window.save_profiles_data()
 
@@ -920,6 +932,7 @@ class ProfileFrame(BaseBrightnessSlidersFrame):
     def get_data(self):
         return {
             "path": self.entry.text(),
+            "enabled": self.toggle_bth.isChecked(),
             "brightness_data": self.brightness_data
         }
 
@@ -1077,11 +1090,15 @@ class SettingsWindow(QWidget):
             data = frame.get_data()
             path = data["path"]
             brightness_data = data["brightness_data"]
+            enabled = data.get("enabled", True)
             if path != "":
                 resolved_path = str(Path(path).resolve())
             else:
                 resolved_path = ""
-            self.profiles_data[resolved_path] = brightness_data
+            self.profiles_data[resolved_path] = {
+                "enabled": enabled,
+                "brightness_data": brightness_data
+            }
 
         logger.info(f"Collected profiles data: {self.profiles_data}")
         self.settings.profiles_data = self.profiles_data
@@ -1588,8 +1605,8 @@ class SettingsWindow(QWidget):
         profiles_frame.title_layout.addWidget(profiles_toggle)
 
 
-        def add_profile_frame(path=None, brightness_data=None, highlight=False):
-            frame = ProfileFrame(self, monitors_order, display_names, path, brightness_data)
+        def add_profile_frame(path=None, brightness_data=None, highlight=False, enabled=True):
+            frame = ProfileFrame(self, monitors_order, display_names, path, brightness_data, enabled=enabled)
             self.profiles_frames.append(frame)
             center_layout.insertWidget(1, frame) # Add to the top
             # Highlight the newly added frame
@@ -1689,8 +1706,14 @@ class SettingsWindow(QWidget):
 
         # Restore ProfileFrame widgets from settings
         profiles_data = self.settings.profiles_data
-        for path, brightness_data in reversed(profiles_data.items()):
-            add_profile_frame(path, brightness_data)
+        for path, raw_data in reversed(profiles_data.items()):
+            if isinstance(raw_data, dict) and "brightness_data" in raw_data:
+                enabled = raw_data.get("enabled", True)
+                brightness_data = raw_data.get("brightness_data", {})
+            else:
+                enabled = True
+                brightness_data = raw_data
+            add_profile_frame(path, brightness_data, enabled=enabled)
 
         profiles_tab.layout_.addWidget(profiles_frame)
 

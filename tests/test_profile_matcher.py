@@ -158,3 +158,47 @@ def test_debounce_cancels_transient_explorer_before_ignored_app():
     assert prev_active_process == r"C:\Tools\WindowsTerminal.exe"
 
 
+def test_match_profile_disabled_exact():
+    profiles = {
+        r"C:\Games\game.exe": {"enabled": False, "brightness_data": {"DISPLAY1": 90}},
+    }
+    key, data = match_profile(profiles, r"C:\Games\game.exe")
+    assert key is None
+    assert data is None
+
+
+def test_match_profile_enabled_structured():
+    profiles = {
+        r"C:\Games\game.exe": {"enabled": True, "brightness_data": {"DISPLAY1": 90}},
+    }
+    key, data = match_profile(profiles, r"C:\Games\game.exe")
+    assert key == r"C:\Games\game.exe"
+    assert data == {"DISPLAY1": 90}
+
+
+def test_match_profile_disabled_parent_folder():
+    profiles = {
+        r"C:\Games": {"enabled": False, "brightness_data": {"DISPLAY1": 70}},
+    }
+    key, data = match_profile(profiles, r"C:\Games\Sub\game.exe")
+    assert key is None
+    assert data is None
+
+
+def test_match_profile_disabled_specific_overrides_parent_enabled():
+    profiles = {
+        r"C:\Games": {"enabled": True, "brightness_data": {"DISPLAY1": 40}},
+        r"C:\Games\Witcher": {"enabled": False, "brightness_data": {"DISPLAY1": 85}},
+    }
+    # Witcher is explicitly disabled -> must NOT fall back to C:\Games
+    key_w, data_w = match_profile(profiles, r"C:\Games\Witcher\bin\witcher.exe")
+    assert key_w is None
+    assert data_w is None
+
+    # Other game in C:\Games remains enabled -> matches C:\Games
+    key_other, data_other = match_profile(profiles, r"C:\Games\Cyberpunk\game.exe")
+    assert key_other == r"C:\Games"
+    assert data_other == {"DISPLAY1": 40}
+
+
+

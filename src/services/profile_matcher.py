@@ -12,6 +12,26 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
+def _extract_profile_data(data: Any) -> Tuple[bool, Dict[str, int]]:
+    """
+    Extracts (is_enabled, brightness_data) from profile data.
+    Supports both legacy format:
+        {"DISPLAY1": 80}
+    and structured format:
+        {"enabled": True, "brightness_data": {"DISPLAY1": 80}}
+    """
+    if not isinstance(data, dict):
+        return False, {}
+
+    if "brightness_data" in data and isinstance(data["brightness_data"], dict):
+        return bool(data.get("enabled", True)), data["brightness_data"]
+
+    # Legacy format: data itself is the brightness dictionary
+    is_enabled = bool(data.get("enabled", True))
+    br_data = {k: v for k, v in data.items() if k != "enabled" and isinstance(v, (int, float))}
+    return is_enabled, br_data
+
+
 def match_profile(
     profiles_data: Dict[str, Any],
     exe_path: str
@@ -21,10 +41,12 @@ def match_profile(
 
     Lookup strategy:
     1. Exact match on normalized executable path (case-insensitive on Windows).
+       If an exact match exists and is disabled, returns (None, None).
     2. Deepest parent directory match (prefers the most specific folder path).
+       If the deepest matching rule is disabled, returns (None, None).
 
     Returns:
-        (matched_key, brightness_dict) or (None, None) if no match found.
+        (matched_key, brightness_dict) or (None, None) if no match found or disabled.
     """
     if not profiles_data or not exe_path:
         return None, None
@@ -33,15 +55,18 @@ def match_profile(
 
     # 1. Exact match (check raw key first for performance, then normalized)
     if exe_path in profiles_data:
-        return exe_path, profiles_data[exe_path]
+        enabled, br_dict = _extract_profile_data(profiles_data[exe_path])
+        return (exe_path, br_dict) if enabled else (None, None)
 
     for key, data in profiles_data.items():
         if os.path.normcase(os.path.normpath(key)) == exe_path_norm:
-            return key, data
+            enabled, br_dict = _extract_profile_data(data)
+            return (key, br_dict) if enabled else (None, None)
 
     # 2. Parent folder match: prefer the longest / deepest matching directory
     best_match_key = None
     best_match_len = -1
+    best_match_data = None
 
     for key, data in profiles_data.items():
         key_norm = os.path.normcase(os.path.normpath(key))
@@ -52,9 +77,13 @@ def match_profile(
             if len(folder) > best_match_len:
                 best_match_len = len(folder)
                 best_match_key = key
+                best_match_data = data
 
     if best_match_key is not None:
-        return best_match_key, profiles_data[best_match_key]
+        enabled, br_dict = _extract_profile_data(best_match_data)
+        if enabled:
+            return best_match_key, br_dict
+        return None, None
 
     return None, None
 
