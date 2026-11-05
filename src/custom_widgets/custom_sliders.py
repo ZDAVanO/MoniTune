@@ -243,13 +243,14 @@ class AnimatedSliderBS(QSlider):
 
         limit = getattr(self, "max_limit", 100)
         if limit < 100:
+            prev_val = self.value()
             self.blockSignals(True)
             super().mousePressEvent(event)
             self.blockSignals(False)
             if self.value() > limit:
                 self.setValue(limit)
                 self.setSliderPosition(limit)
-            else:
+            elif self.value() != prev_val:
                 self.valueChanged.emit(self.value())
         else:
             super().mousePressEvent(event)
@@ -272,7 +273,7 @@ class AnimatedSliderBS(QSlider):
                     self.blockSignals(False)
                 else:
                     self.setValue(limit)
-            else:
+            elif self.value() != prev_val:
                 self.valueChanged.emit(self.value())
         else:
             super().mouseMoveEvent(event)
@@ -283,13 +284,14 @@ class AnimatedSliderBS(QSlider):
 
         limit = getattr(self, "max_limit", 100)
         if limit < 100:
+            prev_val = self.value()
             self.blockSignals(True)
             super().keyPressEvent(event)
             self.blockSignals(False)
             if self.value() > limit:
                 self.setValue(limit)
                 self.setSliderPosition(limit)
-            else:
+            elif self.value() != prev_val:
                 self.valueChanged.emit(self.value())
         else:
             super().keyPressEvent(event)

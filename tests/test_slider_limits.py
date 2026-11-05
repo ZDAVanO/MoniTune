@@ -185,3 +185,29 @@ def test_power_saving_limits_frame_drag_does_not_spam_hardware(qapp):
 
     mock_settings.set.assert_called_once_with("power_saving_limits", {"mon1": 25})
     mock_main_window.update_power_saving_limits.assert_called_once()
+
+
+def test_animated_slider_mouse_move_does_not_spam_when_value_unchanged(qapp):
+    slider = AnimatedSliderBS(Qt.Orientation.Horizontal)
+    slider.resize(200, 30)
+    slider.setRange(0, 100)
+    slider.setValue(20)
+    slider.set_max_limit(50)
+
+    emitted_values = []
+    slider.valueChanged.connect(lambda v: emitted_values.append(v))
+
+    # Trigger a mouseMove that does not change the integer slider position
+    # Simulate move at the current position
+    move_same = QMouseEvent(
+        QMouseEvent.Type.MouseMove,
+        QPointF(40, 15),
+        QPointF(40, 15),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    slider.mouseMoveEvent(move_same)
+
+    # Should not re-emit valueChanged when value stayed 20
+    assert emitted_values == []
