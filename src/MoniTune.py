@@ -384,21 +384,14 @@ class MainWindow(QMainWindow):
                         if not self.window_open:
                             frame.setValueBS(target_val)
 
-                if self.profile_active:
-                    logger.info("Exited power saving: re-applying active profile brightness")
-                    proc = getattr(self, "prev_active_process", None) or getattr(self, "active_process", None)
-                    if proc:
-                        self.prev_active_process = None
-                        self._on_active_process_change({"exe_path": proc})
-                elif self.settings.enable_time_adjustment:
-                    logger.info("Exited power saving: executing recent schedule task")
-                    self.execute_recent_task()
-                else:
-                    logger.info(f"Exited power saving: restoring pre-saving brightness {restored_values}")
+                if restored_values:
+                    logger.info(f"Exited power saving: saving restored values {restored_values}")
                     for serial, val in restored_values.items():
                         self.settings.manual_brightness_values[serial] = val
                     self.settings.save("manual_brightness_values")
-                    self.apply_brightness(restored_values)
+
+                logger.info("Exited power saving: resolving brightness via coordinator")
+                self.execute_recent_task()
         finally:
             self._linking_suspended = False
 
@@ -579,27 +572,38 @@ class MainWindow(QMainWindow):
 
     # MARK: execute_recent_task()
     def execute_recent_task(self, delay=0):
-
         if self.profile_active:
-            logger.info(f"execute_recent_task: profile_active: {self.profile_active}, skip")
+            logger.info("execute_recent_task: profile_active is True, skip")
             return
 
-        if (not self.settings.time_adjustment_data) or (not self.settings.enable_time_adjustment):
-            logger.info("execute_recent_task: No tasks found")
-            if self.settings.restore_last_brightness:
-                logger.info("execute_recent_task: Restoring last brightness values")
-                # self.apply_brightness(self.settings.brightness_values, delay=delay)
-                self.apply_brightness(self.settings.manual_brightness_values, delay=delay)
+        if not self.active_monitors_dict:
             return
 
-        # Get the current time and find the most recent task time
-        current_time = QTime.currentTime().toString("HH:mm")
-        recent_task_time = self.get_recent_task_time(current_time)
-        if recent_task_time:
-            logger.info(f"Executing task at: {recent_task_time}, delay: {delay / 1000} sec")
-            self.apply_brightness(self.settings.time_adjustment_data[recent_task_time], delay=delay)
+        schedule_data = None
+        if self.settings.enable_time_adjustment and self.settings.time_adjustment_data:
+            current_time = QTime.currentTime().toString("HH:mm")
+            recent_task_time = self.get_recent_task_time(current_time)
+            if recent_task_time:
+                schedule_data = self.settings.time_adjustment_data.get(recent_task_time)
+
+        limits = getattr(self.settings, "power_saving_limits", {}) or {}
+        is_ps = self.is_power_saving_effective()
+
+        targets = self.coordinator.resolve_brightness(
+            active_serials=self.active_monitors_dict.keys(),
+            schedule_data=schedule_data,
+            manual_data=self.settings.manual_brightness_values,
+            enable_schedule=self.settings.enable_time_adjustment,
+            restore_last_brightness=self.settings.restore_last_brightness,
+            is_power_saving=is_ps,
+            limits=limits,
+        )
+
+        if targets:
+            logger.info(f"execute_recent_task: applying targets: {targets}")
+            self.apply_brightness(targets, delay=delay)
         else:
-            logger.info("No task time available to execute")
+            logger.info("execute_recent_task: no target brightness found, skip")
 
 
     # MARK: get_recent_task_time()
@@ -1277,14 +1281,8 @@ class MainWindow(QMainWindow):
                 if not is_ps:
                     self.settings.manual_brightness_values[serial] = new_val
         else:
-            clamped_val = self.coordinator.resolve_brightness(
-                enable_profiles=False,
-                profile_value=None,
-                enable_schedule=False,
-                schedule_value=None,
-                manual_value=value,
-                is_power_saving=is_ps,
-                power_saving_limit=limits.get(monitor_serial, 100),
+            clamped_val = self.coordinator.clamp_value(
+                monitor_serial, value, limit=limits.get(monitor_serial, 100) if is_ps else 100
             )
             self.settings.brightness_values[monitor_serial] = clamped_val
             if not is_ps:

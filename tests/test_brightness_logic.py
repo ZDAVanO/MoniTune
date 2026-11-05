@@ -38,46 +38,49 @@ def test_power_saving_effective_matrix(enable_limits, mode, manual_state, win_sa
 
 
 # ==============================================================================
-# МАТРИЦЯ 2: Пріоритет джерел яскравості (Профіль vs Розклад vs Ручне vs Ліміт)
+# МАТРИЦЯ 2: Визначення цільової яскравості (Розклад vs Ручне vs Ліміт)
 # ==============================================================================
 @pytest.mark.parametrize(
-    "enable_profiles, profile_val, enable_schedule, schedule_val, manual_val, is_power_saving, limit, expected_brightness",
+    "enable_schedule, schedule_val, restore_last, manual_val, is_power_saving, limit, expected_brightness",
     [
-        # Сценарій: Тільки ручне значення (профілі і розклад вимкнені)
-        (False, None, False, None, 75, False, 100, 75),
-        (False, None, False, None, 75, True, 15, 15),  # Ручне зрізано лімітом станції
-        (False, None, False, None, 10, True, 15, 10),  # Ручне нижче ліміту -> залишається 10
+        # Сценарій: Тільки ручне значення (розклад вимкнено)
+        (False, None, True, 75, False, 100, 75),
+        (False, None, True, 75, True, 15, 15),   # Ручне зрізано лімітом
+        (False, None, True, 10, True, 15, 10),   # Ручне нижче ліміту -> 10
 
-        # Сценарій: Розклад увімкнено (профілі вимкнені) -> Розклад перемагає ручне значення
-        (False, None, True, 60, 80, False, 100, 60),
-        (False, None, True, 60, 80, True, 15, 15),     # Розклад (60) зрізано лімітом (15)
-        (False, None, True, 10, 80, True, 15, 10),     # Розклад (10) нижче ліміту (15) -> 10
+        # Сценарій: Розклад увімкнено -> перемагає ручне значення
+        (True, 60, True, 80, False, 100, 60),
+        (True, 60, True, 80, True, 15, 15),      # Розклад (60) зрізано лімітом (15)
+        (True, 10, True, 80, True, 15, 10),      # Розклад (10) нижче ліміту -> 10
 
-        # Сценарій: Профіль увімкнено і є збіг -> Профіль перемагає і розклад, і ручне
-        (True, 100, True, 50, 70, False, 100, 100),   # Гра дає 100%
-        (True, 100, True, 50, 70, True, 15, 15),      # Гра дає 100%, але ліміт станції 15% -> строго 15%
-        (True, 12, True, 50, 70, True, 15, 12),       # Гра дає 12% (нічний фільм) -> залишається 12%
+        # Сценарій: Розклад увімкнено, але для монітора немає слота -> падає на ручне
+        (True, None, True, 80, False, 100, 80),
 
-        # Сценарій: Профілі увімкнені глобально, але для поточного exe немає профілю (profile_val is None)
-        (True, None, True, 65, 80, False, 100, 65),    # Падає на розклад (65)
-        (True, None, False, None, 80, False, 100, 80), # Падає на ручне (80)
-        (True, None, True, 65, 80, True, 15, 15),      # Падає на розклад, зрізаний до 15
+        # Сценарій: Немає цільового значення (restore_last вимкнено або manual is None) -> екран не чіпається (None)
+        (False, None, False, 80, False, 100, None),
+        (True, None, True, None, False, 100, None),
     ],
 )
-def test_brightness_priority_matrix(
-    enable_profiles, profile_val, enable_schedule, schedule_val, manual_val, is_power_saving, limit, expected_brightness
+def test_resolve_brightness_schedule_and_manual(
+    enable_schedule, schedule_val, restore_last, manual_val, is_power_saving, limit, expected_brightness
 ):
-    coordinator = BrightnessCoordinator()
-    result = coordinator.resolve_brightness(
-        enable_profiles=enable_profiles,
-        profile_value=profile_val,
+    schedule = {"MON1": schedule_val} if schedule_val is not None else {}
+    manual = {"MON1": manual_val} if manual_val is not None else {}
+    limits = {"MON1": limit}
+
+    result = BrightnessCoordinator.resolve_brightness(
+        active_serials=["MON1"],
+        schedule_data=schedule,
+        manual_data=manual,
         enable_schedule=enable_schedule,
-        schedule_value=schedule_val,
-        manual_value=manual_val,
+        restore_last_brightness=restore_last,
         is_power_saving=is_power_saving,
-        power_saving_limit=limit,
+        limits=limits,
     )
-    assert result == expected_brightness
+    if expected_brightness is None:
+        assert "MON1" not in result, "Якщо немає цільового значення, монітор не чіпається"
+    else:
+        assert result.get("MON1") == expected_brightness
 
 
 # ==============================================================================
@@ -156,9 +159,9 @@ def test_linked_monitors_matrix(
         (True, False, 60, 80, False, 100, 80),     # Відновили останню ручну 80
         (True, False, 60, 80, True, 15, 15),       # Відновили 80, але зрізали до 15
 
-        # Нічого не відновлювати -> дефолт 50
-        (False, False, None, 80, False, 100, 50),
-        (False, False, None, 80, True, 15, 15),    # Дефолт 50, але ліміт 15 -> 15
+        # Нічого не відновлювати -> None (не чіпати екран)
+        (False, False, None, 80, False, 100, None),
+        (False, False, None, 80, True, 15, None),
     ],
 )
 def test_startup_brightness_matrix(
@@ -276,3 +279,47 @@ def test_remove_monitor_cleans_up():
 def test_get_recent_task_time(task_times, current_time, expected):
     result = BrightnessCoordinator.get_recent_task_time(task_times, current_time)
     assert result == expected
+
+
+def test_resolve_brightness_multiple_monitors():
+    serials = ["MON1", "MON2", "MON3"]
+    # MON1 has schedule, MON2 has no schedule slot (falls back to manual), MON3 has no data at all
+    schedule = {"MON1": 60}
+    manual = {"MON1": 80, "MON2": 45}
+
+    res = BrightnessCoordinator.resolve_brightness(
+        active_serials=serials,
+        schedule_data=schedule,
+        manual_data=manual,
+        enable_schedule=True,
+        restore_last_brightness=True,
+    )
+    assert res == {"MON1": 60, "MON2": 45}
+    assert "MON3" not in res, "MON3 не має цільового значення і не повинен бути змінений"
+
+
+def test_resolve_brightness_power_saving_clamping():
+    serials = ["MON1", "MON2"]
+    schedule = {"MON1": 90, "MON2": 40}
+    limits = {"MON1": 20, "MON2": 50}
+
+    res = BrightnessCoordinator.resolve_brightness(
+        active_serials=serials,
+        schedule_data=schedule,
+        enable_schedule=True,
+        is_power_saving=True,
+        limits=limits,
+    )
+    assert res == {"MON1": 20, "MON2": 40}
+
+
+def test_enter_power_saving_skips_unknown_monitors():
+    coordinator = BrightnessCoordinator()
+    # MON1 is known, MON2 has neither live nor fallback
+    live = {"MON1": 70}
+    limits = {"MON1": 15, "MON2": 20}
+
+    targets = coordinator.enter_power_saving(live_brightness=live, limits=limits)
+    assert targets == {"MON1": 15}
+    assert "MON2" not in targets, "Монітор без відомої яскравості не повинен отримувати 50%"
+

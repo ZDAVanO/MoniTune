@@ -33,33 +33,47 @@ class BrightnessCoordinator:
     # MARK: Priority Resolution
     @staticmethod
     def resolve_brightness(
-        enable_profiles: bool,
-        profile_value: Optional[int],
-        enable_schedule: bool,
-        schedule_value: Optional[int],
-        manual_value: Optional[int],
-        is_power_saving: bool,
-        power_saving_limit: Optional[int] = 100,
-    ) -> int:
+        active_serials: Iterable[str],
+        schedule_data: Optional[Dict[str, int]] = None,
+        manual_data: Optional[Dict[str, int]] = None,
+        enable_schedule: bool = True,
+        restore_last_brightness: bool = True,
+        is_power_saving: bool = False,
+        limits: Optional[Dict[str, int]] = None,
+    ) -> Dict[str, int]:
         """
-        Resolves the winning brightness value according to the priority hierarchy:
-        1. Active App Profile (if enabled & present)
-        2. Schedule Time Adjustment (if enabled & present)
-        3. Manual Brightness (fallback)
-        Final: Clamped by Power Saving limit (if active)
+        Resolves target brightness for active monitors according to priority:
+        1. Schedule Time Adjustment (if enable_schedule=True and serial in schedule_data)
+        2. Saved Manual Brightness (if restore_last_brightness=True and serial in manual_data)
+        3. Untouched (if monitor has no target in schedule or manual, it is omitted from the result)
+        Final: Clamped by Power Saving limit (if is_power_saving=True, capped to monitor's limit)
+
+        System-wide context:
+        - Active App Profile (managed via match_profile in process listener) takes precedence
+          over schedule while running, suppressing schedule updates until the app is closed.
+
+        Returns:
+            Dict[serial, target_brightness] containing only monitors with resolved targets.
         """
-        if enable_profiles and profile_value is not None:
-            val = profile_value
-        elif enable_schedule and schedule_value is not None:
-            val = schedule_value
-        else:
-            val = manual_value if manual_value is not None else 50
+        limits = limits or {}
+        manual_data = manual_data or {}
+        schedule_data = schedule_data or {}
+        resolved: Dict[str, int] = {}
 
-        if is_power_saving:
-            limit = power_saving_limit if power_saving_limit is not None else 100
-            val = min(val, limit)
+        for serial in active_serials:
+            val: Optional[int] = None
+            if enable_schedule and serial in schedule_data:
+                val = schedule_data[serial]
+            elif restore_last_brightness and serial in manual_data:
+                val = manual_data[serial]
 
-        return max(0, min(100, int(val)))
+            if val is not None:
+                if is_power_saving:
+                    limit = limits.get(serial, 100)
+                    val = min(val, limit)
+                resolved[serial] = max(0, min(100, int(val)))
+
+        return resolved
 
     # MARK: Linked Monitors Delta Calculation
     @staticmethod
@@ -102,14 +116,23 @@ class BrightnessCoordinator:
         saved_manual_value: Optional[int],
         is_power_saving: bool,
         power_saving_limit: Optional[int] = 100,
-    ) -> int:
-        """Resolves target brightness on MoniTune application launch."""
+    ) -> Optional[int]:
+        """
+        Resolves target brightness on application launch according to priority:
+        1. Current schedule slot (if time_adjustment_startup=True and schedule_value is not None)
+        2. Saved manual brightness (if restore_last_brightness=True and saved_manual_value is not None)
+        3. Untouched (returns None if no target exists; monitor is left as-is)
+        Final: Clamped by Power Saving limit (if is_power_saving=True)
+
+        Returns:
+            Target brightness int (0-100) or None if display should not be modified.
+        """
         if time_adjustment_startup and schedule_value is not None:
             val = schedule_value
         elif restore_last_brightness and saved_manual_value is not None:
             val = saved_manual_value
         else:
-            val = 50
+            return None
 
         if is_power_saving:
             limit = power_saving_limit if power_saving_limit is not None else 100
@@ -143,7 +166,9 @@ class BrightnessCoordinator:
         for serial in all_serials:
             val = live.get(serial)
             if val is None:
-                val = fallback.get(serial, 50)
+                val = fallback.get(serial)
+            if val is None:
+                continue
 
             if serial not in self.pre_saving_brightness:
                 self.pre_saving_brightness[serial] = val
