@@ -23,3 +23,6 @@ from .custom_widgets import (
     SeparatorLine,
     FadingWidget,
 )
+
+from .button_grid_frame import ButtonGridFrame
+from .slider_frame import SliderFrame

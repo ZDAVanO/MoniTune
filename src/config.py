@@ -10,10 +10,12 @@ is_exe = getattr(sys, 'frozen', False)
 
 app_name = "MoniTune"
 
-version = "0.3.8"
+version = "0.4.1"
 
 timer_interval = 15  # seconds
 break_notification_interval = 30  # minutes
+break_idle_threshold = 10  # minutes
+enable_idle_detection = True
 
 REGISTRY_PATH = r"Software\MoniTune\Settings"
 
@@ -134,6 +136,10 @@ icons = {
     "shutdown": {
         "Light": get_icon_path('icons/shutdown_light.png'), # src/assets/icons/shutdown_light.png
         "Dark": get_icon_path('icons/shutdown_dark.png') # src/assets/icons/shutdown_dark.png
+    },
+    "leaf": {
+        "Light": get_icon_path('icons/leaf_light.png'), # src/assets/icons/leaf_light.png
+        "Dark": get_icon_path('icons/leaf_dark.png') # src/assets/icons/leaf_dark.png
     }
 }
 

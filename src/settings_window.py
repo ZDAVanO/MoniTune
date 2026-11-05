@@ -3,7 +3,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout, 
     QTabWidget, 
     QLabel, 
-    QSlider, 
     QPushButton, 
     QHBoxLayout, 
     QComboBox, 
@@ -19,6 +18,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QFileDialog,
     QApplication,
+    QSpinBox,
+    QProgressBar,
 )
 from PySide6.QtCore import (
     Qt, 
@@ -34,20 +35,9 @@ from custom_widgets import (
     FadingWidget,
 )
 
+from services.settings_manager import get_settings
 from utils.monitor_utils import (
     get_monitors, 
-)
-from utils.reg_utils import (
-    is_dark_theme, 
-    key_exists, 
-    create_reg_key, 
-    reg_write_bool, 
-    reg_read_bool, 
-    reg_write_list, 
-    reg_read_list, 
-    reg_write_dict, 
-    reg_read_dict,
-    delete_reg_key,
 )
 from utils.utils import (
     check_github_update_available,
@@ -216,7 +206,7 @@ class SettingToggleButton(BaseToggleButton):
         if not self.after_restart:
             setattr(self.main_window, self.setting_name, checked)
 
-        reg_write_bool(cfg.REGISTRY_PATH, self.reg_setting_name, checked)
+        get_settings().set(self.setting_name, checked)
 
         if callable(self.callback):
             self.callback(checked)
@@ -308,8 +298,243 @@ class SettingButtonFrame(BaseSettingFrame):
                                QSizePolicy.Policy.Fixed)
         if callback:
             self.btn.clicked.connect(callback)
-
         self.title_layout.addWidget(self.btn, alignment=Qt.AlignmentFlag.AlignRight)
+
+
+# MARK: BreakReminderSettingFrame
+class BreakReminderSettingFrame(SettingFrame):
+    def __init__(self, main_window):
+        super().__init__(settings_window=main_window, 
+                         title="Eye Break Reminder", 
+                         descr="Get reminders to rest your eyes.")
+        self.main_window = main_window
+
+        self.enable_toggle = SettingToggleButton(
+            main_window=main_window,
+            tool_tip=None,
+            setting_name="enable_break_reminders",
+            reg_setting_name="EnableBreakReminders",
+            callback=self.on_enable_toggled
+        )
+        self.title_layout.addWidget(self.enable_toggle, alignment=Qt.AlignmentFlag.AlignRight)
+
+        self.sub_options_widget = QWidget()
+        sub_layout = QVBoxLayout(self.sub_options_widget)
+        sub_layout.setContentsMargins(0, 4, 0, 0)
+        sub_layout.setSpacing(8)
+
+        # 1) Idle Detection Sub-Row
+        row1 = QWidget()
+        r1_layout = QHBoxLayout(row1)
+        r1_layout.setContentsMargins(0, 0, 0, 0)
+        r1_layout.setSpacing(6)
+
+        r1_info = QWidget()
+        r1_info.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        r1_info_layout = QVBoxLayout(r1_info)
+        r1_info_layout.setContentsMargins(0, 0, 0, 0)
+        r1_info_layout.setSpacing(0)
+        r1_title = QLabel("Idle Detection")
+        r1_descr = QLabel("Pause and reset timer when idle. If disabled, reminders trigger at fixed intervals.")
+        r1_descr.setWordWrap(True)
+        fading_descr1 = FadingWidget(fade_opacity=0.75, duration=300)
+        fading_descr1.box_layout.addWidget(r1_descr)
+        r1_info_layout.addWidget(r1_title)
+        r1_info_layout.addWidget(fading_descr1)
+
+        self.idle_toggle = SettingToggleButton(
+            main_window=main_window,
+            tool_tip=None,
+            setting_name="enable_idle_detection",
+            reg_setting_name="EnableIdleDetection"
+        )
+        r1_layout.addWidget(r1_info)
+        r1_layout.addWidget(self.idle_toggle, alignment=Qt.AlignmentFlag.AlignRight)
+        r1_layout.setStretch(0, 1)
+        r1_layout.setStretch(1, 0)
+        sub_layout.addWidget(row1)
+
+        sub_layout.addWidget(SeparatorLine(color=cfg.colors["s_sep"][main_window.color_theme]))
+
+        # 2) Reminder Interval Sub-Row
+        row2 = QWidget()
+        r2_layout = QHBoxLayout(row2)
+        r2_layout.setContentsMargins(0, 0, 0, 0)
+        r2_layout.setSpacing(6)
+
+        r2_info = QWidget()
+        r2_info.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        r2_info_layout = QVBoxLayout(r2_info)
+        r2_info_layout.setContentsMargins(0, 0, 0, 0)
+        r2_info_layout.setSpacing(0)
+        r2_title = QLabel("Reminder Interval")
+        r2_descr = QLabel("Time interval between break reminders.")
+        r2_descr.setWordWrap(True)
+        fading_descr2 = FadingWidget(fade_opacity=0.75, duration=300)
+        fading_descr2.box_layout.addWidget(r2_descr)
+        r2_info_layout.addWidget(r2_title)
+        r2_info_layout.addWidget(fading_descr2)
+
+        self.interval_spinbox = QSpinBox()
+        self.interval_spinbox.setRange(1, 180)
+        self.interval_spinbox.setSuffix(" min")
+        self.interval_spinbox.setFixedWidth(115)
+        settings = get_settings()
+        current_interval = settings.break_notification_interval
+        self.interval_spinbox.setValue(current_interval)
+        setattr(main_window, "break_notification_interval", current_interval)
+        self.interval_spinbox.valueChanged.connect(self.on_interval_changed)
+
+        r2_layout.addWidget(r2_info)
+        r2_layout.addWidget(self.interval_spinbox, alignment=Qt.AlignmentFlag.AlignRight)
+        r2_layout.setStretch(0, 1)
+        r2_layout.setStretch(1, 0)
+        sub_layout.addWidget(row2)
+
+        sub_layout.addWidget(SeparatorLine(color=cfg.colors["s_sep"][main_window.color_theme]))
+
+        # 3) Idle Reset Threshold Sub-Row
+        row3 = QWidget()
+        r3_layout = QHBoxLayout(row3)
+        r3_layout.setContentsMargins(0, 0, 0, 0)
+        r3_layout.setSpacing(6)
+
+        r3_info = QWidget()
+        r3_info.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        r3_info_layout = QVBoxLayout(r3_info)
+        r3_info_layout.setContentsMargins(0, 0, 0, 0)
+        r3_info_layout.setSpacing(0)
+        r3_title = QLabel("Idle Reset Threshold")
+        r3_descr = QLabel("Idle time required to reset the break timer.")
+        r3_descr.setWordWrap(True)
+        fading_descr3 = FadingWidget(fade_opacity=0.75, duration=300)
+        fading_descr3.box_layout.addWidget(r3_descr)
+        r3_info_layout.addWidget(r3_title)
+        r3_info_layout.addWidget(fading_descr3)
+
+        self.threshold_spinbox = QSpinBox()
+        self.threshold_spinbox.setRange(1, 60)
+        self.threshold_spinbox.setSuffix(" min")
+        self.threshold_spinbox.setFixedWidth(115)
+        current_threshold = settings.break_idle_threshold
+        self.threshold_spinbox.setValue(current_threshold)
+        setattr(main_window, "break_idle_threshold", current_threshold)
+        self.threshold_spinbox.valueChanged.connect(self.on_threshold_changed)
+
+        r3_layout.addWidget(r3_info)
+        r3_layout.addWidget(self.threshold_spinbox, alignment=Qt.AlignmentFlag.AlignRight)
+        r3_layout.setStretch(0, 1)
+        r3_layout.setStretch(1, 0)
+        sub_layout.addWidget(row3)
+
+        sub_layout.addWidget(SeparatorLine(color=cfg.colors["s_sep"][main_window.color_theme]))
+
+        # 4) Next Reminder Progress Sub-Row
+        row4 = QWidget()
+        r4_layout = QVBoxLayout(row4)
+        r4_layout.setContentsMargins(0, 0, 0, 0)
+        r4_layout.setSpacing(6)
+
+        r4_header = QWidget()
+        r4_header_layout = QHBoxLayout(r4_header)
+        r4_header_layout.setContentsMargins(0, 0, 0, 0)
+        r4_header_layout.setSpacing(6)
+
+        r4_title = QLabel("Next Reminder")
+        self.progress_label = QLabel()
+        fading_progress_label = FadingWidget(fade_opacity=0.75, duration=300)
+        fading_progress_label.box_layout.addWidget(self.progress_label)
+
+        r4_header_layout.addWidget(r4_title)
+        r4_header_layout.addWidget(fading_progress_label, alignment=Qt.AlignmentFlag.AlignRight)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedHeight(6)
+
+        is_dark = "Dark" in main_window.color_theme
+        bg_color = "#3c3c3c" if is_dark else "#e5e5e5"
+        self.progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {bg_color};
+                border: none;
+                border-radius: 3px;
+            }}
+            QProgressBar::chunk {{
+                background-color: palette(highlight);
+                border-radius: 3px;
+            }}
+        """)
+
+        r4_layout.addWidget(r4_header)
+        r4_layout.addWidget(self.progress_bar)
+        sub_layout.addWidget(row4)
+
+        self.content_layout.addWidget(self.sub_options_widget)
+
+        initial_enabled = settings.enable_break_reminders
+        self.sub_options_widget.setEnabled(initial_enabled)
+
+        # Timer for updating progress (active only when widget is visible)
+        self.update_timer = QTimer(self)
+        self.update_timer.setInterval(1000)
+        self.update_timer.timeout.connect(self.update_progress)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        logger.info("BreakReminderSettingFrame shown, starting update_timer")
+        self.update_progress()
+        if not self.update_timer.isActive():
+            self.update_timer.start()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        logger.info("BreakReminderSettingFrame hidden, stopping update_timer")
+        if self.update_timer.isActive():
+            self.update_timer.stop()
+
+    def update_progress(self):
+        interval_min = getattr(self.main_window, "break_notification_interval", cfg.break_notification_interval)
+        total_sec = max(1, interval_min * 60)
+        active_sec = getattr(self.main_window, "time_active", 0)
+        current_sec = min(active_sec, total_sec)
+
+        self.progress_bar.setRange(0, total_sec)
+        self.progress_bar.setValue(int(current_sec))
+
+        enabled = getattr(self.main_window, "enable_break_reminders", False)
+        if not enabled:
+            self.progress_label.setText("Disabled")
+            return
+
+        remaining_sec = max(0, total_sec - current_sec)
+        rem_min = int(remaining_sec // 60)
+        rem_sec = int(remaining_sec % 60)
+
+        if rem_min > 0:
+            if rem_sec > 0:
+                self.progress_label.setText(f"{rem_min}m {rem_sec:02d}s remaining")
+            else:
+                self.progress_label.setText(f"{rem_min} min remaining")
+        else:
+            self.progress_label.setText(f"{rem_sec}s remaining")
+
+    def on_enable_toggled(self, enabled):
+        self.sub_options_widget.setEnabled(enabled)
+        self.update_progress()
+
+    def on_interval_changed(self, value):
+        get_settings().break_notification_interval = value
+        setattr(self.main_window, "break_notification_interval", value)
+        logger.info(f"Updated BreakNotificationInterval: {value}")
+        self.update_progress()
+
+    def on_threshold_changed(self, value):
+        get_settings().break_idle_threshold = value
+        setattr(self.main_window, "break_idle_threshold", value)
+        logger.info(f"Updated BreakIdleThreshold: {value}")
+
+
 
 
 
@@ -344,7 +569,7 @@ class TrayIconSelector(BaseSettingFrame):
         logger.info(f"Selected icon: {icon_name}")
 
         self.main_window.tray_icon.changeIconName(icon_name)
-        reg_write_list(cfg.REGISTRY_PATH, "TrayIcon", [icon_name])
+        get_settings().tray_icon_name = icon_name
 
     # MARK: select_icon()
     def select_icon(self, icon_name):
@@ -426,6 +651,131 @@ class BaseBrightnessSlidersFrame(SettingFrame):
 
 
 
+# MARK: PopupPositionFrame
+class PopupPositionFrame(BaseSettingFrame):
+    def __init__(self, main_window):
+        super().__init__(title="Popup Position", 
+                         descr="Choose which screen corner the brightness popup appears in.")
+        self.main_window = main_window
+
+        self.combo = QComboBox()
+        self.combo.addItem("Bottom Right", "bottom_right")
+        self.combo.addItem("Top Right", "top_right")
+        self.combo.addItem("Bottom Left", "bottom_left")
+        self.combo.addItem("Top Left", "top_left")
+        self.combo.setMinimumWidth(180)
+
+        current_pos = getattr(main_window.settings, "popup_position", "bottom_right")
+        idx = self.combo.findData(current_pos)
+        if idx >= 0:
+            self.combo.setCurrentIndex(idx)
+
+        self.combo.currentIndexChanged.connect(self.on_position_changed)
+        self.title_layout.addWidget(self.combo, alignment=Qt.AlignmentFlag.AlignRight)
+
+    def on_position_changed(self, index):
+        pos = self.combo.currentData()
+        logger.info(f"Popup position changed to: {pos}")
+        get_settings().set("popup_position", pos)
+
+
+# MARK: PowerSavingLimitsFrame
+class PowerSavingLimitsFrame(SettingFrame):
+    def __init__(self, settings_window, monitors_order, display_names):
+        super().__init__(settings_window, 
+                         title="Monitor Brightness Limits",
+                         descr="Set the maximum brightness allowed during Power Saving. Set to 100% for no limit.")
+        self.settings_window = settings_window
+        self.monitors_order = monitors_order
+        self.display_names = display_names
+        self.sliders = {}
+        self._debounce_timers = {}
+
+        limits_data = self.settings_window.settings.power_saving_limits or {}
+
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        self.content_layout.setSpacing(0)
+
+        sliders_container = QHBoxLayout()
+        sliders_container.setContentsMargins(9, 4, 9, 8)
+        sliders_container.setSpacing(0)
+
+        names_layout = QVBoxLayout()
+        sliders_layout = QVBoxLayout()
+        sliders_container.addLayout(names_layout)
+        sliders_container.addItem(QSpacerItem(6, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        sliders_container.addLayout(sliders_layout)
+
+        for serial in monitors_order:
+            label = QLabel(display_names.get(serial, serial))
+            names_layout.addWidget(label)
+
+            slider_layout = QHBoxLayout()
+            slider = NoScrollSlider(Qt.Orientation.Horizontal)
+            slider.setRange(0, 100)
+            initial_val = int(limits_data.get(serial, 100))
+            slider.setValue(initial_val)
+            self.sliders[serial] = slider
+
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(300)
+            timer.timeout.connect(lambda s=serial, sl=slider: self.commit_limit(s, sl.value()))
+            self._debounce_timers[serial] = timer
+
+            spacer = QSpacerItem(3, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+
+            value_label = QLabel("No limit" if initial_val == 100 else f"{initial_val}%")
+            value_label.setFixedWidth(55)
+            value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            slider.valueChanged.connect(
+                lambda val, s=serial, lbl=value_label, sl=slider: self.on_slider_value_changed(s, val, lbl, sl)
+            )
+            slider.sliderReleased.connect(
+                lambda s=serial, sl=slider: self.on_slider_released(s, sl)
+            )
+
+            slider_layout.addWidget(slider)
+            slider_layout.addItem(spacer)
+            slider_layout.addWidget(value_label)
+            sliders_layout.addLayout(slider_layout)
+
+        self.content_layout.addLayout(sliders_container)
+
+    def on_slider_value_changed(self, serial, value, label, slider):
+        label.setText("No limit" if value == 100 else f"{value}%")
+        if slider.isSliderDown():
+            # Actively dragging with mouse: update label only, don't spam hardware
+            timer = self._debounce_timers.get(serial)
+            if timer and timer.isActive():
+                timer.stop()
+        else:
+            # Changed without dragging (e.g. keyboard navigation): debounce commit
+            timer = self._debounce_timers.get(serial)
+            if timer:
+                timer.start(300)
+
+    def on_slider_released(self, serial, slider):
+        timer = self._debounce_timers.get(serial)
+        if timer and timer.isActive():
+            timer.stop()
+        self.commit_limit(serial, slider.value())
+
+    def commit_limit(self, serial, value):
+        current_limits = dict(self.settings_window.settings.power_saving_limits or {})
+        if current_limits.get(serial) == int(value):
+            return
+        current_limits[serial] = int(value)
+        self.settings_window.settings.set("power_saving_limits", current_limits)
+        if hasattr(self.settings_window.main_window, "update_power_saving_limits"):
+            self.settings_window.main_window.update_power_saving_limits()
+
+    def on_slider_changed(self, serial, value, label):
+        label.setText("No limit" if value == 100 else f"{value}%")
+        self.commit_limit(serial, value)
+
+
 # MARK: TimeAdjustmentFrame
 class TimeAdjustmentFrame(BaseBrightnessSlidersFrame):
     def __init__(self, 
@@ -487,16 +837,18 @@ class ProfileFrame(BaseBrightnessSlidersFrame):
                  monitors_order, 
                  display_names, 
                  process=None, 
-                 brightness_data=None
+                 brightness_data=None,
+                 enabled=True
                  ):
         super().__init__(settings_window, 
                          monitors_order, 
                          display_names, 
                          brightness_data)
 
-        self.toggle_bth = BaseToggleButton(initial_state=True)
-        # self.toggle_bth.setStyleSheet("padding: 4px 10px;")
-        # self.toggle_bth.clicked.connect(self.choose_exe_dialog)
+        self.toggle_bth = BaseToggleButton(
+            initial_state=enabled,
+            callback=self.on_toggle_state
+        )
         self.title_layout.addWidget(self.toggle_bth)
 
         self.entry = QLineEdit()
@@ -516,6 +868,16 @@ class ProfileFrame(BaseBrightnessSlidersFrame):
         self.delete_button.clicked.connect(self.delete_frame)
         self.title_layout.addWidget(self.delete_button)
 
+        self.update_ui_state(enabled)
+
+    def on_toggle_state(self, checked):
+        self.update_ui_state(checked)
+        self.save_data()
+
+    def update_ui_state(self, enabled):
+        for slider in self.sliders.values():
+            slider.setEnabled(enabled)
+
     def save_data(self): # using in BaseBrightnessSlidersFrame
         self.settings_window.save_profiles_data()
 
@@ -530,6 +892,7 @@ class ProfileFrame(BaseBrightnessSlidersFrame):
     def get_data(self):
         return {
             "path": self.entry.text(),
+            "enabled": self.toggle_bth.isChecked(),
             "brightness_data": self.brightness_data
         }
 
@@ -539,6 +902,26 @@ class ProfileFrame(BaseBrightnessSlidersFrame):
         )
         if file_path:
             self.entry.setText(file_path)
+
+
+# MARK: IgnoredProcessRow
+class IgnoredProcessRow(QWidget):
+    def __init__(self, settings_window, pattern: str):
+        super().__init__()
+        self.settings_window = settings_window
+        self.pattern = pattern
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 2, 0, 2)
+
+        self.entry = QLineEdit(pattern)
+        self.entry.setReadOnly(True)
+        layout.addWidget(self.entry, stretch=1)
+
+        self.delete_button = QPushButton("Delete")
+        self.delete_button.setStyleSheet("padding: 4px 10px;")
+        self.delete_button.clicked.connect(lambda: self.settings_window.remove_ignored_process(self.pattern))
+        layout.addWidget(self.delete_button)
 
 
 
@@ -571,14 +954,15 @@ class SettingsWindow(QWidget):
         super().__init__()
         
         self.main_window = main_window
+        self.settings = get_settings()
         self.theme = self.main_window.theme
         self.color_theme = self.main_window.color_theme
 
         self.setWindowTitle(f"{cfg.app_name} Settings")
         self.setWindowIcon(QIcon(cfg.icons["monitune"]["Light"]))
         
-        self.resize(475, 600)
-        self.setMinimumWidth(450)
+        self.resize(520, 620)
+        self.setMinimumWidth(520)
         self.setMinimumHeight(400)
 
         settings_layout = QVBoxLayout(self)
@@ -604,10 +988,10 @@ class SettingsWindow(QWidget):
         self.profiles_data = {}
         self.profiles_frames = []
         self.ap_timer = None
+        
+        # self.serial_list = []
 
-        self.serial_list = []
-
-
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
 
     # MARK: showEvent()
     def showEvent(self, event):
@@ -622,9 +1006,16 @@ class SettingsWindow(QWidget):
 
     # MARK: closeEvent()
     def closeEvent(self, event):
-        # logger.info("Settings window closed")
-        event.ignore()
-        self.hide() # hide instead of close to prevent app closing
+        logger.info("Settings window closed and unloaded")
+
+        if self.ap_timer and self.ap_timer.isActive():
+            self.ap_timer.stop()
+            logger.info("ap_timer stopped")
+
+        if self.main_window:
+            self.main_window.settings_window = None
+
+        super().closeEvent(event)
 
     # MARK: hideEvent()
     def hideEvent(self, event):
@@ -649,8 +1040,7 @@ class SettingsWindow(QWidget):
         sorted_time_adjustment_data = dict(sorted(self.time_adjustment_data.items()))
 
         logger.info(f"Collected time adjustment data: {sorted_time_adjustment_data}")
-        reg_write_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData", sorted_time_adjustment_data)
-        self.main_window.time_adjustment_data = sorted_time_adjustment_data
+        self.settings.time_adjustment_data = sorted_time_adjustment_data
 
 
     # MARK: save_profiles_data()
@@ -660,15 +1050,52 @@ class SettingsWindow(QWidget):
             data = frame.get_data()
             path = data["path"]
             brightness_data = data["brightness_data"]
+            enabled = data.get("enabled", True)
             if path != "":
                 resolved_path = str(Path(path).resolve())
             else:
                 resolved_path = ""
-            self.profiles_data[resolved_path] = brightness_data
+            self.profiles_data[resolved_path] = {
+                "enabled": enabled,
+                "brightness_data": brightness_data
+            }
 
         logger.info(f"Collected profiles data: {self.profiles_data}")
-        reg_write_dict(cfg.REGISTRY_PATH, "ProfilesData", self.profiles_data)
-        self.main_window.profiles_data = self.profiles_data
+        self.settings.profiles_data = self.profiles_data
+
+    # MARK: Ignored processes helpers
+    def add_ignored_process(self, pattern: str):
+        if not pattern:
+            return
+        cleaned = pattern.strip().strip('"').strip("'")
+        if not cleaned:
+            return
+        current = list(self.settings.ignored_processes)
+        if any(p.lower() == cleaned.lower() for p in current):
+            logger.info(f"Process already in ignored list: {cleaned}")
+            return
+        current.append(cleaned)
+        self.settings.ignored_processes = current
+        self.populate_ignored_processes()
+
+    def remove_ignored_process(self, pattern: str):
+        cleaned = pattern.strip().strip('"').strip("'")
+        current = [p for p in self.settings.ignored_processes if p.lower() != cleaned.lower()]
+        self.settings.ignored_processes = current
+        self.populate_ignored_processes()
+
+    def populate_ignored_processes(self):
+        if not hasattr(self, "ignored_list_layout"):
+            return
+        while self.ignored_list_layout.count():
+            item = self.ignored_list_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        for pattern in self.settings.ignored_processes:
+            row = IgnoredProcessRow(self, pattern)
+            self.ignored_list_layout.addWidget(row)
 
 
 
@@ -713,12 +1140,12 @@ class SettingsWindow(QWidget):
 
         # Створюємо словник, де ключ — серійний номер
         monitors_dict = {monitor.serial: monitor for monitor in monitors_info}
-        reg_order = reg_read_list(cfg.REGISTRY_PATH, "MonitorsOrder")
+        reg_order = self.settings.monitors_order
         # Сортуємо список моніторів відповідно до порядку з реєстру
         monitors_order = [serial for serial in reg_order if serial in monitors_dict]
         # Додаємо монітори, яких немає в реєстрі, в кінець списку
         monitors_order += [monitor.serial for monitor in monitors_info if monitor.serial not in monitors_order]
-        custom_monitor_names = reg_read_dict(cfg.REGISTRY_PATH, "CustomMonitorNames")
+        custom_monitor_names = self.settings.custom_monitor_names
 
         display_names = {}
         short_display_names = {}
@@ -765,22 +1192,26 @@ class SettingsWindow(QWidget):
                                                            after_restart=True))
 
         general_tab.layout_.addWidget(SettingToggleFrame(main_window=self.main_window, 
-                                                           title="Eye Break Reminder",
-                                                           descr="Get reminders every 30 minutes to rest your eyes.",
-                                                           setting_name="enable_break_reminders", 
-                                                           reg_setting_name="EnableBreakReminders"))
+                                                           title="Enable Logging",
+                                                           descr="Save application logs to MoniTune.log file.",
+                                                           setting_name="enable_logging", 
+                                                           reg_setting_name="EnableLogging",
+                                                           callback=self.main_window.update_logging))
+
+        general_tab.layout_.addWidget(BreakReminderSettingFrame(self.main_window))
+
         
 
         tray_icon_selector = TrayIconSelector(self.main_window)
-        tray_icon = reg_read_list(cfg.REGISTRY_PATH, "TrayIcon")
+        tray_icon = self.settings.tray_icon
         logger.info(f"tray_icon: {tray_icon}")
-        tray_icon_selector.select_icon(tray_icon[0] if tray_icon else "monitune")
+        tray_icon_selector.select_icon(tray_icon)
         general_tab.layout_.addWidget(tray_icon_selector)
 
 
         # MARK: Hide Displays
-        hidden_displays = reg_read_list(cfg.REGISTRY_PATH, "HiddenDisplays")
-        logger.info(f"Hidden displays (reg): {hidden_displays}")
+        hidden_displays = self.settings.hidden_displays
+        logger.info(f"Hidden displays (settings): {hidden_displays}")
 
         def update_hidden_displays(monitor_id, state):
             if state == 2: # 2 - checked
@@ -793,8 +1224,7 @@ class SettingsWindow(QWidget):
                 #     hidden_displays.remove(monitor_id)
                 if monitor_id not in hidden_displays:
                     hidden_displays.append(monitor_id)
-            reg_write_list(cfg.REGISTRY_PATH, "HiddenDisplays", hidden_displays)
-            self.main_window.hidden_displays = hidden_displays
+            self.settings.hidden_displays = hidden_displays
             logger.info(f"Updated hidden displays: {hidden_displays}")
 
         hide_displays_frame = SettingFrame(self, "Hide Displays")
@@ -814,9 +1244,8 @@ class SettingsWindow(QWidget):
             elif len(new_name) == 0:
                 custom_monitor_names.pop(monitor_id, None)
             logger.info(f"Updated names: {custom_monitor_names}")
-            self.main_window.custom_monitor_names = custom_monitor_names
             # # self.show_main_window()
-            reg_write_dict(cfg.REGISTRY_PATH, "CustomMonitorNames", custom_monitor_names)
+            self.settings.custom_monitor_names = custom_monitor_names
 
         rename_monitors_frame = SettingFrame(self, "Rename Monitors")
         for serial in monitors_order:
@@ -856,8 +1285,7 @@ class SettingsWindow(QWidget):
         def save_order():
             monitors_order = [list_widget.item(i).data(Qt.ItemDataRole.UserRole) for i in range(list_widget.count())]
             logger.info(f"New monitors_order: {monitors_order}")
-            reg_write_list(cfg.REGISTRY_PATH, "MonitorsOrder", monitors_order)
-            self.main_window.monitors_order = monitors_order
+            self.settings.monitors_order = monitors_order
             # self.show_main_window()
 
         reorder_monitors_frame = SettingFrame(self, "Reorder Monitors")
@@ -926,7 +1354,7 @@ class SettingsWindow(QWidget):
 
             reply = msg_box.exec()
             if reply == QMessageBox.StandardButton.Yes:
-                delete_reg_key(cfg.REGISTRY_PATH)
+                self.settings.reset_to_defaults()
 
         reset_settings_frame = SettingButtonFrame(title="Reset settings",
                                                   descr="Hit this button to clear config.",
@@ -948,8 +1376,8 @@ class SettingsWindow(QWidget):
 
 
         # MARK: Exclude Refresh Rates
-        excluded_rates = reg_read_dict(cfg.REGISTRY_PATH, "ExcludedHzRates")
-        logger.info(f"Excluded refresh rates (reg): {excluded_rates}")
+        excluded_rates = self.settings.excluded_rates
+        logger.info(f"Excluded refresh rates: {excluded_rates}")
 
         # Function to update the excluded list
         def update_excluded_rates(state, rate, serial):
@@ -966,8 +1394,7 @@ class SettingsWindow(QWidget):
                 if rate not in excluded_rates[serial]:
                     excluded_rates[serial].append(rate)
 
-            reg_write_dict(cfg.REGISTRY_PATH, "ExcludedHzRates", excluded_rates)
-            self.main_window.excluded_rates = excluded_rates
+            self.settings.excluded_rates = excluded_rates
             logger.info(f"Updated excluded list: {excluded_rates}")
 
         exclude_rr_frame = SettingFrame(self, "Exclude Refresh Rates")
@@ -1019,11 +1446,35 @@ class SettingsWindow(QWidget):
                                                               setting_name="restore_last_brightness",
                                                               reg_setting_name="RestoreLastBrightness"))
         
-        brightness_tab.layout_.addWidget(SettingToggleFrame(main_window=self.main_window,
-                                                              title="Show Popup on background change",
-                                                              descr="Show app window when brightness changing in background.",
-                                                              setting_name="show_brightness_popup",
-                                                              reg_setting_name="ShowBrightnessPopup"))
+        # MARK: Popup Frame
+        popup_frame = SettingFrame(settings_window=self, 
+                                   title="Show Popup on background change", 
+                                   descr="Show app window when brightness changing in background.")
+
+        skip_popup_frame = SettingToggleFrame(main_window=self.main_window,
+                                              title="Skip Popup if brightness unchanged",
+                                              descr="Do not show popup if monitors already match the target brightness.",
+                                              setting_name="skip_popup_if_unchanged",
+                                              reg_setting_name="SkipPopupIfUnchanged")
+
+        position_frame = PopupPositionFrame(main_window=self.main_window)
+
+        def on_popup_toggled(checked):
+            skip_popup_frame.setEnabled(checked)
+            position_frame.setEnabled(checked)
+
+        popup_toggle = SettingToggleButton(self.main_window,
+                                           tool_tip="Show app window when brightness changing in background.",
+                                           setting_name="show_brightness_popup",
+                                           reg_setting_name="ShowBrightnessPopup",
+                                           callback=on_popup_toggled)
+        popup_frame.title_layout.addWidget(popup_toggle, alignment=Qt.AlignmentFlag.AlignRight)
+
+        skip_popup_frame.setEnabled(self.settings.show_brightness_popup)
+        position_frame.setEnabled(self.settings.show_brightness_popup)
+        popup_frame.content_layout.addWidget(skip_popup_frame)
+        popup_frame.content_layout.addWidget(position_frame)
+        brightness_tab.layout_.addWidget(popup_frame)
 
 
 
@@ -1071,14 +1522,59 @@ class SettingsWindow(QWidget):
         time_adjustment_frame.content_layout.addWidget(scroll_content)
         brightness_tab.layout_.addWidget(time_adjustment_frame)
 
-        # Restore TimeAdjustmentFrame widgets from registry
-        saved_data = reg_read_dict(cfg.REGISTRY_PATH, "TimeAdjustmentData")
+        # Restore TimeAdjustmentFrame widgets from settings
+        saved_data = self.settings.time_adjustment_data
         # print("Saved data:", saved_data)
         for time_str, brightness_data in reversed(saved_data.items()):
             # print(f"Adding frame with time: {time_str}, brightness: {brightness_data}")
             add_time_adjustment_frame(time_str, brightness_data)
 
 
+
+        # MARK: Power Saving Tab
+        power_saving_tab = ScrollableTab()
+        self.tab_widget.addTab(power_saving_tab, "Power Saving")
+
+        power_saving_frame = SettingFrame(
+            settings_window=self,
+            title="Enable Power Saving Limits",
+            descr="Limit maximum brightness on configured monitors when power saving is active."
+        )
+
+        sync_windows_frame = SettingToggleFrame(
+            main_window=self.main_window,
+            title="Follow Windows Energy Saver",
+            descr="Automatically activate power saving limits when Windows Energy Saver turns on, and deactivate when it turns off.",
+            setting_name="sync_windows_energy_saver",
+            reg_setting_name="SyncWindowsEnergySaver",
+            callback=self.main_window.on_sync_windows_energy_saver_toggled
+        )
+
+        limits_frame = PowerSavingLimitsFrame(
+            self, monitors_order, display_names
+        )
+
+        def on_limits_enabled(checked):
+            sync_windows_frame.setEnabled(checked)
+            limits_frame.setEnabled(checked)
+            self.main_window.on_power_saving_enabled_toggled(checked)
+
+        power_saving_toggle = SettingToggleButton(
+            main_window=self.main_window,
+            tool_tip="Enable or disable power saving brightness limits.",
+            setting_name="enable_power_saving_limits",
+            reg_setting_name="EnablePowerSavingLimits",
+            callback=on_limits_enabled
+        )
+        power_saving_frame.title_layout.addWidget(power_saving_toggle, alignment=Qt.AlignmentFlag.AlignRight)
+
+        sync_windows_frame.setEnabled(self.settings.enable_power_saving_limits)
+        limits_frame.setEnabled(self.settings.enable_power_saving_limits)
+
+        power_saving_frame.content_layout.addWidget(sync_windows_frame)
+        power_saving_frame.content_layout.addWidget(limits_frame)
+
+        power_saving_tab.layout_.addWidget(power_saving_frame)
 
         # MARK: Profiles Tab
         profiles_tab = ScrollableTab()
@@ -1095,8 +1591,8 @@ class SettingsWindow(QWidget):
         profiles_frame.title_layout.addWidget(profiles_toggle)
 
 
-        def add_profile_frame(path=None, brightness_data=None, highlight=False):
-            frame = ProfileFrame(self, monitors_order, display_names, path, brightness_data)
+        def add_profile_frame(path=None, brightness_data=None, highlight=False, enabled=True):
+            frame = ProfileFrame(self, monitors_order, display_names, path, brightness_data, enabled=enabled)
             self.profiles_frames.append(frame)
             center_layout.insertWidget(1, frame) # Add to the top
             # Highlight the newly added frame
@@ -1131,12 +1627,52 @@ class SettingsWindow(QWidget):
         ap_add_btn.clicked.connect(lambda: (add_profile_frame(path=ap_line_edit.text(), highlight=True), 
                                             self.save_profiles_data()))
         ap_frame_layout.addWidget(ap_add_btn)
+        ap_ignore_btn = QPushButton("Ignore")
+        ap_ignore_btn.setStyleSheet("padding: 4px 10px;")
+        ap_ignore_btn.setToolTip("Add the active app to the ignored processes list")
+        ap_ignore_btn.clicked.connect(lambda: self.add_ignored_process(ap_line_edit.text()))
+        ap_frame_layout.addWidget(ap_ignore_btn)
 
         self.ap_timer = QTimer()
         self.ap_timer.timeout.connect(update_ap_line_edit)
         self.ap_timer.start(1000)
 
         profiles_frame.content_layout.addWidget(ap_frame)
+
+        # Debounce / Switch delay row
+        delay_row = QFrame(frameShape=QFrame.Shape.StyledPanel)
+        delay_layout = QHBoxLayout(delay_row)
+        delay_label = QLabel("Switch delay:")
+        delay_layout.addWidget(delay_label)
+        delay_layout.addStretch()
+
+        delay_spinbox = QSpinBox()
+        delay_spinbox.setRange(0, 2000)
+        delay_spinbox.setSingleStep(50)
+        delay_spinbox.setSuffix(" ms")
+        delay_spinbox.setFixedWidth(100)
+        delay_spinbox.setValue(self.settings.profile_switch_delay_ms)
+        delay_spinbox.setToolTip("Wait time before applying profile or restoring brightness on window focus change.\nPrevents flicker when Alt-Tabbing rapidly or clicking the taskbar/tray.")
+        delay_spinbox.valueChanged.connect(lambda val: setattr(self.settings, "profile_switch_delay_ms", val))
+        delay_layout.addWidget(delay_spinbox)
+
+        profiles_frame.content_layout.addWidget(delay_row)
+
+        # Profile path matching guide / examples
+        hint_frame = QWidget()
+        hint_layout = QVBoxLayout(hint_frame)
+        hint_layout.setContentsMargins(4, 2, 4, 4)
+        hint_label = QLabel(
+            "<b>Path matching examples:</b><br>"
+            "• <b>Exact executable:</b> <code>C:\\Games\\Cyberpunk 2077\\bin\\x64\\Cyberpunk2077.exe</code><br>"
+            "• <b>Folder for all games inside:</b> <code>D:\\Games</code> or <code>C:\\SteamLibrary\\steamapps\\common</code><br>"
+            "• <b>Priority:</b> More specific (deeper) folder paths always win over general parent directories."
+        )
+        hint_label.setWordWrap(True)
+        fading_hint = FadingWidget(fade_opacity=0.75, duration=300)
+        fading_hint.box_layout.addWidget(hint_label)
+        hint_layout.addWidget(fading_hint)
+        profiles_frame.content_layout.addWidget(hint_frame)
 
         # profiles frames
         add_frame_btn = QPushButton("Add profile")
@@ -1154,12 +1690,67 @@ class SettingsWindow(QWidget):
 
         profiles_frame.content_layout.addWidget(center_widget)
 
-        # Restore ProfileFrame widgets from registry
-        profiles_data = reg_read_dict(cfg.REGISTRY_PATH, "ProfilesData")
-        for path, brightness_data in reversed(profiles_data.items()):
-            add_profile_frame(path, brightness_data)
+        # Restore ProfileFrame widgets from settings
+        profiles_data = self.settings.profiles_data
+        for path, raw_data in reversed(profiles_data.items()):
+            if isinstance(raw_data, dict) and "brightness_data" in raw_data:
+                enabled = raw_data.get("enabled", True)
+                brightness_data = raw_data.get("brightness_data", {})
+            else:
+                enabled = True
+                brightness_data = raw_data
+            add_profile_frame(path, brightness_data, enabled=enabled)
 
         profiles_tab.layout_.addWidget(profiles_frame)
+
+        # MARK: Ignored Processes Frame
+        ignored_frame = SettingFrame(
+            self,
+            "Ignored Processes",
+            "Processes that won't deactivate the active profile when focused (e.g. tray apps, overlays, volume mixers)."
+        )
+
+        add_ignored_row = QWidget()
+        add_ignored_layout = QHBoxLayout(add_ignored_row)
+        add_ignored_layout.setContentsMargins(0, 0, 0, 0)
+
+        ignored_input = QLineEdit()
+        ignored_input.setPlaceholderText("e.g. EarTrumpet.exe, C:\\Path\\App.exe, or folder")
+        add_ignored_layout.addWidget(ignored_input, stretch=1)
+
+        def choose_ignored_exe():
+            file_path, _ = QFileDialog.getOpenFileName(
+                self, "Select executable to ignore", "", "EXE Files (*.exe);;All Files (*)"
+            )
+            if file_path:
+                ignored_input.setText(file_path)
+
+        ignored_select_btn = QPushButton("Select")
+        ignored_select_btn.setStyleSheet("padding: 4px 10px;")
+        ignored_select_btn.clicked.connect(choose_ignored_exe)
+        add_ignored_layout.addWidget(ignored_select_btn)
+
+        def on_add_ignored():
+            text = ignored_input.text()
+            if text:
+                self.add_ignored_process(text)
+                ignored_input.clear()
+
+        ignored_add_btn = QPushButton("Add")
+        ignored_add_btn.setStyleSheet("padding: 4px 10px;")
+        ignored_add_btn.clicked.connect(on_add_ignored)
+        add_ignored_layout.addWidget(ignored_add_btn)
+
+        ignored_frame.content_layout.addWidget(add_ignored_row)
+
+        ignored_list_container = QWidget()
+        self.ignored_list_layout = QVBoxLayout(ignored_list_container)
+        self.ignored_list_layout.setContentsMargins(0, 0, 0, 0)
+        ignored_frame.content_layout.addWidget(ignored_list_container)
+
+        self.populate_ignored_processes()
+
+        profiles_tab.layout_.addWidget(ignored_frame)
 
 
 

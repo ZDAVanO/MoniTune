@@ -69,6 +69,61 @@ def reg_read_bool(reg_path, dword_name, def_value=True):
         return def_value
 
 
+def reg_write_int(reg_path, dword_name, value):
+    try:
+        if not key_exists(reg_path):
+            create_reg_key(reg_path)
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_WRITE) as key:
+            winreg.SetValueEx(key, dword_name, 0, winreg.REG_DWORD, int(value))
+    except Exception as e:
+        logger.error(f"Error writing to registry: {e}")
+
+
+def reg_read_int(reg_path, dword_name, def_value=0):
+    try:
+        if not key_exists(reg_path):
+            create_reg_key(reg_path)
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_READ) as key:
+            try:
+                value, _ = winreg.QueryValueEx(key, dword_name)
+                return int(value)
+            except FileNotFoundError:
+                return def_value
+    except Exception as e:
+        logger.error(f"Error reading from registry: {e}")
+        return def_value
+
+
+
+def reg_write_str(reg_path, value_name, value):
+    try:
+        if not key_exists(reg_path):
+            create_reg_key(reg_path)
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_WRITE) as key:
+            winreg.SetValueEx(key, value_name, 0, winreg.REG_SZ, str(value))
+    except Exception as e:
+        logger.error(f"Error writing string to registry: {e}")
+
+
+def reg_read_str(reg_path, value_name, def_value=""):
+    try:
+        if not key_exists(reg_path):
+            create_reg_key(reg_path)
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_READ) as key:
+            try:
+                value, _ = winreg.QueryValueEx(key, value_name)
+                return str(value)
+            except FileNotFoundError:
+                return def_value
+    except Exception as e:
+        logger.error(f"Error reading string from registry: {e}")
+        return def_value
+
+
 def reg_write_list(reg_path, dword_name, list):
     try:
         order_str = ",".join(map(str, list))
@@ -84,7 +139,7 @@ def reg_write_list(reg_path, dword_name, list):
 
 
 
-def reg_read_list(reg_path, dword_name):
+def reg_read_list(reg_path, dword_name, default=None):
     try:
         if not key_exists(reg_path):
             create_reg_key(reg_path)
@@ -93,24 +148,24 @@ def reg_read_list(reg_path, dword_name):
         
         try:
             value, _ = winreg.QueryValueEx(key, dword_name)
-            raw_list = value.split(",")  # Розбиваємо рядок на список
+            raw_list = value.split(",")
             
-            filtered_list = []  # Створюємо порожній список для відфільтрованих значень
+            filtered_list = []
             for item in raw_list:
-                cleaned_item = item.strip()  # Видаляємо зайві пробіли
-                if cleaned_item:  # Перевіряємо, чи не порожнє значення
+                cleaned_item = item.strip()
+                if cleaned_item:
                     filtered_list.append(cleaned_item)
+
+            winreg.CloseKey(key)
+            return filtered_list
             
         except FileNotFoundError:
-            filtered_list = []
-
-        winreg.CloseKey(key)
-
-        return filtered_list
+            winreg.CloseKey(key)
+            return list(default) if default is not None else []
     
     except Exception as e:
         logger.error(f"Error reading from registry: {e}")
-        return []
+        return list(default) if default is not None else []
 
 
 
