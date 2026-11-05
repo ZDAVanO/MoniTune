@@ -34,8 +34,10 @@ class BrightnessCoordinator:
     @staticmethod
     def resolve_brightness(
         active_serials: Iterable[str],
+        profile_data: Optional[Dict[str, int]] = None,
         schedule_data: Optional[Dict[str, int]] = None,
         manual_data: Optional[Dict[str, int]] = None,
+        enable_profiles: bool = True,
         enable_schedule: bool = True,
         restore_last_brightness: bool = True,
         is_power_saving: bool = False,
@@ -43,14 +45,11 @@ class BrightnessCoordinator:
     ) -> Dict[str, int]:
         """
         Resolves target brightness for active monitors according to priority:
-        1. Schedule Time Adjustment (if enable_schedule=True and serial in schedule_data)
-        2. Saved Manual Brightness (if restore_last_brightness=True and serial in manual_data)
-        3. Untouched (if monitor has no target in schedule or manual, it is omitted from the result)
+        1. Active App Profile (if enable_profiles=True and serial in profile_data)
+        2. Schedule Time Adjustment (if enable_schedule=True and serial in schedule_data)
+        3. Saved Manual Brightness (if restore_last_brightness=True and serial in manual_data)
+        4. Untouched (if monitor has no target in 1, 2, or 3, it is omitted from the result)
         Final: Clamped by Power Saving limit (if is_power_saving=True, capped to monitor's limit)
-
-        System-wide context:
-        - Active App Profile (managed via match_profile in process listener) takes precedence
-          over schedule while running, suppressing schedule updates until the app is closed.
 
         Returns:
             Dict[serial, target_brightness] containing only monitors with resolved targets.
@@ -58,11 +57,14 @@ class BrightnessCoordinator:
         limits = limits or {}
         manual_data = manual_data or {}
         schedule_data = schedule_data or {}
+        profile_data = profile_data or {}
         resolved: Dict[str, int] = {}
 
         for serial in active_serials:
             val: Optional[int] = None
-            if enable_schedule and serial in schedule_data:
+            if enable_profiles and serial in profile_data:
+                val = profile_data[serial]
+            elif enable_schedule and serial in schedule_data:
                 val = schedule_data[serial]
             elif restore_last_brightness and serial in manual_data:
                 val = manual_data[serial]

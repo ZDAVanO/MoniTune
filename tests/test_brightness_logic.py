@@ -83,6 +83,36 @@ def test_resolve_brightness_schedule_and_manual(
         assert result.get("MON1") == expected_brightness
 
 
+@pytest.mark.parametrize(
+    "profile_val, schedule_val, manual_val, is_power_saving, limit, expected_brightness",
+    [
+        # Профіль перемагає розклад і ручне значення
+        (90, 60, 40, False, 100, 90),
+        # Профіль зрізається лімітом Power Saving
+        (90, 60, 40, True, 25, 25),
+        # Профіль нижче ліміту не зрізається
+        (20, 60, 40, True, 25, 20),
+    ],
+)
+def test_resolve_brightness_profile_priority(
+    profile_val, schedule_val, manual_val, is_power_saving, limit, expected_brightness
+):
+    profile = {"MON1": profile_val}
+    schedule = {"MON1": schedule_val}
+    manual = {"MON1": manual_val}
+    limits = {"MON1": limit}
+
+    res = BrightnessCoordinator.resolve_brightness(
+        active_serials=["MON1"],
+        profile_data=profile,
+        schedule_data=schedule,
+        manual_data=manual,
+        is_power_saving=is_power_saving,
+        limits=limits,
+    )
+    assert res.get("MON1") == expected_brightness
+
+
 # ==============================================================================
 # МАТРИЦЯ 3: Зв'язування моніторів (Link monitors) з дельтою та лімітами
 # ==============================================================================
@@ -322,4 +352,18 @@ def test_enter_power_saving_skips_unknown_monitors():
     targets = coordinator.enter_power_saving(live_brightness=live, limits=limits)
     assert targets == {"MON1": 15}
     assert "MON2" not in targets, "Монітор без відомої яскравості не повинен отримувати 50%"
+
+
+def test_resolve_brightness_partial_profile():
+    serials = ["MON1", "MON2"]
+    # MON1 is in profile, MON2 is not -> MON2 falls back to schedule
+    profile = {"MON1": 95}
+    schedule = {"MON1": 50, "MON2": 65}
+
+    res = BrightnessCoordinator.resolve_brightness(
+        active_serials=serials,
+        profile_data=profile,
+        schedule_data=schedule,
+    )
+    assert res == {"MON1": 95, "MON2": 65}
 

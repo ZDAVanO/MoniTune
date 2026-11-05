@@ -161,6 +161,7 @@ class MainWindow(QMainWindow):
         self.active_process = None # using for settings window
         self.prev_active_process = None
         self.profile_active = False
+        self.active_profile_data = None
         self._linking_suspended = False
 
         self._init_ui()
@@ -390,15 +391,10 @@ class MainWindow(QMainWindow):
                         self.settings.manual_brightness_values[serial] = val
                     self.settings.save("manual_brightness_values")
 
-                if self.profile_active:
-                    logger.info("Exited power saving: re-applying active profile brightness")
-                    proc = getattr(self, "prev_active_process", None) or getattr(self, "active_process", None)
-                    if proc:
-                        self.prev_active_process = None
-                        self._on_active_process_change({"exe_path": proc})
-                else:
-                    logger.info("Exited power saving: resolving brightness via coordinator")
-                    self.execute_recent_task()
+                logger.info("Exited power saving: resolving brightness via coordinator")
+                targets = self.resolve_target_brightness()
+                if targets:
+                    self.apply_brightness(targets)
         finally:
             self._linking_suspended = False
 
@@ -576,14 +572,11 @@ class MainWindow(QMainWindow):
 
 
 
-    # MARK: execute_recent_task()
-    def execute_recent_task(self, delay=0):
-        if self.profile_active:
-            logger.info(f"execute_recent_task: profile_active: {self.profile_active}, skip")
-            return
-
+    # MARK: resolve_target_brightness()
+    def resolve_target_brightness(self, profile_data=None):
+        """Resolves target brightness across active monitors using BrightnessCoordinator."""
         if not self.active_monitors_dict:
-            return
+            return {}
 
         schedule_data = None
         if self.settings.enable_time_adjustment and self.settings.time_adjustment_data:
@@ -595,16 +588,30 @@ class MainWindow(QMainWindow):
         limits = getattr(self.settings, "power_saving_limits", {}) or {}
         is_ps = self.is_power_saving_effective()
 
-        targets = self.coordinator.resolve_brightness(
+        effective_profile = profile_data if profile_data is not None else (
+            self.active_profile_data if self.profile_active else None
+        )
+
+        return self.coordinator.resolve_brightness(
             active_serials=self.active_monitors_dict.keys(),
+            profile_data=effective_profile,
             schedule_data=schedule_data,
             manual_data=self.settings.manual_brightness_values,
+            enable_profiles=True,
             enable_schedule=self.settings.enable_time_adjustment,
             restore_last_brightness=self.settings.restore_last_brightness,
             is_power_saving=is_ps,
             limits=limits,
         )
 
+
+    # MARK: execute_recent_task()
+    def execute_recent_task(self, delay=0):
+        if self.profile_active:
+            logger.info(f"execute_recent_task: profile_active: {self.profile_active}, skip")
+            return
+
+        targets = self.resolve_target_brightness(profile_data=None)
         if targets:
             logger.info(f"execute_recent_task: applying targets: {targets}")
             self.apply_brightness(targets, delay=delay)
@@ -682,6 +689,7 @@ class MainWindow(QMainWindow):
             logger.info(f"process_listener_thread.is_alive(): {self.process_listener_thread.is_alive()}")
             
         self.profile_active = False
+        self.active_profile_data = None
         self.execute_recent_task()
 
     # MARK: toggle_process_listener()
@@ -715,18 +723,15 @@ class MainWindow(QMainWindow):
             self.reset_popup_timer()  # Reset the popup timer
             logger.info(f"Applying profile: {profile} (key: {profile_key})")
             self.profile_active = True
-            target_profile = profile
-            if self.is_power_saving_effective():
-                limits = getattr(self.settings, "power_saving_limits", {}) or {}
-                target_profile = {
-                    s: self.coordinator.clamp_value(s, val, limit=limits.get(s, 100))
-                    for s, val in profile.items()
-                }
-            self.apply_brightness(target_profile)
+            self.active_profile_data = profile
+            targets = self.resolve_target_brightness(profile_data=profile)
+            if targets:
+                self.apply_brightness(targets)
         else:
             if self.profile_active:
                 self.reset_popup_timer()  # Reset the popup timer
                 self.profile_active = False
+                self.active_profile_data = None
                 logger.info(f"Disabling profile")
                 self.execute_recent_task()
             else: # reduce br changes when moving between processes outside profiles_data
