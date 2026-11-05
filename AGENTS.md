@@ -15,6 +15,7 @@ Windows tray utility for multi-monitor brightness, contrast, and refresh rate ma
 - `src/settings_window.py`: Multi-tab configuration dialog (Profiles, Power Saving, DDC/CI, Brightness, Hotkeys).
 - `src/services/`: Pure business logic decoupled from UI widgets:
   - `brightness_coordinator.py`: State machine for brightness resolution, Power Saving limits, linked slider deltas, and pre-saving recovery.
+  - `profile_matcher.py`: Active process path matching (exact .exe and deepest parent directory resolution).
   - `settings_manager.py`: Typed configuration manager backed by Windows Registry (`HKCU\Software\MoniTune`) with Qt signal notifications.
   - `window_positioner.py`: Taskbar edge detection, corner targeting (top/bottom, left/right), and slide animation geometry.
 - `src/utils/`: Hardware and Win32 OS bridges:

@@ -55,6 +55,7 @@ from custom_widgets import (
 from services.settings_manager import get_settings
 from services.brightness_coordinator import BrightnessCoordinator
 from services.window_positioner import calculate_window_rects, calculate_close_rect
+from services.profile_matcher import match_profile
 from utils.monitor_utils import (
     Monitor,
     get_monitors, 
@@ -705,37 +706,7 @@ class MainWindow(QMainWindow):
             logger.info(f"exe_path == prev_active_process, skip")
             return
 
-
-        profile_key = None
-        profile = None
-
-        # 1. Check for exact exe_path match
-        if exe_path in self.settings.profiles_data:
-            profile_key = exe_path
-            profile = self.settings.profiles_data[exe_path]
-        else:
-            start_time = time.time()
-            logger.info(f"No exact match for exe_path: {exe_path}, checking parent folders")
-            # 2. Check for parent folder matches, prefer deepest match
-            exe_path_norm = os.path.normcase(os.path.normpath(exe_path))
-            best_match = ""
-
-            for key in self.settings.profiles_data:
-                key_norm = os.path.normcase(os.path.normpath(key))
-                # Ensure trailing separator for folder match
-                folder = key_norm if key_norm.endswith(os.sep) else key_norm + os.sep
-
-                if exe_path_norm.startswith(folder):
-                    # Prefer the longest (deepest) match
-                    if len(folder) > len(best_match):
-                        best_match = folder
-                        profile_key = key
-
-            if profile_key:
-                profile = self.settings.profiles_data[profile_key]
-            
-            logger.info(f"Time taken to check parent folders: {time.time() - start_time:.2f} sec")
-
+        profile_key, profile = match_profile(self.settings.profiles_data, exe_path)
 
         if profile:
             self.reset_popup_timer()  # Reset the popup timer
