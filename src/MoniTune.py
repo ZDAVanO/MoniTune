@@ -529,7 +529,7 @@ class MainWindow(QMainWindow):
         if removed_monitors:
             logger.info(f"Removed monitors: {removed_monitors}")
             for serial in removed_monitors:
-                self.pre_saving_brightness.pop(serial, None)
+                self.coordinator.remove_monitor(serial)
 
         self.previous_monitor_list = current_monitor_list
 
@@ -1071,8 +1071,7 @@ class MainWindow(QMainWindow):
                 limit = (self.settings.power_saving_limits or {}).get(monitor.serial, 100)
                 br_frame.set_max_limit(limit)
                 if br_level > limit:
-                    if monitor.serial not in self.pre_saving_brightness:
-                        self.pre_saving_brightness[monitor.serial] = br_level
+                    self.coordinator.record_pre_saving_brightness(monitor.serial, br_level)
                     br_frame.setValueBS(limit)
                     self.settings.brightness_values[monitor.serial] = limit
                     threading.Timer(0.05, self.brightness_sync_onetime).start()

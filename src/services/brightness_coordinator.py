@@ -177,3 +177,13 @@ class BrightnessCoordinator:
     def get_pre_saving_brightness(self, serial: str) -> Optional[int]:
         """Gets stored pre-saving brightness for monitor."""
         return self.pre_saving_brightness.get(serial)
+
+    def record_pre_saving_brightness(self, serial: str, value: int) -> None:
+        """Stores pre-saving brightness for a monitor if not already recorded."""
+        if serial not in self.pre_saving_brightness:
+            self.pre_saving_brightness[serial] = int(value)
+
+    def remove_monitor(self, serial: str) -> None:
+        """Cleans up internal state when a monitor is disconnected."""
+        self.pre_saving_brightness.pop(serial, None)
+        self.active_limits.pop(serial, None)

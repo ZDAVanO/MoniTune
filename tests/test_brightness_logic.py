@@ -240,3 +240,24 @@ def test_enter_power_saving_prefers_live_over_stale_manual():
     assert targets["SAMSUNG"] == 15, "SAMSUNG має зрізатися до 15, а не брати застарілі 11"
     assert coordinator.get_pre_saving_brightness("SAMSUNG") == 50
     assert coordinator.get_pre_saving_brightness("DISPLAY1") == 65
+
+
+def test_record_pre_saving_brightness():
+    coordinator = BrightnessCoordinator()
+    # First record should succeed
+    coordinator.record_pre_saving_brightness("MON1", 75)
+    assert coordinator.get_pre_saving_brightness("MON1") == 75
+
+    # Subsequent record should not overwrite original pre-saving brightness
+    coordinator.record_pre_saving_brightness("MON1", 30)
+    assert coordinator.get_pre_saving_brightness("MON1") == 75
+
+
+def test_remove_monitor_cleans_up():
+    coordinator = BrightnessCoordinator()
+    coordinator.record_pre_saving_brightness("MON1", 75)
+    coordinator.active_limits["MON1"] = 30
+
+    coordinator.remove_monitor("MON1")
+    assert coordinator.get_pre_saving_brightness("MON1") is None
+    assert coordinator.get_active_limit("MON1") == 100  # defaults to 100 when absent
