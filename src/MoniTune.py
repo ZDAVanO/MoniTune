@@ -179,12 +179,14 @@ class MainWindow(QMainWindow):
         threading.Thread(target=self.lock_listener.run, daemon=True).start()
 
         self.coordinator = BrightnessCoordinator()
-        self.is_power_saving_active = False
-        self.is_popup = False
-        self.current_screen = None
 
         self.is_energy_saver = is_energy_saver_active()
         logger.info(f"is_energy_saver on startup: {self.is_energy_saver}")
+        self.is_power_saving_active = self.is_power_saving_effective()
+        
+        self.is_popup = False
+        self.current_screen = None
+
         self.power_listener = PowerDetect(lambda state: self.energy_saver_changed.emit(state))
         threading.Thread(target=self.power_listener.run, daemon=True).start()
 
@@ -208,10 +210,11 @@ class MainWindow(QMainWindow):
         self.previous_monitor_list = get_monitor_device_names()
         self.update_monitors_info()
         self.start_checking(interval=(cfg.timer_interval * 1000))  # Start self.timer
-        self.apply_power_saving_state()
 
         if self.settings.time_adjustment_startup:
             self.execute_recent_task()
+        elif self.is_power_saving_active:
+            self.apply_power_saving_state(force=True)
 
 
         # timer for hiding the popup window
