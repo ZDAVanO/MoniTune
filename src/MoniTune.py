@@ -942,7 +942,7 @@ class MainWindow(QMainWindow):
         monitors_order += [serial for serial in self.active_monitors_dict if serial not in monitors_order]
         logger.debug(f"monitors_order: {monitors_order}")
         
-
+        needs_sync = False
 
         for index, monitor_serial in enumerate(monitors_order):
             monitor: Monitor = self.active_monitors_dict[monitor_serial]
@@ -1104,7 +1104,7 @@ class MainWindow(QMainWindow):
                     self.coordinator.record_pre_saving_brightness(monitor.serial, br_level)
                     br_frame.setValueBS(limit)
                     self.settings.brightness_values[monitor.serial] = limit
-                    threading.Timer(0.05, self.brightness_sync_onetime).start()
+                    needs_sync = True
             monitor_vbox.addWidget(br_frame)
 
 
@@ -1138,6 +1138,9 @@ class MainWindow(QMainWindow):
 
             self.monitors_layout.addWidget(monitor_widget)
             # self.monitors_widgets.append(monitor_widget)  # Store monitor frame in list
+
+        if needs_sync:
+            threading.Timer(0.05, self.brightness_sync_onetime).start()
 
         logger.debug(f"brightness_values {self.settings.brightness_values}")
         logger.debug(f"contrast_values {self.settings.contrast_values}")
