@@ -693,14 +693,17 @@ class PowerSavingLimitsFrame(SettingFrame):
 
         limits_data = self.settings_window.settings.power_saving_limits or {}
 
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        self.content_layout.setSpacing(0)
+
         sliders_container = QHBoxLayout()
-        sliders_container.setContentsMargins(9, 6, 9, 6)
+        sliders_container.setContentsMargins(9, 4, 9, 8)
         sliders_container.setSpacing(0)
 
         names_layout = QVBoxLayout()
         sliders_layout = QVBoxLayout()
         sliders_container.addLayout(names_layout)
-        sliders_container.addItem(QSpacerItem(12, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        sliders_container.addItem(QSpacerItem(6, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
         sliders_container.addLayout(sliders_layout)
 
         for serial in monitors_order:
@@ -720,7 +723,7 @@ class PowerSavingLimitsFrame(SettingFrame):
             timer.timeout.connect(lambda s=serial, sl=slider: self.commit_limit(s, sl.value()))
             self._debounce_timers[serial] = timer
 
-            spacer = QSpacerItem(6, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+            spacer = QSpacerItem(3, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
             value_label = QLabel("No limit" if initial_val == 100 else f"{initial_val}%")
             value_label.setFixedWidth(55)
@@ -1532,6 +1535,12 @@ class SettingsWindow(QWidget):
         power_saving_tab = ScrollableTab()
         self.tab_widget.addTab(power_saving_tab, "Power Saving")
 
+        power_saving_frame = SettingFrame(
+            settings_window=self,
+            title="Enable Power Saving Limits",
+            descr="Limit maximum brightness on configured monitors when power saving is active."
+        )
+
         sync_windows_frame = SettingToggleFrame(
             main_window=self.main_window,
             title="Follow Windows Energy Saver",
@@ -1540,26 +1549,32 @@ class SettingsWindow(QWidget):
             reg_setting_name="SyncWindowsEnergySaver",
             callback=self.main_window.on_sync_windows_energy_saver_toggled
         )
-        sync_windows_frame.setEnabled(self.settings.enable_power_saving_limits)
+
+        limits_frame = PowerSavingLimitsFrame(
+            self, monitors_order, display_names
+        )
 
         def on_limits_enabled(checked):
             sync_windows_frame.setEnabled(checked)
+            limits_frame.setEnabled(checked)
             self.main_window.on_power_saving_enabled_toggled(checked)
 
-        power_saving_tab.layout_.addWidget(SettingToggleFrame(
+        power_saving_toggle = SettingToggleButton(
             main_window=self.main_window,
-            title="Enable Power Saving Limits",
-            descr="Limit maximum brightness on configured monitors when power saving is active.",
+            tool_tip="Enable or disable power saving brightness limits.",
             setting_name="enable_power_saving_limits",
             reg_setting_name="EnablePowerSavingLimits",
             callback=on_limits_enabled
-        ))
+        )
+        power_saving_frame.title_layout.addWidget(power_saving_toggle, alignment=Qt.AlignmentFlag.AlignRight)
 
-        power_saving_tab.layout_.addWidget(sync_windows_frame)
+        sync_windows_frame.setEnabled(self.settings.enable_power_saving_limits)
+        limits_frame.setEnabled(self.settings.enable_power_saving_limits)
 
-        power_saving_tab.layout_.addWidget(PowerSavingLimitsFrame(
-            self, monitors_order, display_names
-        ))
+        power_saving_frame.content_layout.addWidget(sync_windows_frame)
+        power_saving_frame.content_layout.addWidget(limits_frame)
+
+        power_saving_tab.layout_.addWidget(power_saving_frame)
 
         # MARK: Profiles Tab
         profiles_tab = ScrollableTab()
