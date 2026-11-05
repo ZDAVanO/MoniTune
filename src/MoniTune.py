@@ -2,20 +2,15 @@ from PySide6.QtCore import (
     Qt, 
     QTimer, 
     QTime, 
-    QDateTime, 
     QPropertyAnimation, 
     QEasingCurve, 
     Signal,
     QEvent, 
     QSize, 
-    QRect, 
-    QTranslator,
-    QLocale,
 )
 from PySide6.QtGui import (
     QIcon, 
     QGuiApplication, 
-    QWheelEvent,
     QCursor,
 )
 from PySide6.QtWidgets import (
@@ -23,19 +18,11 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
-    QStyle,
     QVBoxLayout,
     QWidget,
-    QMenu,
-    QSlider,
     QGraphicsOpacityEffect,
     QStyleFactory,
-    QTabWidget,
     QPushButton,
-    QFrame,
-    QComboBox,
-    QGridLayout,
-    QSpacerItem,
     QSizePolicy,
     QMessageBox
 )
@@ -47,7 +34,6 @@ from custom_widgets import (
     ButtonGridFrame,
     SliderFrame,
     HoverIconButton,
-    NoScrollComboBox,
     StyledComboBox,
     SeparatorLine,
 )
@@ -62,14 +48,6 @@ from utils.monitor_utils import (
     get_monitor_device_names,
 )
 from utils.reg_utils import (
-    reg_write_bool, 
-    reg_read_bool, 
-    reg_write_int,
-    reg_read_int,
-    reg_write_list, 
-    reg_read_list, 
-    reg_write_dict, 
-    reg_read_dict,
     add_to_startup,
     remove_from_startup,
 )
@@ -82,7 +60,7 @@ from utils.utils import (
 )
 from utils.lock_detect import LockDetect
 from utils.power_detect import PowerDetect, is_energy_saver_active
-from utils.active_process import ActiveProcessListener, get_active_process
+from utils.active_process import ActiveProcessListener
 
 from utils.logger import get_logger, set_file_logging
 logger = get_logger(__name__) # debug, info, warning, error, critical

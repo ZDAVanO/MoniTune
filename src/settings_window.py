@@ -3,7 +3,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout, 
     QTabWidget, 
     QLabel, 
-    QSlider, 
     QPushButton, 
     QHBoxLayout, 
     QComboBox, 
@@ -39,20 +38,6 @@ from custom_widgets import (
 from services.settings_manager import get_settings
 from utils.monitor_utils import (
     get_monitors, 
-)
-from utils.reg_utils import (
-    is_dark_theme, 
-    key_exists, 
-    create_reg_key, 
-    reg_write_bool, 
-    reg_read_bool, 
-    reg_write_int,
-    reg_read_int,
-    reg_write_list, 
-    reg_read_list, 
-    reg_write_dict, 
-    reg_read_dict,
-    delete_reg_key,
 )
 from utils.utils import (
     check_github_update_available,

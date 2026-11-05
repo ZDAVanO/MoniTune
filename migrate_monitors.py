@@ -161,7 +161,7 @@ def collect_registry_serials(settings):
         s_str = ensure_serial(s)
         serials_info[s_str]["custom_name"] = name
         serials_info[s_str]["score"] += 10
-        if any(w in str(name).lower() for w in ["laptop", "ноутбук", "internal", "built-in"]):
+        if any(w in str(name).lower() for w in ["laptop", "internal", "built-in", "integrated"]):
             serials_info[s_str]["is_laptop_hint"] = True
 
     for s in settings.get("MonitorsOrder", []):
