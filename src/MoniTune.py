@@ -543,9 +543,8 @@ class MainWindow(QMainWindow):
         # Check time adjustment tasks
         if (self.last_check_time != current_time) and can_change_br and self.settings.enable_time_adjustment:
             if current_time in self.settings.time_adjustment_data:
-                if not self.profile_active:
-                    self.apply_brightness(self.settings.time_adjustment_data[current_time])
-                    log_messages.append(f"Applied brightness: {self.settings.time_adjustment_data[current_time]}")
+                self.execute_recent_task()
+                log_messages.append(f"Scheduled task: {current_time}")
             else:
                 log_messages.append("idle")
 
@@ -616,13 +615,6 @@ class MainWindow(QMainWindow):
     # MARK: apply_brightness()
     def apply_brightness(self, brightness_data, delay=0):
         logger.info(f"apply_brightness: {brightness_data}, delay: {delay / 1000} sec")
-
-        if self.is_power_saving_effective():
-            limits = getattr(self.settings, "power_saving_limits", {}) or {}
-            brightness_data = {
-                s: self.coordinator.clamp_value(s, val, limit=limits.get(s, 100))
-                for s, val in brightness_data.items()
-            }
 
         self.update_monitors_info()
         for serial in self.active_monitors_dict:
@@ -716,7 +708,14 @@ class MainWindow(QMainWindow):
             self.reset_popup_timer()  # Reset the popup timer
             logger.info(f"Applying profile: {profile} (key: {profile_key})")
             self.profile_active = True
-            self.apply_brightness(profile)
+            target_profile = profile
+            if self.is_power_saving_effective():
+                limits = getattr(self.settings, "power_saving_limits", {}) or {}
+                target_profile = {
+                    s: self.coordinator.clamp_value(s, val, limit=limits.get(s, 100))
+                    for s, val in profile.items()
+                }
+            self.apply_brightness(target_profile)
         else:
             if self.profile_active:
                 self.reset_popup_timer()  # Reset the popup timer
