@@ -390,8 +390,15 @@ class MainWindow(QMainWindow):
                         self.settings.manual_brightness_values[serial] = val
                     self.settings.save("manual_brightness_values")
 
-                logger.info("Exited power saving: resolving brightness via coordinator")
-                self.execute_recent_task()
+                if self.profile_active:
+                    logger.info("Exited power saving: re-applying active profile brightness")
+                    proc = getattr(self, "prev_active_process", None) or getattr(self, "active_process", None)
+                    if proc:
+                        self.prev_active_process = None
+                        self._on_active_process_change({"exe_path": proc})
+                else:
+                    logger.info("Exited power saving: resolving brightness via coordinator")
+                    self.execute_recent_task()
         finally:
             self._linking_suspended = False
 
@@ -572,7 +579,7 @@ class MainWindow(QMainWindow):
     # MARK: execute_recent_task()
     def execute_recent_task(self, delay=0):
         if self.profile_active:
-            logger.info("execute_recent_task: profile_active is True, skip")
+            logger.info(f"execute_recent_task: profile_active: {self.profile_active}, skip")
             return
 
         if not self.active_monitors_dict:
